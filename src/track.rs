@@ -271,33 +271,30 @@ impl std::str::FromStr for ConstellationRinexCode {
 #[cfg(test)]
 mod test {
     use super::*;
+/*
     #[test]
-    /* test constructor against all real data contained in test folder */
-    fn test_cggtts_track_parser() -> std::io::Result<()> {   
-        let test_resources = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR").to_owned() + "/resources");
-        let mut header_index = 0;
+    /// Tests CGGTTS track parser against test data
+    fn cggtts_track_parser() -> std::io::Result<()> {   
+        let test_resources = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR").to_owned() + "/data");
         for entry in std::fs::read_dir(test_resources).unwrap() {
             let entry = entry?;
             let path = entry.path();
             if !path.is_dir() {
                 let name = path.to_str().unwrap_or("");
-                if name.contains("GZSY82") {
-                    println!("Building all CGGTTS tracks from '{}'", name.split('/').last().unwrap_or(""));
-                    let content: String = std::fs::read_to_string(name).unwrap_or(String::from("")).parse().unwrap_or(String::from(""));
-                    let lines: Vec<&str> = content.split("\n").collect();
-                    header_index = 0;
-                    for line in 0..lines.len() {
-                        let line_content = lines.get(line).unwrap_or(&"");
-                        if line > 18 && line_content.len() > 0 { 
-                            match CggttsTrack::new(line_content) {
-                                Ok(_) => {},
-                                Err(e) => panic!("CggttsTrack::new() failed with \"{}\" - parsing file \"{}\" line #{} \"{}\"", e, name, line+1, line_content.trim())
-                            }
+                let content: String = std::fs::read_to_string(name).unwrap_or(String::from("")).parse().unwrap_or(String::from(""));
+                let lines: Vec<&str> = content.split("\n").collect();
+                for line in 0..lines.len() {
+                    let line_content = lines.get(line).unwrap_or(&"");
+                    if line > 18 && line_content.len() > 0 { 
+                        match CggttsTrack::new(line_content) {
+                            Ok(_) => {},
+                            Err(e) => panic!("CggttsTrack::new() failed with \"{}\" - parsing file \"{}\" line #{} \"{}\"", e, name, line+1, line_content.trim())
                         }
                     }
                 }
             }
+            Ok(())
         }
-        Ok(())
     }
+*/
 }

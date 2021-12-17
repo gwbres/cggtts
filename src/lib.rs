@@ -8,9 +8,9 @@
 //! Refer to official doc: 
 //! https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf
 
-use std::fmt;
 use regex::Regex;
 use thiserror::Error;
+use std::str::FromStr;
 use scan_fmt::scan_fmt;
 
 /// CGGTTS track description
@@ -26,17 +26,17 @@ pub struct Cggtts {
     rev_date: chrono::NaiveDate, // revision date 
     date: chrono::NaiveDate, // production / creation date
     lab: String, // lab where measurements were performed (possibly unknown)
-    recvr: Rcvr, // possible GNSS receiver infos
+    rcvr: Option<Rcvr>, // possible GNSS receiver infos
     nb_channels: u16, // nb of GNSS receiver channels
     ims: Option<Rcvr>, // IMS Ionospheric Measurement System (if any)
     xyz: (f32,f32,f32), // antenna phase center coordinates [in m]
     frame: String,
     comments: Option<String>, // comments (if any)
-    // delays
-    //  sys delay: total system delay [internal + cable delay] [ns]
-    //  cable delay: delay from antenna to receiver [ns]
-    //  ref. delay: receiver to local clock delay [ns]
-    delays: (f64,f64,f64), 
+    tot_dly: f64, // total system + cable delay
+    int_dly: Option<f64>, // combined electric delay ANT+RCVR
+    cab_dly: Option<f64>, // ANT cable delay
+    sys_dly: Option<f64>,
+    ref_dly: Option<f64>, // LO / RCVR delta
     reference: String,
     tracks: Vec<track::CggttsTrack> // CGGTTS track(s)
 }
@@ -60,7 +60,9 @@ pub enum Error {
     #[error("File naming convention")]
     FileNamingConvention,
     #[error("Failed to identify date of creation")]
-    DateMjdParsingError,
+    DateMjdFormatError,
+    #[error("Failed to parse MJD date of creation")]
+    ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("Deprecated versions are not supported")]
     DeprecatedVersion,
     #[error("Version format mismatch")]
@@ -86,7 +88,7 @@ pub enum Error {
     #[error("Failed to parse '{0}' coordinates")]
     CoordinatesParsingError(String),
     #[error("'{0}' delay format mismatch")]
-    DelayFormatError(String),
+    DelayParsingError(String),
     #[error("Checksum format error")]
     ChecksumFormatError,
     #[error("Failed to parse checksum value")]
@@ -113,9 +115,11 @@ impl Cggtts {
 
         // identify date of creation 
         // using file naming convention 
-        let mjd: f32 = match scan_fmt!(file_name, "{[1-9]{2}.[1-9]{3}]$}", f32) {
-            Some(f) => f,
-            _ => return Err(Error::DateMjdParsingError),
+        let mjd: f64 = match file_name.find(".") {
+            Some(location) => {
+                f64::from_str(file_name.split_at(location-2).1)?
+            },
+            _ => return Err(Error::DateMjdFormatError),
         };
 
         let mut chksum: u8 = 0;
@@ -159,19 +163,24 @@ impl Cggtts {
 
         // rcvr
         let line = lines.next().unwrap();
-        let rcvr_infos: Rcvr = match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
-            (Some(manufacturer),
-            Some(recv_type),
-            Some(serial_number),
-            Some(year),
-            Some(software_number)) => Rcvr{
-                manufacturer, 
-                recv_type, 
-                serial_number, 
-                year: u16::from_str_radix(&year, 10)?, 
-                software_number
+        let rcvr: Option<Rcvr> = match line.contains("RCVR = RRRRRRRR") {
+            true => None,
+            false => {
+                match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
+                    (Some(manufacturer),
+                    Some(recv_type),
+                    Some(serial_number),
+                    Some(year),
+                    Some(software_number)) => Some(Rcvr{
+                        manufacturer, 
+                        recv_type, 
+                        serial_number, 
+                        year: u16::from_str_radix(&year, 10)?, 
+                        software_number
+                    }),
+                    _ => return Err(Error::RcvrFormatError),
+                }
             },
-            _ => return Err(Error::RcvrFormatError),
         };
         // crc 
         let bytes = line.clone().into_bytes();
@@ -193,23 +202,28 @@ impl Cggtts {
 
         // ims
         let line = lines.next().unwrap();
-        let ims_infos: Option<Rcvr> = match line.contains("IMS = 99999") { 
+        let ims : Option<Rcvr> = match line.contains("IMS = 99999") { 
             true => None,
-            false => { // IMS data provided
-                match scan_fmt! (&line, "IMS = {} {} {} {d} {}", String, String, String, String, String) {
-                    (Some(manufacturer),
-                        Some(recv_type),
-                        Some(serial_number),
-                        Some(year),
-                        Some(software_number)) => Some(
-                            Rcvr {
-                                manufacturer, 
-                                recv_type, 
-                                serial_number, 
-                                year: u16::from_str_radix(&year, 10)?, 
-                                software_number
-                            }),
-                    _ => return Err(Error::ImsFormatError),
+            false => { 
+                match line.contains("IMS = IIIII") {
+                    true => None,
+                    false => { // IMS data provided
+                        match scan_fmt! (&line, "IMS = {} {} {} {d} {}", String, String, String, String, String) {
+                            (Some(manufacturer),
+                                Some(recv_type),
+                                Some(serial_number),
+                                Some(year),
+                                Some(software_number)) => Some(
+                                    Rcvr {
+                                        manufacturer, 
+                                        recv_type, 
+                                        serial_number, 
+                                        year: u16::from_str_radix(&year, 10)?, 
+                                        software_number
+                                    }),
+                            _ => return Err(Error::ImsFormatError),
+                        }
+                    }
                 }
             }
         };
@@ -298,76 +312,132 @@ impl Cggtts {
         for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-        // system delay 
+
+        // system & cable delays 
         let line = lines.next().unwrap();
-        let sys_dly: f64 = match scan_fmt!(&line, "SYS DLY = {f} {} {}", f64, String, String) {
-            (Some(dly),Some(scaling),Some(_)) => {
-                if scaling.eq("ms") {
-                    dly * 1E-3
-                } else if scaling.eq("us") {
-                    dly * 1E-6
-                } else if scaling.eq("ns") {
-                    dly * 1E-9
-                } else if scaling.eq("ps") {
-                    dly * 1E-12
-                } else if scaling.eq("fs") {
-                    dly * 1E-15
-                } else {
-                    dly
+        let mut ref_dly: Option<f64> = None;
+        let mut cab_dly: Option<f64> = None;
+        let (tot_dly, int_dly, sys_dly): (Option<f64>,Option<f64>,Option<f64>) = match line.contains("TOT DLY =") {
+            true => {
+                match scan_fmt!(&line, "TOT DLY = {f} {}", f64, String) {
+                    (Some(f),Some(unit)) => {
+                        if unit.eq("ms") {
+                            (Some(f*1E-3),None,None)
+                        } else if unit.eq("us") {
+                            (Some(f*1E-6),None,None) 
+                        } else if unit.eq("ns") {
+                            (Some(f*1E-9),None,None)
+                        } else if unit.eq("ps") {
+                            (Some(f*1E-12),None,None)
+                        } else if unit.eq("fs") {
+                            (Some(f*1E-15),None,None)
+                        } else {
+                            (Some(f),None,None)
+                        }
+                    },
+                    _ => return Err(Error::DelayParsingError(String::from("Total"))),
                 }
             },
-            _ => return Err(Error::DelayFormatError(String::from("System"))),
+            false => {
+                match line.contains("SYS DLY =") {
+                    true => {
+                        match scan_fmt!(&line, "SYS DLY = {f} {}", f64, String) {
+                            (Some(f),Some(unit)) => {
+                                if unit.eq("ms") {
+                                    (None,None,Some(f*1E-3))
+                                } else if unit.eq("us") {
+                                    (None,None,Some(f*1E-6))
+                                } else if unit.eq("ns") {
+                                    (None,None,Some(f*1E-9))
+                                } else if unit.eq("ps") {
+                                    (None,None,Some(f*1E-12))
+                                } else if unit.eq("fs") {
+                                    (None,None,Some(f*1E-15))
+                                } else {
+                                    (None,None,Some(f))
+                                }
+                            }
+                            _ => return Err(Error::DelayParsingError(String::from("System"))),
+                        }
+                    },
+                    false => {
+                        match scan_fmt!(&line, "INT DLY = {f} {}", f64, String) {
+                            (Some(f),Some(unit)) => {
+                                if unit.eq("ms") {
+                                    (None,Some(f*1E-3),None)
+                                } else if unit.eq("us") {
+                                    (None,Some(f*1E-6),None)
+                                } else if unit.eq("ns") {
+                                    (None,Some(f*1E-9),None)
+                                } else if unit.eq("ps") {
+                                    (None,Some(f*1E-12),None)
+                                } else if unit.eq("fs") {
+                                    (None,Some(f*1E-15),None)
+                                } else {
+                                    (None,Some(f),None)
+                                }
+                            },
+                            _ => return Err(Error::DelayParsingError(String::from("Internal"))),
+                        }
+                    }
+                }
+            }
         };
         // crc
         let bytes = line.clone().into_bytes();
         for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-        // cable delay
-        let line = lines.next().unwrap();
-        let cab_dly: f64 = match scan_fmt!(&line, "CAB DLY = {f} {}", f64, String) {
-            (Some(dly),Some(scaling)) => {
-                if scaling.eq("ms") {
-                    dly * 1E-3
-                } else if scaling.eq("us") {
-                    dly * 1E-6
-                } else if scaling.eq("ns") {
-                    dly * 1E-9
-                } else if scaling.eq("ps") {
-                    dly * 1E-12
-                } else if scaling.eq("fs") {
-                    dly * 1E-15
-                } else {
-                    dly
+        // ref delay ?
+        if !tot_dly.is_some() {
+            if int_dly.is_some() {
+                // missing cable delay
+                let line = lines.next().unwrap();
+                cab_dly = match scan_fmt!(&line, "CAB DLY = {f} {}", f64, String) {
+                    (Some(f),Some(unit)) => {
+                        if unit.eq("ms") {
+                            Some(f*1E-3)
+                        } else if unit.eq("us") {
+                            Some(f*1E-6)
+                        } else if unit.eq("ns") {
+                            Some(f*1E-9)
+                        } else if unit.eq("ps") {
+                            Some(f*1E-12)
+                        } else if unit.eq("fs") {
+                            Some(f*1E-15)
+                        } else {
+                            Some(f)
+                        }
+                    },
+                    _ => return Err(Error::DelayParsingError(String::from(line))),
+                };
+                // crc
+                let bytes = line.clone().into_bytes();
+                for i in 0..bytes.len() {
+                    chksum = chksum.wrapping_add(bytes[i]);
                 }
-            },
-            _ => return Err(Error::DelayFormatError(String::from("Cable"))),
-        };
-        // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
+            } // needed cab delay
+            let line = lines.next().unwrap();
+            ref_dly = match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
+                (Some(f),Some(unit)) => {
+                    if unit.eq("ms") {
+                        Some(f*1E-3)
+                    } else if unit.eq("us") {
+                        Some(f*1E-6)
+                    } else if unit.eq("ns") {
+                        Some(f*1E-9)
+                    } else if unit.eq("ps") {
+                        Some(f*1E-12)
+                    } else if unit.eq("fs") {
+                        Some(f*1E-15)
+                    } else {
+                        Some(f)
+                    }
+                },
+                //_ => return Err(Error::DelayParsingError(String::from("REF"))),//line))),
+                _ => return Err(Error::DelayParsingError(String::from(line))),
+            }
         }
-        // ref. delay
-        let line = lines.next().unwrap();
-        let ref_dly: f64 = match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
-            (Some(dly),Some(scaling)) => {
-                if scaling.eq("ms") {
-                    dly * 1E-3
-                } else if scaling.eq("us") {
-                    dly * 1E-6
-                } else if scaling.eq("ns") {
-                    dly * 1E-9
-                } else if scaling.eq("ps") {
-                    dly * 1E-12
-                } else if scaling.eq("fs") {
-                    dly * 1E-15
-                } else {
-                    dly
-                }
-            },
-            _ => return Err(Error::DelayFormatError(String::from("Ref."))),
-        };
         // crc
         let bytes = line.clone().into_bytes();
         for i in 0..bytes.len() {
@@ -384,7 +454,7 @@ impl Cggtts {
         for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-        // checksum
+            // checksum
         let line = lines.next().unwrap();
         let cksum_parsed: u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
             Some(string) => {
@@ -414,7 +484,7 @@ impl Cggtts {
 
         // tracks parsing
         let mut tracks: Vec<track::CggttsTrack> = Vec::new();
-        loop {
+        /*loop {
             // grab new line
             let line = match lines.next() {
                 Some(s) => s,
@@ -424,20 +494,24 @@ impl Cggtts {
                 break // we're done parsing
             }
             tracks.push(track::CggttsTrack::new(&line)?);
-        }
+        }*/
 
         Ok(Cggtts {
             version: VERSION.to_string(),
             rev_date,
-            date: julianday::JulianDay::new(mjd as i32).to_date(),
+            date: julianday::JulianDay::new((mjd * 1000.0) as i32).to_date(),
             nb_channels,
-            recvr: rcvr_infos,
-            ims: ims_infos,
+            rcvr,
+            ims,
             lab,
             xyz: (x,y,z),
             frame,
             comments,
-            delays: (sys_dly, cab_dly, ref_dly),
+            tot_dly: tot_dly.unwrap(),
+            int_dly,
+            cab_dly,
+            sys_dly,
+            ref_dly,
             reference,
             tracks
         })
@@ -460,17 +534,16 @@ impl Cggtts {
 }
 
 // custom display formatter
-impl fmt::Display for Cggtts {
-    fn fmt (&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Cggtts {
+    fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
-            f, "Version: '{}' | REV DATE '{}' | LAB '{}' | Nb Channels {}\nRECVR: {:?}\nIMS: {:?}\nXYZ: {:?}\nFRAME: {}\nCOMMENTS: {:#?}\nDELAYS {:?} [ns]\nREFERENCE: {}\n",
+            f, "Version: '{}' | REV DATE '{}' | LAB '{}' | Nb Channels {}\nRECVR: {:?}\nIMS: {:?}\nXYZ: {:?}\nFRAME: {}\nCOMMENTS: {:#?}\nREFERENCE: {}\n",
             self.version, self.rev_date, self.lab, self.nb_channels,
-            self.recvr,
+            self.rcvr,
             self.ims,
             self.xyz,
             self.frame,
             self.comments,
-            self.delays,
             self.reference,
         ).unwrap();
         write! (f, "-------------------------\n").unwrap();
@@ -483,17 +556,42 @@ impl fmt::Display for Cggtts {
 
 #[cfg(test)]
 mod test {
-    use chrono::Datelike;
     use super::*;
 
     #[test]
     /*
-     * Tests lib against test resources
+     * Tests lib against standard test resources
      */
-    fn cggtts_constructor() {
+    fn cggtts_test_standard_data() {
         // open test resources
         let test_resources = std::path::PathBuf::from(
-            env!("CARGO_MANIFEST_DIR").to_owned() + "/data");
+            env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard");
+        // walk test resources
+        for entry in std::fs::read_dir(test_resources)
+            .unwrap() {
+            let entry = entry
+                .unwrap();
+            let path = entry.path();
+            if !path.is_dir() { // only files..
+                let fp = std::path::Path::new(&path);
+                assert_eq!(
+                    Cggtts::new(&fp).is_err(),
+                    false,
+                    "Cggtts::new() failed for '{:?}' with '{:?}'",
+                    path, 
+                    Cggtts::new(&fp))
+            }
+        }
+    }
+    
+    #[test]
+    /*
+     * Tests lib against advanced test resources
+     */
+    fn cggtts_test_ionospheric_data() {
+        // open test resources
+        let test_resources = std::path::PathBuf::from(
+            env!("CARGO_MANIFEST_DIR").to_owned() + "/data/ionospheric");
         // walk test resources
         for entry in std::fs::read_dir(test_resources)
             .unwrap() {
