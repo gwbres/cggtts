@@ -45,9 +45,9 @@ struct Rcvr {
 
 #[allow(dead_code)]
 impl Cggtts {
-    pub fn new (file_path: &str) -> Result<Cggtts, ErrorKind> {
+    pub fn new(fp: &std::path::Path) -> Result<Cggtts, ErrorKind> {
         let mut chksum: u8 = 0;
-        let file_content = std::fs::read_to_string(file_path).unwrap();
+        let file_content = std::fs::read_to_string(&fp).unwrap();
         let mut lines = file_content.split("\n").map(|x| x.to_string()).into_iter();
 
         let mut sys_dly: Option<f32> = Some(0.0);
@@ -55,8 +55,8 @@ impl Cggtts {
         let mut cab_dly: Option<f32> = Some(0.0);
 
         // Identify date from MJD contained in file name
-        let point_index = file_path.find(".").unwrap(); // will panic if filename does not match naming convention
-        let mjd_str = file_path.to_string().split_off(point_index-2);
+        let point_index = fp.to_str().unwrap().find(".").unwrap(); // will panic if filename does not match naming convention
+        let mjd_str = fp.to_string().split_off(point_index-2);
         let mjd: f32 = mjd_str.parse().unwrap();
 
         // Version line
@@ -451,47 +451,45 @@ fn mjd_to_date (mjd: u32) -> chrono::NaiveDate {
 
     return chrono::NaiveDate::from_ymd(annee as i32, m, q)
 }
-/*
 #[cfg(test)]
-mod test
-{
+mod test {
     use chrono::Datelike;
-    use crate::syref::cggtts::Cggtts;
-    use crate::syref::cggtts::mjd_to_date;
+    use super::*;
 
     #[test]
-    fn test_cggtts_with_real_data1 ()
-    {   // Test constructor with sample data
-        match Cggtts::new ("src/syref/cggtts/tests/GZSY8251.412")
-        {
-            Ok(c) => println!("Found {}", c),
-            Err(_) => {
-                println!("CGGTTS file parsing test failed!");
-                assert!(false);
+    /*
+     * Tests lib against test resources
+     */
+    fn cggtts_constructor() {
+        // open test resources
+        let test_resources = std::path::PathBuf::from(
+            env!("CARGO_MANIFEST_DIR").to_owned() + "/data");
+        // walk test resources
+        for entry in std::fs::read_dir(test_resources)
+            .unwrap() {
+            let entry = entry
+                .unwrap();
+            let path = entry.path();
+            if !path.is_dir() { // only files..
+                let fp = std::path::Path::new(&path);
+                assert_eq!(
+                    Cggtts::new(&fp).is_err(),
+                    false,
+                    "Cggtts::new() failed for '{:?}' with '{:?}'",
+                    path, 
+                    Cggtts::new(&fp))
             }
         }
     }
-
+    
     #[test]
-    fn test_cggtts_with_real_data2 ()
-    {   // Test constructor with sample data
-        match Cggtts::new ("src/syref/cggtts/tests/GZSY8259.159")
-        {
-            Ok(c) => println!("Found {}", c),
-            Err(_) => {
-                println!("CGGTTS file parsing test failed!");
-                assert!(false);
-            }
-        }
-    }
-
-    #[test]
-    fn test_mdj_convertion ()
-    {
+    /*
+     * Tests MJD convertion
+     */
+    fn test_mdj_convertion () {
         let date = mjd_to_date(57000);
         assert_eq!(date.year(), 2014);
         assert_eq!(date.month(), 12);
         assert_eq!(date.day(), 9);
     }
 }
-*/
