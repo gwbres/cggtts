@@ -1,0 +1,12 @@
+[package]
+name = "agentime"
+version = "0.0.1"
+authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+thiserror = "1"
+chrono = "0.4"
+scan_fmt = "0.1"
+geo-types = "0.7.2"
+rinex = { git = "https://github.com/gwbres/rinex.git" }             
