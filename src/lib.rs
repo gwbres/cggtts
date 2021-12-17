@@ -14,6 +14,7 @@ mod track;
 const VERSION: &str = "2E";
 
 /// CGGTTS structure
+#[derive(Debug)]
 pub struct Cggtts {
     version: String, // file version info
     rev_date: chrono::NaiveDate, // header data rev. date
