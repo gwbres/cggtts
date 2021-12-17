@@ -161,9 +161,9 @@ impl CggttsTrack {
             chksum = chksum.wrapping_add(bytes[i])
         }
 
-        //if chksum != ck {
-        //    return Err(Error::ChecksumError(chksum, ck))
-        //}
+        if chksum != ck {
+            return Err(Error::ChecksumError(chksum, ck))
+        }
 
         Ok(CggttsTrack {
             constellation,

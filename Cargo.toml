@@ -3,11 +3,16 @@ name = "cggtts"
 version = "0.0.1"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 edition = "2018"
+readme = "README.md"
+description = "Package to handle CGGTTS data file"
+homepage = "https://github.com/gwbres/cggtts"
+keywords = ["positionning","time transfer","bipm","gnss","timing","common view","satellites"]
 
 [dependencies]
 regex = "1"
 thiserror = "1"
 chrono = "0.4"
+julianday = "0.2.0"
 scan_fmt = "0.1"
 geo-types = "0.7.2"
 rinex = { git = "https://github.com/gwbres/rinex.git" } 

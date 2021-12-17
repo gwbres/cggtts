@@ -23,9 +23,9 @@ const VERSION: &str = "2E";
 #[derive(Debug)]
 pub struct Cggtts {
     version: String, // file version info
-    rev_date: chrono::NaiveDate, // header data rev. date
-    date: chrono::NaiveDate, // production date
-    lab: String, // LAB where measurements were performed (possibly unknown)
+    rev_date: chrono::NaiveDate, // revision date 
+    date: chrono::NaiveDate, // production / creation date
+    lab: String, // lab where measurements were performed (possibly unknown)
     recvr: Rcvr, // possible GNSS receiver infos
     nb_channels: u16, // nb of GNSS receiver channels
     ims: Option<Rcvr>, // IMS Ionospheric Measurement System (if any)
@@ -38,7 +38,7 @@ pub struct Cggtts {
     //  ref. delay: receiver to local clock delay [ns]
     delays: (f64,f64,f64), 
     reference: String,
-    tracks: Vec<track::CggttsTrack>
+    tracks: Vec<track::CggttsTrack> // CGGTTS track(s)
 }
 
 /// GNSS Receiver and external system description
@@ -52,13 +52,15 @@ struct Rcvr {
 }
 
 #[derive(Error, Debug)]
-pub enum CggttsError {
+pub enum Error {
     #[error("Failed to parse file")]
     IoError(#[from] std::io::Error),
     #[error("Failed to parse integer number")]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("File naming convention")]
     FileNamingConvention,
+    #[error("Failed to identify date of creation")]
+    DateMjdParsingError,
     #[error("Deprecated versions are not supported")]
     DeprecatedVersion,
     #[error("Version format mismatch")]
@@ -69,6 +71,8 @@ pub enum CggttsError {
     RevisionDateParsingError,
     #[error("RCVR format mismatch")]
     RcvrFormatError,
+    #[error("Reference format mismatch")]
+    ReferenceFormatError,
     #[error("Failed to parse 'lab' field")]
     LabParsingError,
     #[error("Comments format mismatch")]
@@ -83,13 +87,19 @@ pub enum CggttsError {
     CoordinatesParsingError(String),
     #[error("'{0}' delay format mismatch")]
     DelayFormatError(String),
+    #[error("Checksum format error")]
+    ChecksumFormatError,
+    #[error("Failed to parse checksum value")]
+    ChecksumParsingError,
     #[error("File Checksum error - got '{0}' but '{1}' locally computed")]
     ChecksumError(u8, u8),
+    #[error("CGGTTS Track error")]
+    CggttsTrackError(#[from] track::Error)
 }
 
 impl Cggtts {
     /// Builds CGGTTS from given file
-    pub fn new(fp: &std::path::Path) -> Result<Cggtts, CggttsError> {
+    pub fn new(fp: &std::path::Path) -> Result<Cggtts, Error> {
         let file_name = fp.file_name()
             .unwrap()
             .to_str()
@@ -98,25 +108,29 @@ impl Cggtts {
         let file_re = Regex::new(r"(G|R|E|C|J)(S|M|Z)....[1-9][1-9]\.[1-9][1-9][1-9]")
             .unwrap();
         if !file_re.is_match(file_name) {
-            return Err(CggttsError::FileNamingConvention)
+            return Err(Error::FileNamingConvention)
         }
+
+        // identify date of creation 
+        // using file naming convention 
+        let mjd: f32 = match scan_fmt!(file_name, "{[1-9]{2}.[1-9]{3}]$}", f32) {
+            Some(f) => f,
+            _ => return Err(Error::DateMjdParsingError),
+        };
 
         let mut chksum: u8 = 0;
         let file_content = std::fs::read_to_string(&fp).unwrap();
         let mut lines = file_content.split("\n").map(|x| x.to_string()).into_iter();
-
-        // Identify date from MJD contained in file name
-        let mjd: f32 = 10.0; //mjd_str.parse().unwrap();
 
         // version
         let line = lines.next().unwrap();
         let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
             Some(version) => {
                 if !version.eq(&VERSION) {
-                    return Err(CggttsError::DeprecatedVersion)
+                    return Err(Error::DeprecatedVersion)
                 }
             },
-            _ => return Err(CggttsError::VersionFormatError),
+            _ => return Err(Error::VersionFormatError),
         };
 
         // CRC is the %256 summation
@@ -132,10 +146,10 @@ impl Cggtts {
             Some(string) => {
                 match chrono::NaiveDate::parse_from_str(string.trim(), "%Y-%m-%d") {
                     Ok(date) => date,
-                    _ => return Err(CggttsError::RevisionDateParsingError),
+                    _ => return Err(Error::RevisionDateParsingError),
                 }
             },
-            _ => return Err(CggttsError::RevisionDateFormatError),
+            _ => return Err(Error::RevisionDateFormatError),
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -157,7 +171,7 @@ impl Cggtts {
                 year: u16::from_str_radix(&year, 10)?, 
                 software_number
             },
-            _ => return Err(CggttsError::RcvrFormatError),
+            _ => return Err(Error::RcvrFormatError),
         };
         // crc 
         let bytes = line.clone().into_bytes();
@@ -169,7 +183,7 @@ impl Cggtts {
         let line = lines.next().unwrap();
         let nb_channels: u16 = match scan_fmt!(&line, "CH = {d}", u16) {
             Some(channel) => channel,
-            _ => return Err(CggttsError::ChannelFormatError),
+            _ => return Err(Error::ChannelFormatError),
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -195,7 +209,7 @@ impl Cggtts {
                                 year: u16::from_str_radix(&year, 10)?, 
                                 software_number
                             }),
-                    _ => return Err(CggttsError::ImsFormatError),
+                    _ => return Err(Error::ImsFormatError),
                 }
             }
         };
@@ -216,7 +230,7 @@ impl Cggtts {
                     lab
                 }
             },
-            _ => return Err(CggttsError::LabParsingError),
+            _ => return Err(Error::LabParsingError),
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -227,7 +241,7 @@ impl Cggtts {
         let line = lines.next().unwrap();
         let x: f32 = match scan_fmt!(&line, "X = {f}", f32) {
             Some(f) => f,
-            _ => return Err(CggttsError::CoordinatesParsingError(String::from("X")))
+            _ => return Err(Error::CoordinatesParsingError(String::from("X")))
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -238,7 +252,7 @@ impl Cggtts {
         let line = lines.next().unwrap();
         let y: f32 = match scan_fmt!(&line, "Y = {f}", f32) {
             Some(f) => f,
-            _ => return Err(CggttsError::CoordinatesParsingError(String::from("Y")))
+            _ => return Err(Error::CoordinatesParsingError(String::from("Y")))
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -249,7 +263,7 @@ impl Cggtts {
         let line = lines.next().unwrap();
         let z: f32 = match scan_fmt!(&line, "Z = {f}", f32) {
             Some(f) => f,
-            _ => return Err(CggttsError::CoordinatesParsingError(String::from("Z")))
+            _ => return Err(Error::CoordinatesParsingError(String::from("Z")))
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -260,7 +274,7 @@ impl Cggtts {
         let line = lines.next().unwrap();
         let frame: String = match scan_fmt!(&line, "FRAME = {}", String) {
             Some(fr) => fr,
-            _ => return Err(CggttsError::FrameFormatError),
+            _ => return Err(Error::FrameFormatError),
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -277,7 +291,7 @@ impl Cggtts {
                     Some(String::from(string))
                 }
             },
-            _ => return Err(CggttsError::CommentsFormatError),
+            _ => return Err(Error::CommentsFormatError),
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -302,7 +316,7 @@ impl Cggtts {
                     dly
                 }
             },
-            _ => return Err(CggttsError::DelayFormatError(String::from("System"))),
+            _ => return Err(Error::DelayFormatError(String::from("System"))),
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -327,7 +341,7 @@ impl Cggtts {
                     dly
                 }
             },
-            _ => return Err(CggttsError::DelayFormatError(String::from("Cable"))),
+            _ => return Err(Error::DelayFormatError(String::from("Cable"))),
         };
         // crc
         let bytes = line.clone().into_bytes();
@@ -352,55 +366,53 @@ impl Cggtts {
                     dly
                 }
             },
-            _ => return Err(CggttsError::DelayFormatError(String::from("Ref."))),
+            _ => return Err(Error::DelayFormatError(String::from("Ref."))),
         };
         // crc
         let bytes = line.clone().into_bytes();
         for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
-        // CRC
+        // reference
+        let line = lines.next().unwrap();
+        let reference: String = match scan_fmt!(&line, "REF = {}", String) {
+            Some(string) => string,
+            _ => return Err(Error::ReferenceFormatError),
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
-        // REFERENCE
+        // checksum
         let line = lines.next().unwrap();
-        let reference = scan_fmt!(&line, "REF = {}", String).unwrap();
-
-        // CRC
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
-        // CKSUM
-        let line = lines.next().unwrap();
-        let cksum_parsed = scan_fmt!(&line, "CKSUM = {x}", String).unwrap();
-        let cksum = u8::from_str_radix(&cksum_parsed, 16).unwrap();
+        let cksum_parsed: u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
+            Some(string) => {
+                match u8::from_str_radix(&string, 16) {
+                    Ok(hex) => hex,
+                    _ => return Err(Error::ChecksumParsingError),
+                }
+            },
+            _ => return Err(Error::ChecksumFormatError),
+        };
 
         // CRC calc. ends on 'CHKSUM = ' (line 15)
-        let end_pos = line.find("= ").unwrap();
+        let end_pos = line.find("= ")
+            .unwrap(); // already checked
         let bytes = line.clone().into_bytes();
-        for i in 0..end_pos+2
-        {
+        for i in 0..end_pos+2 {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
-        chksum = chksum.wrapping_add(15*10); // 15*'\n', TODO: faulty syref2-5.c ??
-        if chksum != cksum {
-            return Err(CggttsError::ChecksumError(cksum, chksum))
+        if chksum != cksum_parsed {
+            return Err(Error::ChecksumError(cksum_parsed, chksum))
         }
 
         let _ = lines.next().unwrap(); // Blank line
         let _ = lines.next().unwrap(); // labels line
-        let _ = lines.next().unwrap(); // units line currently discarded, TODO: to be improved
+        let _ = lines.next().unwrap(); // units line currently discarded
 
-        // Parsing tracks
+        // tracks parsing
         let mut tracks: Vec<track::CggttsTrack> = Vec::new();
         loop {
             // grab new line
@@ -411,25 +423,24 @@ impl Cggtts {
             if line.len() == 0 { // empty line
                 break // we're done parsing
             }
-            tracks.push (track::CggttsTrack::new(&line).unwrap());
+            tracks.push(track::CggttsTrack::new(&line)?);
         }
 
-        return Ok(Cggtts {
-                version: VERSION.to_string(),
-                rev_date,
-                date: mjd_to_date((mjd * 1000.0) as u32), /* TODO @GBR conversion mjd est a revoir */
-                nb_channels,
-                recvr: rcvr_infos,
-                ims: ims_infos,
-                lab,
-                xyz: (x,y,z),
-                frame,
-                comments,
-                delays: (sys_dly, cab_dly, ref_dly),
-                reference,
-                tracks
-            }
-        );
+        Ok(Cggtts {
+            version: VERSION.to_string(),
+            rev_date,
+            date: julianday::JulianDay::new(mjd as i32).to_date(),
+            nb_channels,
+            recvr: rcvr_infos,
+            ims: ims_infos,
+            lab,
+            xyz: (x,y,z),
+            frame,
+            comments,
+            delays: (sys_dly, cab_dly, ref_dly),
+            reference,
+            tracks
+        })
     }
 
     pub fn get_date (&self) -> &chrono::NaiveDate { &self.date }
@@ -470,31 +481,6 @@ impl fmt::Display for Cggtts {
     }
 }
 
-/* converts MJD to chrono::naivedate */
-fn mjd_to_date (mjd: u32) -> chrono::NaiveDate {
-    let z = 2400000.5 + 0.5 + mjd as f32; // julian day 0h
-    let alpha: u32 = ((z - 867216.25) /  36524.25) as u32;
-    let s: u32 = z as u32 +1 +alpha - alpha / 4;
-    let b: u32 = s + 1524;
-    let c: u32 = ((b as f32 -122.1)/365.25) as u32;
-    let d: u32 = (365.25 * c as f32) as u32;
-    let e: u32 = ((b-d) as f32 / 30.6001) as u32;
-    let q = b - d - ((30.6001 * e as f32) as u32);
-    let m: u32;
-    let mut annee: u32 = c - 4715;
-
-    if e < 14 {
-        m = e-1;
-    } else {
-        m = e-13;
-    }
-
-    if m > 2 {
-        annee = c - 4716;
-    }
-
-    return chrono::NaiveDate::from_ymd(annee as i32, m, q)
-}
 #[cfg(test)]
 mod test {
     use chrono::Datelike;
@@ -524,16 +510,5 @@ mod test {
                     Cggtts::new(&fp))
             }
         }
-    }
-    
-    #[test]
-    /*
-     * Tests MJD convertion
-     */
-    fn test_mdj_convertion () {
-        let date = mjd_to_date(57000);
-        assert_eq!(date.year(), 2014);
-        assert_eq!(date.month(), 12);
-        assert_eq!(date.day(), 9);
     }
 }
