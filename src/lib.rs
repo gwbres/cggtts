@@ -1,6 +1,12 @@
-//! CGGTTS Format
-//! Only 2E Version (latest) supported at the moment
-//! Refer to official doc: https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf
+//! CGGTTS Rust package
+//!
+//! A package to handle CGGTTS data files.
+//! Only 2E Version (latest) supported
+//!
+//! url: https://github.com/gwbres/cggtts
+//!
+//! Refer to official doc: 
+//! https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf
 
 use std::fmt;
 use regex::Regex;
