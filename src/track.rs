@@ -199,10 +199,10 @@ impl CggttsTrack {
     pub fn get_track_start_time (&self) -> chrono::NaiveTime { self.trktime }
 
     /* returns true if track does have ionospheric data */
-    fn has_ionospheric_data (&self) -> bool { self.msio.is_some() && self.smsi.is_some() && self.isg.is_some() }
+    pub fn has_ionospheric_data (&self) -> bool { self.msio.is_some() && self.smsi.is_some() && self.isg.is_some() }
 
     /* returns ionospheric data triplet (msio, smsi, isg) */
-    fn get_ionospheric_data (&self) -> Option<(f64, f64, f64)> {
+    pub fn get_ionospheric_data (&self) -> Option<(f64, f64, f64)> {
         if self.has_ionospheric_data() {
             Some((self.msio.unwrap(),self.smsi.unwrap(),self.isg.unwrap()))
         } else {
@@ -290,7 +290,7 @@ mod test {
                         let line_content = lines.get(line).unwrap_or(&"");
                         if line > 18 && line_content.len() > 0 { 
                             match CggttsTrack::new(line_content) {
-                                Ok(track) => {},
+                                Ok(_) => {},
                                 Err(e) => panic!("CggttsTrack::new() failed with \"{}\" - parsing file \"{}\" line #{} \"{}\"", e, name, line+1, line_content.trim())
                             }
                         }
