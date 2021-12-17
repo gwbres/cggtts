@@ -6,7 +6,7 @@ CGGTTS is specified by BIPM, Paris
 and is dedicated to GNSS Time Transfer, Common View, Two Way
 Satellites time transfers.
 
-[](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
+[CGGTTS Specifications](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
 
 Supported version: "2E"
 
