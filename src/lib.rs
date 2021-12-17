@@ -3,16 +3,17 @@
 //! Refer to official doc: https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf
 
 use std::fmt;
+use regex::Regex;
+use thiserror::Error;
 use scan_fmt::scan_fmt;
-use std::io::ErrorKind;
 
-/// track description
+/// CGGTTS track description
 mod track;
 
-/// currently CGGTTS file version supported
-const CGGTTS_VERSION: &str = "2E";
+/// supported CGGTTS version
+const VERSION: &str = "2E";
 
-#[allow(dead_code)]
+/// CGGTTS structure
 pub struct Cggtts {
     version: String, // file version info
     rev_date: chrono::NaiveDate, // header data rev. date
@@ -24,16 +25,16 @@ pub struct Cggtts {
     xyz: (f32,f32,f32), // antenna phase center coordinates [in m]
     frame: String,
     comments: Option<String>, // comments (if any)
-    sys_dly: f32, // total system delay (internal + cable delay) [in ns]
-    cab_dly: f32, // delay in antenna to GNSS RX [in ns]
-    ref_dly: f32, // local GNSS RX to local clock delay
+    // delays
+    //  sys delay: total system delay [internal + cable delay] [ns]
+    //  cable delay: delay from antenna to receiver [ns]
+    //  ref. delay: receiver to local clock delay [ns]
+    delays: (f64,f64,f64), 
     reference: String,
     tracks: Vec<track::CggttsTrack>
 }
 
-/*
- * GNSS receiver & other system descriptor
- */
+/// GNSS Receiver and external system description
 #[derive(Clone, Debug)]
 struct Rcvr {
     manufacturer: String,
@@ -43,271 +44,313 @@ struct Rcvr {
     software_number: String,
 }
 
-#[allow(dead_code)]
+#[derive(Error, Debug)]
+pub enum CggttsError {
+    #[error("Failed to parse file")]
+    IoError(#[from] std::io::Error),
+    #[error("Failed to parse integer number")]
+    ParseIntError(#[from] std::num::ParseIntError),
+    #[error("File naming convention")]
+    FileNamingConvention,
+    #[error("Deprecated versions are not supported")]
+    DeprecatedVersion,
+    #[error("Version format mismatch")]
+    VersionFormatError,
+    #[error("Rev. date format mismatch")]
+    RevisionDateFormatError,
+    #[error("Failed to parse Rev. date")]
+    RevisionDateParsingError,
+    #[error("RCVR format mismatch")]
+    RcvrFormatError,
+    #[error("Failed to parse 'lab' field")]
+    LabParsingError,
+    #[error("Comments format mismatch")]
+    CommentsFormatError,
+    #[error("IMS format mismatch")]
+    ImsFormatError,
+    #[error("Frame format mismatch")]
+    FrameFormatError,
+    #[error("Channel format mismatch")]
+    ChannelFormatError,
+    #[error("Failed to parse '{0}' coordinates")]
+    CoordinatesParsingError(String),
+    #[error("'{0}' delay format mismatch")]
+    DelayFormatError(String),
+    #[error("File Checksum error - got '{0}' but '{1}' locally computed")]
+    ChecksumError(u8, u8),
+}
+
 impl Cggtts {
-    pub fn new(fp: &std::path::Path) -> Result<Cggtts, ErrorKind> {
+    /// Builds CGGTTS from given file
+    pub fn new(fp: &std::path::Path) -> Result<Cggtts, CggttsError> {
+        let file_name = fp.file_name()
+            .unwrap()
+            .to_str()
+                .unwrap();
+        // regex to check for file naming convetion
+        let file_re = Regex::new(r"(G|R|E|C|J)(S|M|Z)....[1-9][1-9]\.[1-9][1-9][1-9]")
+            .unwrap();
+        if !file_re.is_match(file_name) {
+            return Err(CggttsError::FileNamingConvention)
+        }
+
         let mut chksum: u8 = 0;
         let file_content = std::fs::read_to_string(&fp).unwrap();
         let mut lines = file_content.split("\n").map(|x| x.to_string()).into_iter();
 
-        let mut sys_dly: Option<f32> = Some(0.0);
-        let mut ref_dly: Option<f32> = Some(0.0);
-        let mut cab_dly: Option<f32> = Some(0.0);
-
         // Identify date from MJD contained in file name
-        let point_index = fp.to_str().unwrap().find(".").unwrap(); // will panic if filename does not match naming convention
-        let mjd_str = fp.to_string().split_off(point_index-2);
-        let mjd: f32 = mjd_str.parse().unwrap();
+        let mjd: f32 = 10.0; //mjd_str.parse().unwrap();
 
-        // Version line
+        // version
         let line = lines.next().unwrap();
-        let version = scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String).unwrap();
-        if !version.eq(CGGTTS_VERSION) {
-            println!("CGTTS Version '{}' is not supported", version);
-            return Err(ErrorKind::InvalidData);
-        }
+        let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
+            Some(version) => {
+                if !version.eq(&VERSION) {
+                    return Err(CggttsError::DeprecatedVersion)
+                }
+            },
+            _ => return Err(CggttsError::VersionFormatError),
+        };
 
         // CRC is the %256 summation
         // of all ASCII bytes contained in the header
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
-        // REV DATE
-        let line = lines.next().unwrap();
-        let rev_date_str = scan_fmt!(&line, "REV DATE = {}", String).unwrap();
-        let rev_date = chrono::NaiveDate::parse_from_str(rev_date_str.trim(), " %Y-%m-%d").unwrap();
-
-        // CRC
         let bytes = line.clone().into_bytes();
         for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
-        // RCVR
-        let rcvr_infos: Rcvr;
+        // rev date 
         let line = lines.next().unwrap();
-        match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
+        let rev_date: chrono::NaiveDate = match scan_fmt!(&line, "REV DATE = {}", String) {
+            Some(string) => {
+                match chrono::NaiveDate::parse_from_str(string.trim(), "%Y-%m-%d") {
+                    Ok(date) => date,
+                    _ => return Err(CggttsError::RevisionDateParsingError),
+                }
+            },
+            _ => return Err(CggttsError::RevisionDateFormatError),
+        };
+        // crc
+        let bytes = line.clone().into_bytes();
+        for i in 0..bytes.len() {
+            chksum = chksum.wrapping_add(bytes[i]);
+        }
+
+        // rcvr
+        let line = lines.next().unwrap();
+        let rcvr_infos: Rcvr = match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
             (Some(manufacturer),
             Some(recv_type),
             Some(serial_number),
             Some(year),
-            Some(software_number)) => rcvr_infos = Rcvr{manufacturer, recv_type, serial_number, year: u16::from_str_radix(&year, 10).unwrap(), software_number},
-            _ => {
-                println!("Failed to parse RCVR infos from CGGTTS file");
-                return Err(ErrorKind::InvalidData);
-            }
-        }
-
-        // CRC
+            Some(software_number)) => Rcvr{
+                manufacturer, 
+                recv_type, 
+                serial_number, 
+                year: u16::from_str_radix(&year, 10)?, 
+                software_number
+            },
+            _ => return Err(CggttsError::RcvrFormatError),
+        };
+        // crc 
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
-        // CHANNEL
+        // channel
         let line = lines.next().unwrap();
-        let nb_channels = scan_fmt!(&line, "CH = {d}", u16).unwrap();
-
-        // CRC
+        let nb_channels: u16 = match scan_fmt!(&line, "CH = {d}", u16) {
+            Some(channel) => channel,
+            _ => return Err(CggttsError::ChannelFormatError),
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
-        // IMS
-        let mut ims_infos: Option<Rcvr> = None;
+        // ims
         let line = lines.next().unwrap();
-        if !line.contains("IMS = 99999") // IMS data is provided
-        {
-            match scan_fmt! (&line, "IMS = {} {} {} {d} {}", String, String, String, String, String)
-            {
-                (Some(manufacturer),
-                    Some(recv_type),
-                    Some(serial_number),
-                    Some(year),
-                    Some(software_number)) => ims_infos = Some(Rcvr{manufacturer, recv_type, serial_number, year: u16::from_str_radix(&year, 10).unwrap(), software_number}),
-                _ => {
-                    println!("Failed to parse IMS infos from CGGTTS file");
-                    return Err(ErrorKind::InvalidData);
+        let ims_infos: Option<Rcvr> = match line.contains("IMS = 99999") { 
+            true => None,
+            false => { // IMS data provided
+                match scan_fmt! (&line, "IMS = {} {} {} {d} {}", String, String, String, String, String) {
+                    (Some(manufacturer),
+                        Some(recv_type),
+                        Some(serial_number),
+                        Some(year),
+                        Some(software_number)) => Some(
+                            Rcvr {
+                                manufacturer, 
+                                recv_type, 
+                                serial_number, 
+                                year: u16::from_str_radix(&year, 10)?, 
+                                software_number
+                            }),
+                    _ => return Err(CggttsError::ImsFormatError),
                 }
             }
-        }
+        };
 
-        // CRC
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
-        // LAB
+        // lab
         let line = lines.next().unwrap();
-
-        let mut lab = scan_fmt!(&line, "LAB = {}", String).unwrap();
-        if lab.eq("ABC")
-        {
-            lab = String::from("Unknown");
-        }
-
-        // CRC
+        let lab: String = match scan_fmt!(&line, "LAB = {}", String) {
+            Some(lab) => {
+                if lab.eq("ABC") {
+                    String::from("Unknown")
+                } else {
+                    lab
+                }
+            },
+            _ => return Err(CggttsError::LabParsingError),
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
         // X
         let line = lines.next().unwrap();
-        let x = scan_fmt!(&line, "X = {f}", f32).unwrap();
-
-        // CRC
+        let x: f32 = match scan_fmt!(&line, "X = {f}", f32) {
+            Some(f) => f,
+            _ => return Err(CggttsError::CoordinatesParsingError(String::from("X")))
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
         // Y
         let line = lines.next().unwrap();
-        let y = scan_fmt!(&line, "Y = {f}", f32).unwrap();
-
-        // CRC
+        let y: f32 = match scan_fmt!(&line, "Y = {f}", f32) {
+            Some(f) => f,
+            _ => return Err(CggttsError::CoordinatesParsingError(String::from("Y")))
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
-        // Z
+        // Y
         let line = lines.next().unwrap();
-        let z = scan_fmt!(&line, "Z = {f}", f32).unwrap(); // TODO: to be fixed in next release!
-
-        // CRC
+        let z: f32 = match scan_fmt!(&line, "Z = {f}", f32) {
+            Some(f) => f,
+            _ => return Err(CggttsError::CoordinatesParsingError(String::from("Z")))
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
-        // FRAME
+        // frame 
         let line = lines.next().unwrap();
-        let frame = scan_fmt!(&line, "FRAME = {}", String).unwrap();
-
-        // CRC
+        let frame: String = match scan_fmt!(&line, "FRAME = {}", String) {
+            Some(fr) => fr,
+            _ => return Err(CggttsError::FrameFormatError),
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
-        // COMMENTS
-        let mut comments: Option<String> = None;
+        // comments 
         let line = lines.next().unwrap();
-        let cmts = line.split("=").nth(1).unwrap().trim();
-        if !cmts.eq("NO COMMENTS")
-        {
-            comments = Some(cmts.to_string());
-        }
-
-        // CRC
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
-        // SYS DLY
-        let line = lines.next().unwrap();
-        match scan_fmt!(&line, "SYS DLY = {f} {} {}", f32, String, String)
-        {
-            (Some(dly), Some(scaling), Some(_)) => {
-                if scaling.eq("ms")
-                {
-                    sys_dly = Some(dly * 1e-3);
-                } else if scaling.eq("us")
-                {
-                    sys_dly = Some(dly * 1e-6);
-                } else if scaling.eq("ns") {
-                    sys_dly = Some(dly * 1e-9);
-                } else if scaling.eq("ps") {
-                    sys_dly = Some(dly * 1e-12);
-                } else if scaling.eq("fs") {
-                    sys_dly = Some(dly * 1e-15);
+        let comments: Option<String> = match scan_fmt!(&line, "COMMENTS = {}", String) {
+            Some(string) => {
+                if string.eq("NO COMMENTS") {
+                    None
+                } else {
+                    Some(String::from(string))
                 }
             },
-            _ => {
-                println!("Failed to parse SYS (system) Delay line");
-                return Err(ErrorKind::InvalidData);
-            }
-        }
-
-        // CRC
+            _ => return Err(CggttsError::CommentsFormatError),
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
-        // CAB DLY
+        // system delay 
         let line = lines.next().unwrap();
-        match scan_fmt!(&line, "CAB DLY = {f} {}", f32, String)
-        {
-            (Some(dly), Some(scaling)) => {
-                if scaling.eq("ms")
-                {
-                    cab_dly = Some(dly * 1e-3);
-                } else if scaling.eq("us")
-                {
-                    cab_dly = Some(dly * 1e-6);
+        let sys_dly: f64 = match scan_fmt!(&line, "SYS DLY = {f} {} {}", f64, String, String) {
+            (Some(dly),Some(scaling),Some(_)) => {
+                if scaling.eq("ms") {
+                    dly * 1E-3
+                } else if scaling.eq("us") {
+                    dly * 1E-6
                 } else if scaling.eq("ns") {
-                    cab_dly = Some(dly * 1e-9);
+                    dly * 1E-9
                 } else if scaling.eq("ps") {
-                    cab_dly = Some(dly * 1e-12);
+                    dly * 1E-12
                 } else if scaling.eq("fs") {
-                    cab_dly = Some(dly * 1e-15);
+                    dly * 1E-15
+                } else {
+                    dly
                 }
             },
-            _ => {
-                println!("Failed to parse CAB (cable) Delay line");
-                return Err(ErrorKind::InvalidData);
-            }
-        }
-
-        // CRC
+            _ => return Err(CggttsError::DelayFormatError(String::from("System"))),
+        };
+        // crc
         let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len()
-        {
+        for i in 0..bytes.len() {
             chksum = chksum.wrapping_add(bytes[i]);
         }
-
-        // REF DLY
+        // cable delay
         let line = lines.next().unwrap();
-        match scan_fmt!(&line, "REF DLY = {f} {}", f32, String)
-        {
-            (Some(dly), Some(scaling)) => {
-                if scaling.eq("ms")
-                {
-                    ref_dly = Some(dly * 1e-3);
-                } else if scaling.eq("us")
-                {
-                    ref_dly = Some(dly * 1e-6);
+        let cab_dly: f64 = match scan_fmt!(&line, "CAB DLY = {f} {}", f64, String) {
+            (Some(dly),Some(scaling)) => {
+                if scaling.eq("ms") {
+                    dly * 1E-3
+                } else if scaling.eq("us") {
+                    dly * 1E-6
                 } else if scaling.eq("ns") {
-                    ref_dly = Some(dly * 1e-9);
+                    dly * 1E-9
                 } else if scaling.eq("ps") {
-                    ref_dly = Some(dly * 1e-12);
+                    dly * 1E-12
                 } else if scaling.eq("fs") {
-                    ref_dly = Some(dly * 1e-15);
+                    dly * 1E-15
+                } else {
+                    dly
                 }
             },
-            _ => {
-                println!("Failed to parse REF (Reference) Delay line");
-                return Err(ErrorKind::InvalidData);
-            }
+            _ => return Err(CggttsError::DelayFormatError(String::from("Cable"))),
+        };
+        // crc
+        let bytes = line.clone().into_bytes();
+        for i in 0..bytes.len() {
+            chksum = chksum.wrapping_add(bytes[i]);
+        }
+        // ref. delay
+        let line = lines.next().unwrap();
+        let ref_dly: f64 = match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
+            (Some(dly),Some(scaling)) => {
+                if scaling.eq("ms") {
+                    dly * 1E-3
+                } else if scaling.eq("us") {
+                    dly * 1E-6
+                } else if scaling.eq("ns") {
+                    dly * 1E-9
+                } else if scaling.eq("ps") {
+                    dly * 1E-12
+                } else if scaling.eq("fs") {
+                    dly * 1E-15
+                } else {
+                    dly
+                }
+            },
+            _ => return Err(CggttsError::DelayFormatError(String::from("Ref."))),
+        };
+        // crc
+        let bytes = line.clone().into_bytes();
+        for i in 0..bytes.len() {
+            chksum = chksum.wrapping_add(bytes[i]);
         }
 
         // CRC
@@ -342,12 +385,8 @@ impl Cggtts {
         }
 
         chksum = chksum.wrapping_add(15*10); // 15*'\n', TODO: faulty syref2-5.c ??
-
-        // Verify Checksum
-        if chksum != cksum
-        {
-            println!("CGGTTS file checksum error - Found '{}' while '{}' was locally computed", cksum, chksum);
-            return Err(ErrorKind::InvalidData);
+        if chksum != cksum {
+            return Err(CggttsError::ChecksumError(cksum, chksum))
         }
 
         let _ = lines.next().unwrap(); // Blank line
@@ -369,7 +408,7 @@ impl Cggtts {
         }
 
         return Ok(Cggtts {
-                version: CGGTTS_VERSION.to_string(),
+                version: VERSION.to_string(),
                 rev_date,
                 date: mjd_to_date((mjd * 1000.0) as u32), /* TODO @GBR conversion mjd est a revoir */
                 nb_channels,
@@ -379,9 +418,7 @@ impl Cggtts {
                 xyz: (x,y,z),
                 frame,
                 comments,
-                sys_dly: sys_dly.unwrap(),
-                cab_dly: cab_dly.unwrap(),
-                ref_dly: ref_dly.unwrap(),
+                delays: (sys_dly, cab_dly, ref_dly),
                 reference,
                 tracks
             }
@@ -408,14 +445,14 @@ impl Cggtts {
 impl fmt::Display for Cggtts {
     fn fmt (&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
-            f, "Version: '{}' | REV DATE '{}' | LAB '{}' | Nb Channels {}\nRECVR: {:?}\nIMS: {:?}\nXYZ: {:?}\nFRAME: {}\nCOMMENTS: {:#?}\nDELAYS | SYS: {} ns | CAB: {} ns | TOTAL {} ns\nREFERENCE: {}\n",
+            f, "Version: '{}' | REV DATE '{}' | LAB '{}' | Nb Channels {}\nRECVR: {:?}\nIMS: {:?}\nXYZ: {:?}\nFRAME: {}\nCOMMENTS: {:#?}\nDELAYS {:?} [ns]\nREFERENCE: {}\n",
             self.version, self.rev_date, self.lab, self.nb_channels,
             self.recvr,
             self.ims,
             self.xyz,
             self.frame,
             self.comments,
-            self.sys_dly, self.cab_dly, self.ref_dly,
+            self.delays,
             self.reference,
         ).unwrap();
         write! (f, "-------------------------\n").unwrap();
