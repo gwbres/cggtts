@@ -1,5 +1,5 @@
 [package]
-name = "agentime"
+name = "cggtts"
 version = "0.0.1"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 edition = "2018"
