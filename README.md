@@ -10,7 +10,3 @@ Satellites time transfers.
 
 Supported version: "2E". Older versions are not managed by this lib,
 mainly because it knows how to manipulate cable delays.
-
-## TODO
-
-* Checksum verification!
