@@ -604,7 +604,7 @@ impl Cggtts {
             // still missing ref. delay
             let line = lines.next().unwrap();
             //ref_dly = Some(0.0); 
-            ref_dly = match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
+            ref_dly = match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
                 (Some(f),Some(unit)) => {
                     if unit.eq("ms") {
                         Some(f*1E-3)
@@ -620,8 +620,7 @@ impl Cggtts {
                         Some(f)
                     }
                 },
-                //_ => return Err(Error::DelayParsingError(String::from("REF"))),//line))),
-                _ => return Err(Error::DelayParsingError(String::from(line))),
+                _ => return Err(Error::DelayParsingError(String::from("Ref"))),
             };
             // crc
             let bytes = line.clone().into_bytes();
@@ -830,12 +829,14 @@ mod test {
             let path = entry.path();
             if !path.is_dir() { // only files..
                 let fp = std::path::Path::new(&path);
+                let cggtts = Cggtts::from_file(&fp);
                 assert_eq!(
-                    Cggtts::from_file(&fp).is_err(),
+                    cggtts.is_err(),
                     false,
-                    "Cggtts::new() failed for '{:?}' with '{:?}'",
-                    path, 
-                    Cggtts::from_file(&fp))
+                    "Cggtts::from_file() failed for '{:?}' with '{:?}'",
+                    path,
+                    cggtts);
+                println!("{:?}", cggtts)
             }
         }
     }
@@ -858,7 +859,7 @@ mod test {
                 assert_eq!(
                     cggtts.is_err(), 
                     false,
-                    "Cggtts::new() failed for '{:?}' with '{:?}'",
+                    "Cggtts::from_file() failed for '{:?}' with '{:?}'",
                     path, 
                     cggtts); 
                 println!("{:?}", cggtts)
