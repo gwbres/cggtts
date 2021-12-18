@@ -1,36 +1,32 @@
 //! CGGTTS Rust package
 //!
 //! A package to handle CGGTTS data files.
-//! Only 2E Version (latest) supported
+//!
+//! Only "2E" Version (latest to date) supported
 //!
 //! Only single frequency `Cggtts` is supported at the moment,
 //! dual frequency `Cggtts` to be supported in coming releases.
 //!
-//! url: https://github.com/gwbres/cggtts
+//! Homepage: <https://github.com/gwbres/cggtts>
 //!
 //! Official BIPM `Cggtts` specifications:
-//! https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf
+//! <https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf>
 //!
 
-mod track;
+pub mod track;
 use regex::Regex;
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
 
-/// supported CGGTTS version
-/// non matching CGGTTS file input will be rejected
+/// supported `Cggtts` version
+/// non matching input files will be rejected
 const VERSION: &str = "2E";
 
 /// last revision date
 const REV_DATE: &str = "2014-02-20";
 
-/// BIPM specified tracking duration
-/// `Cggtts` tracks must respect that duration
-/// to be BIPM compliant, which is not mandatory 
-const BIPM_SPECIFIED_TRACKING_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
-
-/// `CGGTTS` structure
+/// `Cggtts` structure
 #[derive(Debug)]
 pub struct Cggtts {
     version: String, // file version info
@@ -40,8 +36,8 @@ pub struct Cggtts {
     rcvr: Option<Rcvr>, // possible GNSS receiver infos
     nb_channels: u16, // nb of GNSS receiver channels
     ims: Option<Rcvr>, // IMS Ionospheric Measurement System (if any)
-    // antenna phase center coordinates [m]
-    // in ITFR spatial reference
+    // Antenna phase center coordinates [m]
+    // in `ITFR` spatial reference
     coordinates: (f32,f32,f32), 
     frame: String,
     comments: Option<String>, // comments (if any)
@@ -115,7 +111,7 @@ pub enum Error {
 }
 
 impl Default for Cggtts {
-    /// Buils default `CGGTTS` structure
+    /// Buils default `Cggtts` structure
     fn default() -> Cggtts {
         let today = chrono::Utc::today(); 
         let rcvr: Option<Rcvr> = None;
@@ -147,7 +143,7 @@ impl Default for Cggtts {
 }
 
 impl Cggtts {
-    /// builds default `Cggtts` object
+    /// Builds `Cggtts` object with default attributes
     pub fn new() -> Cggtts { Default::default() }
 
     /// Returns production date
@@ -156,38 +152,38 @@ impl Cggtts {
     pub fn get_revision_date (&self) -> chrono::NaiveDate { self.rev_date }
 
     /// Returns true if all tracks follow the tracking specifications
-    /// from BIPM, ie., all tracks last for BIPM_TRACKING_DURATION
+    /// from `BIPM`, ie., all tracks last for `CggttsTrack::BIPM_SPECIFIED_TRACKING_DURATION`
     pub fn matches_bipm_tracking_specs (&self) -> bool {
         for i in 0..self.tracks.len() {
-            if self.tracks[i].get_duration() != BIPM_SPECIFIED_TRACKING_DURATION {
+            if self.tracks[i].get_duration() != track::BIPM_SPECIFIED_TRACKING_DURATION {
                 return false
             }
         }
         true
     }
 
-    /// assigns `lab` agency
+    /// Assigns `lab` agency
     pub fn set_lab_agency (&mut self, lab: &str) { self.lab = String::from(lab) }
-    /// returns `lab` agency
+    /// Returns `lab` agency
     pub fn get_lab_agency (&self) -> &str { &self.lab } 
     
-    /// assigns gnss receiver nb of channels
+    /// Assigns GNSS receiver number of channels
     pub fn set_nb_channels (&mut self, ch: u16) { self.nb_channels = ch }
-    /// Returns gnss receiver nb of channels
+    /// Returns GNSS receiver number of channels
     pub fn get_nb_channels (&self) -> u16 { self.nb_channels }
 
-    /// assigns antenna phase center coordinates [m]
-    /// coordinates should use IRTF spatial reference
+    /// Assigns antenna phase center coordinates [m],
+    /// coordinates should use `IRTF` referencing
     pub fn set_antenna_coordinates (&mut self, coords: (f32,f32,f32)) { self.coordinates = coords }
-    /// returns antenna phase center coordinates [m] IRTF reference
+    /// Returns antenna phase center coordinates [m], `IRTF` referencing
     pub fn get_antenna_coordinates (&self) -> (f32,f32,f32) { self.coordinates }
 
-    /// assigns system reference time field
+    /// Assigns reference time label
     pub fn set_time_reference (&mut self, reference: &str) { self.reference = String::from(reference) }
-    /// returns system reference time field
+    /// Returns reference time label
     pub fn get_reference_time (&self) -> &str { &self.reference }
 
-    /// returns total delay
+    /// Returns total delay
     /// basic use: 
     ///    [ANT]---->[system]----> (clock) 
     ///    |-------------------------------> total delay
@@ -241,52 +237,53 @@ impl Cggtts {
         }
     }
 
-    /// assigns `total` delay
+    /// Assigns `total` delay
     /// `total` delay comprises all internal delays
     /// this interface should only be used when internal system 
     /// is totally unknown, it is not recommended
     pub fn set_total_delay (&mut self, dly: f64) { self.tot_dly = Some(dly) }
 
-    /// assigns `reference` delay
+    /// Assigns `reference` delay
     /// `reference` delay is defined as the time delay
     /// between the local clock and receiver internal clock
     pub fn set_reference_delay (&mut self, dly: f64) { self.ref_dly = Some(dly) }
-    /// returns `reference` delay (if provided)
+    /// Returns `reference` delay (if provided)
     pub fn get_reference_delay (&self) -> Option<f64> { self.ref_dly }
     
-    /// assigns `internal` delay
+    /// Assigns `internal` delay
     /// `internal` delay is the time delay of the gnss signal
     /// inside the antenna and inside the receiver, basically
     /// excluding `cable` delay
     pub fn set_internal_delay (&mut self, dly: f64) { self.int_dly = Some(dly) }
-    /// returns `internal` delay (if provided)
+    /// Returns `internal` delay (if provided)
     pub fn get_internal_delay (&self) -> Option<f64> { self.int_dly }
     
-    /// assigns `cable` delay
+    /// Assigns `cable` delay
     /// `cable` delay is defined as the time delay from the antenna to receiver
     pub fn set_cable_delay (&mut self, dly: f64) { self.cab_dly = Some(dly) }
-    /// returns `cable` delay (if provided)
+    /// Returns `cable` delay (if provided)
     pub fn get_cable_delay (&self) -> Option<f64> { self.cab_dly }
     
-    /// assigns `system` delay
+    /// Assigns `system` delay
     /// `system` delay is defined as `internal` + `cable` delay
     /// in case it is impossible to differentiate the two
     pub fn set_system_delay (&mut self, dly: f64) { self.sys_dly = Some(dly) }
-    /// returns `system` delay (if provided)
+    /// Returns `system` delay (if provided)
     pub fn get_system_delay (&self) -> Option<f64> { self.sys_dly }
     
-    /// Returns first track produced in file
+    /// Returns first track produced in file (if any)
     pub fn get_first_track (&self) -> Option<&track::CggttsTrack> { self.tracks.get(0) }
-    /// Returns last track produced in file
+    /// Returns last track produced in file (if any)
     pub fn get_latest_track (&self) -> Option<&track::CggttsTrack> { self.tracks.get(self.tracks.len()-1) }
-    /// Returns requested track
+    /// Returns requested track (if possible)
     pub fn get_track (&self, index: usize) -> Option<&track::CggttsTrack> { self.tracks.get(index) }
-    /// grabs last track from self 
+    /// Grabs last track from self (if possible)
     pub fn pop_track (&mut self) -> Option<track::CggttsTrack> { self.tracks.pop() }
-    /// Appends one track to self
+    /// Appends one track to self (if possible)
     pub fn push_track (&mut self, track: track::CggttsTrack) { self.tracks.push(track) }
     
-    /// Builds CGGTTS from given file
+    /// Builds `Cggtts` from given file.
+    /// File must respect naming convention.
     pub fn from_file (fp: &std::path::Path) -> Result<Cggtts, Error> {
         let file_name = fp.file_name()
             .unwrap()
@@ -681,7 +678,7 @@ impl Cggtts {
             if line.len() == 0 { // empty line
                 break // we're done parsing
             }
-            tracks.push(track::CggttsTrack::new(&line)?);
+            tracks.push(track::CggttsTrack::from_str(&line)?);
         }
 
         Ok(Cggtts {

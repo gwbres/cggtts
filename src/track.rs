@@ -1,5 +1,10 @@
 use thiserror::Error;
-use std::str::FromStr;
+use chrono::Timelike;
+
+/// `BIPM` tracking duration specifications.
+/// `Cggtts` tracks must respect that duration
+/// to be BIPM compliant, which is not mandatory 
+pub const BIPM_SPECIFIED_TRACKING_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
 
 /// Describes all known GNSS constellations
 #[derive(Clone, PartialEq, Debug)]
@@ -10,6 +15,17 @@ pub enum Constellation {
     QZSS,
     Galileo,
     Mixed, // mixed constellation records
+}
+
+impl std::str::FromStr for CommonViewClassType {
+    type Err = std::str::Utf8Error;
+    fn from_str (s: &str) -> Result<Self, Self::Err> {
+        if s.eq("FF") {
+            Ok(CommonViewClassType::MultiFiles)
+        } else {
+            Ok(CommonViewClassType::SingleFile)
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -39,11 +55,11 @@ impl std::str::FromStr for Constellation {
     }
 }
 
-/// Constellation Code denomination
-/// see RINEX demoninations 
+/// Constellation codes, refer to
+/// `RINEX` denominations
 #[allow(non_camel_case_types)]
-#[derive(Clone, Debug)]
-enum ConstellationRinexCode {
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum ConstellationRinexCode {
     GPS_GLO_QZ_SBA_L1C,
     GPS_GLO_L1P,
     GAL_E1,
@@ -63,9 +79,39 @@ pub enum ConstellationRinexCodeError {
     UnknownCode(String),
 }
 
+impl std::str::FromStr for ConstellationRinexCode {
+    type Err = ConstellationRinexCodeError;   
+    fn from_str (s: &str) -> Result<Self, Self::Err> {
+        if s.eq("L1C") {
+            Ok(ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C)
+        } else if s.eq("L1P") {
+            Ok(ConstellationRinexCode::GPS_GLO_L1P)
+        } else if s.eq("E1") {
+            Ok(ConstellationRinexCode::GAL_E1)
+        } else if s.eq("L1C") {
+            Ok(ConstellationRinexCode::QZSS_L1C)
+        } else if s.eq("B1i") {
+            Ok(ConstellationRinexCode::BEIDOU_B1i)
+        } else if s.eq("L3P") {
+            Ok(ConstellationRinexCode::GPS_C1_P1C2_P2)
+        } else if s.eq("L3E") {
+            Ok(ConstellationRinexCode::GPS_C1_P1C2_P2)
+        } else if s.eq("L3B") {
+            Ok(ConstellationRinexCode::GAL_E1E5a)
+        } else if s.eq("L3P") {
+            Ok(ConstellationRinexCode::BEIDOU_BliB2i)
+        } else if s.eq("L3Q") {
+            Ok(ConstellationRinexCode::GZSS_C1C5)
+        } else {
+            Err(ConstellationRinexCodeError::UnknownCode(s.to_string()))
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 /// `CommonViewClassType` describes
-/// class of common view
+/// whether this common view is based on a unique 
+/// Satellite Vehicule, or a combination of SVs
 enum CommonViewClassType {
     SingleFile,
     MultiFiles,
@@ -75,7 +121,7 @@ const TRACK_WITH_IONOSPHERIC_DATA_LENGTH: usize = 24;
 const TRACK_WITHOUT_IONOSPHERIC_DATA_LENGTH: usize = 21;
 
 #[derive(Debug, Clone)]
-/// `CggttsTrack` describes a CGGTTS measurement
+/// `CggttsTrack` describes a `Cggtts` measurement
 pub struct CggttsTrack {
     constellation: Constellation,
     sat_id: u8,
@@ -131,7 +177,136 @@ pub enum Error {
 }
 
 impl CggttsTrack {
-    pub fn new (line: &str) -> Result<CggttsTrack, Error> {
+    /// Builds `CggttsTrack` object with
+    /// default attributes
+    pub fn new() -> CggttsTrack { Default::default() }
+
+    /// Returns track start time
+    pub fn get_track_start_time (&self) -> chrono::NaiveTime { self.trktime }
+    /// Returns track duration
+    pub fn get_duration (&self) -> std::time::Duration { self.duration }
+    /// Assigns track duration
+    pub fn set_duration (&mut self, duration: std::time::Duration) { self.duration = duration }
+
+    /// Returns satellite vehicule ID (PRN#),
+    /// returns 0xFF in case we're using a combination of SVs
+    pub fn get_satellite_id (&self) -> u8 { self.sat_id }
+    /// Assigns satellite vehicule ID (PRN#),
+    /// set 0xFF when using a combination of SVs
+    pub fn set_satellite_id (&mut self, id: u8) { self.sat_id = id }
+    
+    /// Returns elevation at tracking midpoint [degrees] 
+    pub fn get_elevation (&self) -> f64 { self.elevation }
+    /// Sets elevation at tracking midpoint [degrees] 
+    pub fn set_elevation (&mut self, elevation: f64) { self.elevation = elevation }
+
+    /// Returns azimuth angle [degrees] at tracking midpoint 
+    pub fn get_azimuth (&self) -> f64 { self.azimuth }
+    /// Sets azimuth angle [degrees] at tracking midpoint 
+    pub fn set_azimuth (&mut self, azimuth: f64) { self.azimuth = azimuth }
+
+    /// Returns constellation RINEX code
+    pub fn get_constellation_rinex_code (&self) -> ConstellationRinexCode { self.frc }
+    /// Assigns constellation RINEX code
+    pub fn set_constellation_rinex_code (&mut self, code: ConstellationRinexCode) { self.frc = code }
+    
+    /// Returns track (refsv, srsv) duplet
+    pub fn get_refsv_srsv (&self) -> (f64, f64) { (self.refsv, self.srsv) }
+    /// Assigns track (refsv, srsv) duplet
+    pub fn set_refsv_srsv (&mut self, data: (f64, f64)) { 
+        self.refsv = data.0;
+        self.srsv = data.1
+    }
+
+    /// Returns track (refsys, srsys) duplet 
+    pub fn get_refsys_srsys (&self) -> (f64, f64) { (self.refsys, self.srsys) }
+    /// Assigns track (refsys, srsys) duplet
+    pub fn set_refsys_srsys (&mut self, data: (f64, f64)) { 
+        self.refsys = data.0;
+        self.srsys = data.1
+    }
+
+    /// Returns true if track comes with ionospheric parameters estimates
+    pub fn has_ionospheric_parameters (&self) -> bool { self.msio.is_some() && self.smsi.is_some() && self.isg.is_some() }
+    
+    /// Returns ionospheric parameters estimates (if any)
+    pub fn get_ionospheric_parameters (&self) -> Option<(f64, f64, f64)> {
+        if self.has_ionospheric_parameters() {
+            Some((self.msio.unwrap(),self.smsi.unwrap(),self.isg.unwrap()))
+        } else {
+            None
+        }
+    }
+    
+    /// Assigns ionospheric parameters
+    /// params (MSIO, SMSI, ISG)
+    pub fn set_ionospheric_parameters (&mut self, params: (f64,f64,f64)) {
+        self.msio = Some(params.0);
+        self.smsi = Some(params.1);
+        self.isg = Some(params.2)
+    }
+
+}
+
+impl Default for CggttsTrack {
+    /// Builds default `CggttsTrack` structure
+    fn default() -> CggttsTrack {
+        let now = chrono::Utc::now();
+        let msio: Option<f64> = None;
+        let smsi: Option<f64> = None;
+        let isg: Option<f64> = None;
+        CggttsTrack {
+            constellation: Constellation::GPS,
+            sat_id: 0,
+            class: CommonViewClassType::SingleFile,
+            trktime: chrono::NaiveTime::from_hms(
+                now.time().hour(),
+                now.time().minute(),
+                now.time().second()
+            ),
+            duration: std::time::Duration::from_secs(0),
+            elevation: 0.0_f64,
+            azimuth: 0.0_f64,
+            refsv: 0.0_f64,
+            srsv: 0.0_f64,
+            refsys: 0.0_f64,
+            srsys: 0.0_f64,
+            dsg: 0.0_f64,
+            ioe: 0,
+            mdtr: 0.0_f64,
+            smdt: 0.0_f64,
+            mdio: 0.0_f64,
+            smdi: 0.0_f64,
+            msio,
+            smsi,
+            isg,
+            fr: 0,
+            hc: 0,
+            frc: ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C,
+        }
+    }
+}
+
+impl std::fmt::Display for CggttsTrack {
+    /// custom diplay formatter
+    fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f, "Constellation: {:?} | SAT #{}\nCommon View Class: '{:?}'\nStart Time: {} | Duration: {:?}\nElevation: {} | Azimuth: {}\nREFSV: {} | SRSV: {} | REFSYS: {} SRSYS: {}\nDSG: {} | IOE: {}\nMDTR: {} | SMDT: {} | MDIO: {} | SMDI: {} | MSIO: {:#?} | SMSI: {:#?} | ISG: {:#?}\nFR: {} | HC: {}",
+            self.constellation, self.sat_id, self.class,
+            self.trktime, self.duration,
+            self.elevation, self.azimuth, self.refsv, self.srsv,
+            self.refsys, self.srsys,
+            self.dsg, self.ioe,
+            self.mdtr, self.smdt, self.mdio, self.smdi, self.msio, self.smsi, self.isg,
+            self.fr, self.hc, //self.frc
+        )
+    }
+}
+
+impl std::str::FromStr for CggttsTrack {
+    type Err = Error; 
+    /// Builds `CggttsTrack` from given str content
+    fn from_str (line: &str) -> Result<Self, Self::Err> {
         let cleaned_up = String::from(line.trim());
         let items: Vec<&str> = cleaned_up.split_ascii_whitespace().collect();
         let constellation = Constellation::from_str(items.get(0).unwrap_or(&""))?; 
@@ -212,111 +387,51 @@ impl CggttsTrack {
             frc
         })
     }
-    
-    /// returns track start time
-    pub fn get_track_start_time (&self) -> chrono::NaiveTime { self.trktime }
-    /// returns track duration
-    pub fn get_duration (&self) -> std::time::Duration { self.duration }
-
-    /// returns track (refsys, srsys) duplet 
-    pub fn get_refsys_srsys (&self) -> (f64, f64) { (self.refsys, self.srsys) }
-    
-    /// returns true if track comes with ionospheric parameters estimates
-    pub fn has_ionospheric_data (&self) -> bool { self.msio.is_some() && self.smsi.is_some() && self.isg.is_some() }
-    /// returns ionospheric parameters estimates (if any)
-    pub fn get_ionospheric_data (&self) -> Option<(f64, f64, f64)> {
-        if self.has_ionospheric_data() {
-            Some((self.msio.unwrap(),self.smsi.unwrap(),self.isg.unwrap()))
-        } else {
-            None
-        }
-    }
-}
-
-// custom display Formatter
-impl std::fmt::Display for CggttsTrack {
-    // custom diplay formatter
-    fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f, "Constellation: {:?} | SAT #{}\nCommon View Class: '{:?}'\nStart Time: {} | Duration: {:?}\nElevation: {} | Azimuth: {}\nREFSV: {} | SRSV: {} | REFSYS: {} SRSYS: {}\nDSG: {} | IOE: {}\nMDTR: {} | SMDT: {} | MDIO: {} | SMDI: {} | MSIO: {:#?} | SMSI: {:#?} | ISG: {:#?}\nFR: {} | HC: {}",
-            self.constellation, self.sat_id, self.class,
-            self.trktime, self.duration,
-            self.elevation, self.azimuth, self.refsv, self.srsv,
-            self.refsys, self.srsys,
-            self.dsg, self.ioe,
-            self.mdtr, self.smdt, self.mdio, self.smdi, self.msio, self.smsi, self.isg,
-            self.fr, self.hc, //self.frc
-        )
-    }
-}
-
-impl std::str::FromStr for CommonViewClassType {
-    type Err = std::str::Utf8Error;
-    fn from_str (s: &str) -> Result<Self, Self::Err> {
-        if s.eq("FF") {
-            Ok(CommonViewClassType::MultiFiles)
-        } else {
-            Ok(CommonViewClassType::SingleFile)
-        }
-    }
-}
-
-impl std::str::FromStr for ConstellationRinexCode {
-    type Err = ConstellationRinexCodeError;   
-    fn from_str (s: &str) -> Result<Self, Self::Err> {
-        if s.eq("L1C") {
-            Ok(ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C)
-        } else if s.eq("L1P") {
-            Ok(ConstellationRinexCode::GPS_GLO_L1P)
-        } else if s.eq("E1") {
-            Ok(ConstellationRinexCode::GPS_GLO_L1P)
-        } else if s.eq("L1C") {
-            Ok(ConstellationRinexCode::GAL_E1)
-        } else if s.eq("B1i") {
-            Ok(ConstellationRinexCode::QZSS_L1C)
-        } else if s.eq("L3P") {
-            Ok(ConstellationRinexCode::BEIDOU_B1i)
-        } else if s.eq("L3E") {
-            Ok(ConstellationRinexCode::GPS_C1_P1C2_P2)
-        } else if s.eq("L3B") {
-            Ok(ConstellationRinexCode::GAL_E1E5a)
-        } else if s.eq("L3P") {
-            Ok(ConstellationRinexCode::BEIDOU_BliB2i)
-        } else if s.eq("L3Q") {
-            Ok(ConstellationRinexCode::GZSS_C1C5)
-        } else {
-            Err(ConstellationRinexCodeError::UnknownCode(s.to_string()))
-        }
-    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-/*
+    use float_cmp::approx_eq;
+    
     #[test]
-    /// Tests CGGTTS track parser against test data
-    fn cggtts_track_parser() -> std::io::Result<()> {   
-        let test_resources = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR").to_owned() + "/data");
-        for entry in std::fs::read_dir(test_resources).unwrap() {
-            let entry = entry?;
-            let path = entry.path();
-            if !path.is_dir() {
-                let name = path.to_str().unwrap_or("");
-                let content: String = std::fs::read_to_string(name).unwrap_or(String::from("")).parse().unwrap_or(String::from(""));
-                let lines: Vec<&str> = content.split("\n").collect();
-                for line in 0..lines.len() {
-                    let line_content = lines.get(line).unwrap_or(&"");
-                    if line > 18 && line_content.len() > 0 { 
-                        match CggttsTrack::new(line_content) {
-                            Ok(_) => {},
-                            Err(e) => panic!("CggttsTrack::new() failed with \"{}\" - parsing file \"{}\" line #{} \"{}\"", e, name, line+1, line_content.trim())
-                        }
-                    }
-                }
-            }
-            Ok(())
-        }
+    /// Tests `CggttsTrack` default constructor
+    fn cggtts_track_default() {
+        let track = CggttsTrack::new();
+        assert_eq!(track.get_duration().as_secs(), 0);
+        assert_eq!(track.get_elevation(), 0.0);
+        assert_eq!(track.get_azimuth(), 0.0);
+        assert_eq!(track.get_refsv_srsv(), (0.0,0.0));
+        assert_eq!(track.get_refsys_srsys(), (0.0,0.0));
+        assert_eq!(track.has_ionospheric_parameters(), false);
+        assert_eq!(track.get_ionospheric_parameters().is_none(), true); // missing params
+        assert_eq!(track.get_constellation_rinex_code(), ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C); // missing params
     }
-*/
+
+    #[test]
+    /// Tests `CggttsTrack` basic usage
+    fn cggtts_track_basic_use() {
+        let mut track = CggttsTrack::new();
+        track.set_duration(BIPM_SPECIFIED_TRACKING_DURATION);
+        track.set_elevation(90.0);
+        track.set_azimuth(180.0);
+        track.set_refsys_srsys((1E-9,1E-12));
+        assert_eq!(track.get_duration().as_secs(), BIPM_SPECIFIED_TRACKING_DURATION.as_secs());
+        assert_eq!(track.get_elevation(), 90.0);
+        assert_eq!(track.get_azimuth(), 180.0);
+        assert!(
+            approx_eq!(f64,
+                track.get_refsv_srsv().0, 
+                1E-9,
+                epsilon = 1E-9
+            )
+        );
+        assert!(
+            approx_eq!(f64,
+                track.get_refsv_srsv().1, 
+                1E-12,
+                epsilon = 1E-12
+            )
+        )
+    }
 }
