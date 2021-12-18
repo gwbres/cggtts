@@ -644,7 +644,7 @@ impl Cggtts {
         }
             // checksum
         let line = lines.next().unwrap();
-        let cksum_parsed: u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
+        let _cksum_parsed: u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
             Some(string) => {
                 match u8::from_str_radix(&string, 16) {
                     Ok(hex) => hex,
