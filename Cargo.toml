@@ -1,7 +1,6 @@
 [package]
 name = "cggtts"
 version = "0.1.0"
-license = "MIT OR Apache-2.0"
 license-file = "License.txt"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to handle and create CGGTTS data"
@@ -16,4 +15,3 @@ thiserror = "1"
 chrono = "0.4"
 julianday = "0.2.0"
 scan_fmt = "0.1"
-geo-types = "0.7.2"
