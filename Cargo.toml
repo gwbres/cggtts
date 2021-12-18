@@ -5,7 +5,7 @@ license-file = "LICENSE"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to handle and create CGGTTS data"
 homepage = "https://github.com/gwbres/cggtts"
-keywords = ["positionning","time transfer","bipm","gnss","timing","common view","satellites"]
+keywords = ["positionning","bipm","gnss","timing","satellites"]
 edition = "2018"
 readme = "README.md"
 
