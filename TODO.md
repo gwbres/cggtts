@@ -15,10 +15,10 @@ CGGTTS Rust package todo list
  - [ ] frame descriptor must be parsed & used 
 
 ### Cggtts::track
-- [ ] use from_str() instead of new()
-- [ ] provide a default constructor
-- [ ] expose and make easier to external use
+- [x] use from_str() instead of new()
+- [x] provide a default constructor
+- [x] expose and make easier to external use
 
 ### Documentation
-- [ ] provide some use cases 
+- [x] provide some use cases 
 - [ ] doc on system delays 
