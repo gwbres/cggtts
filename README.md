@@ -16,7 +16,7 @@ For compelling examples, refer to the integrated test methods.
 
 ### Basic usage
 
-Basic usage does not provide enough informat for dual frequency CGGTTS,
+Basic usage does not provide enough information for dual frequency CGGTTS,
 but gets you started quickly
 
 ```rust
@@ -55,13 +55,13 @@ Build from a file
 CGGTTS Tracks manipulation
 ```rust
     let mut cggtts = [...]
-    let track = track::Cggttrack::new();
+    let mut track = track::Cggttrack::new();
     track.set_elevation(180.0);
     track.set_azimuth(180.0);
     track.set_duration(track::BIPM_SPECIFIED_TRACKING_DURATION);
     cggtts.add_track(track);
 
-    let mut track = cggtts.pop();
+    let mut track = cggtts.pop(); // grab 1 please
     assert_eq!(track.get_satellite_id(), 0xFF); // Multi satellite PRN#
     track.set_satellite_id(0x01); // Single SatVehicule PRN#
 ```
