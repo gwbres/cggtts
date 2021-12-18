@@ -33,7 +33,12 @@ but gets you started quickly
     cggtts.set_total_delay(300E-9);
 ```
 
-Build from a file
+Building from a file
+
+* File must be at least revision "2E"
+* older format will be rejected
+* File name must follow the naming convention, see CGGTTS specifications
+
 ```rust
     let cggtts = Cggtts::from_file("data/standard/GSOP0159.571");
     prinln!("{:?}", cggtts);
