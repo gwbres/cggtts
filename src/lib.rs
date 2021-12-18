@@ -290,7 +290,7 @@ impl Cggtts {
             .to_str()
                 .unwrap();
         // check against file naming convetion
-        let file_re = Regex::new(r"(G|R|E|C|J)(S|M|Z)....[1-9][1-9]\.[1-9][1-9][1-9]")
+        let file_re = Regex::new(r"(G|R|E|C|J)(S|M|Z)....[1-9][0-9]\.[0-9][0-9][0-9]")
             .unwrap();
         if !file_re.is_match(file_name) {
             return Err(Error::FileNamingConvention)
@@ -603,7 +603,8 @@ impl Cggtts {
             } // needed cab delay
             // still missing ref. delay
             let line = lines.next().unwrap();
-            ref_dly = Some(0.0); /*match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
+            //ref_dly = Some(0.0); 
+            ref_dly = match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
                 (Some(f),Some(unit)) => {
                     if unit.eq("ms") {
                         Some(f*1E-3)
@@ -621,7 +622,7 @@ impl Cggtts {
                 },
                 //_ => return Err(Error::DelayParsingError(String::from("REF"))),//line))),
                 _ => return Err(Error::DelayParsingError(String::from(line))),
-            };*/
+            };
             // crc
             let bytes = line.clone().into_bytes();
             for i in 0..bytes.len() {
