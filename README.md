@@ -2,6 +2,7 @@
 Rust package to manipulate CGGTTS (BIPM) data files
 
 [![Rust](https://github.com/gwbres/cggtts/actions/workflows/rust.yml/badge.svg)](https://github.com/gwbres/cggtts/actions/workflows/rust.yml)
+[![codecov](https://codecov.io/gh/gwbres/cggtts/branch/main/graph/badge.svg)](https://codecov.io/gh/gwbres/cggtts)
 
 CGGTTS is specified by BIPM, Paris 
 (Bureau International des Poids & des Mesures)
