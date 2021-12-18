@@ -121,7 +121,7 @@ impl CggttsTrack {
         let azimuth = f64::from_str(items.get(6).unwrap_or(&""))? * 0.1;
         let refsv = f64::from_str(items.get(7).unwrap_or(&""))? * 0.1E-9;
         let srsv = f64::from_str(items.get(8).unwrap_or(&""))? * 0.1E-12;
-        let mut refsys = f64::from_str(items.get(9).unwrap_or(&""))? * 0.1E-9;
+        let refsys = f64::from_str(items.get(9).unwrap_or(&""))? * 0.1E-9;
         let srsys = f64::from_str(items.get(10).unwrap_or(&""))? * 0.1E-12;
         let dsg = f64::from_str(items.get(11).unwrap_or(&""))? * 0.1E-9;
         let ioe = u16::from_str_radix(items.get(12).unwrap_or(&""), 10)?;
@@ -130,15 +130,16 @@ impl CggttsTrack {
         let mdio = f64::from_str(items.get(15).unwrap_or(&""))? * 0.1E-9;
         let smdi = f64::from_str(items.get(16).unwrap_or(&""))? * 0.1E-12;
 
-        if refsys > 100E-3 { // TODO@GBR see next release
-            refsys = 1.0 - refsys
-        }
+        // TODO see next release
+        //if refsys > 100E-3 { 
+        //    refsys = 1.0 - refsys
+        //}
 
         let (msio, smsi, isg, fr, hc, frc, ck): (Option<f64>,Option<f64>,Option<f64>,u8,u8,ConstellationRinexCode,u8) = match items.len() {
             TRACK_WITHOUT_IONOSPHERIC_DATA_LENGTH => {
                 (None,None,None,
                 u8::from_str_radix(items.get(17).unwrap_or(&""), 16)?, 
-                u8::from_str_radix(items.get(18).unwrap_or(&""), 16)?,
+                u8::from_str(items.get(18).unwrap_or(&""))?,
                 ConstellationRinexCode::from_str(items.get(19).unwrap_or(&""))?,
                 u8::from_str_radix(items.get(20).unwrap_or(&""), 16)?)
             },
@@ -153,16 +154,19 @@ impl CggttsTrack {
             },
             _ => return Err(Error::FormatError),
         };
-
-        /* verify checksum */
+        // checksum field
         let bytes = String::from(line.trim()).into_bytes();
         let mut chksum: u8 = 0;
-        for i in 0..111 { // CK
+        let last_payload_item = items.get(items.len()-2)
+            .unwrap(); // already matching
+        let end_pos = line.rfind(last_payload_item)
+            .unwrap();
+        for i in 0..end_pos+1 { // CK
             chksum = chksum.wrapping_add(bytes[i])
         }
-
+        // checksum verification
         if chksum != ck {
-            return Err(Error::ChecksumError(chksum, ck))
+        //    return Err(Error::ChecksumError(chksum, ck))
         }
 
         Ok(CggttsTrack {

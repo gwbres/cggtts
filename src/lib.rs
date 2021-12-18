@@ -23,7 +23,7 @@ const VERSION: &str = "2E";
 /// last revision date
 //const REV_DATE: &str = "2014-02-20";
 
-/// CGGTTS structure
+/// `CGGTTS` structure
 #[derive(Debug)]
 pub struct Cggtts {
     version: String, // file version info
@@ -45,7 +45,7 @@ pub struct Cggtts {
     tracks: Vec<track::CggttsTrack> // CGGTTS track(s)
 }
 
-/// GNSS Receiver and external system description
+/// GNSS receiver description
 #[derive(Clone, Debug)]
 struct Rcvr {
     manufacturer: String,
@@ -97,7 +97,7 @@ pub enum Error {
     ChecksumFormatError,
     #[error("Failed to parse checksum value")]
     ChecksumParsingError,
-    #[error("File Checksum error - got '{0}' but '{1}' locally computed")]
+    #[error("File Checksum error - expected '{0}' but '{1}' locally computed")]
     ChecksumError(u8, u8),
     #[error("CGGTTS Track error")]
     CggttsTrackError(#[from] track::Error)
@@ -243,7 +243,8 @@ impl Cggtts {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
-        // ims
+        // IMS information
+        // IMS = IIII is probably for demo simplicity => should be removed
         let line = lines.next().unwrap();
         let ims : Option<Rcvr> = match line.contains("IMS = 99999") { 
             true => None,
@@ -512,14 +513,14 @@ impl Cggtts {
 
         // CRC calc. ends on 'CHKSUM = ' (line 15)
         let end_pos = line.find("= ")
-            .unwrap(); // already checked
+            .unwrap(); // already matching
         let bytes = line.clone().into_bytes();
         for i in 0..end_pos+2 {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
         //if chksum != cksum_parsed {
-        //    return Err(Error::ChecksumError(cksum_parsed, chksum))
+        //    return Err(Error::ChecksumError(chksum, ck))
         //}
 
         let _ = lines.next().unwrap(); // Blank line
