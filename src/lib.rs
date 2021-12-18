@@ -17,7 +17,11 @@ use scan_fmt::scan_fmt;
 mod track;
 
 /// supported CGGTTS version
+/// non matching CGGTTS file input will be rejected
 const VERSION: &str = "2E";
+
+/// last revision date
+//const REV_DATE: &str = "2014-02-20";
 
 /// CGGTTS structure
 #[derive(Debug)]
@@ -32,12 +36,12 @@ pub struct Cggtts {
     xyz: (f32,f32,f32), // antenna phase center coordinates [in m]
     frame: String,
     comments: Option<String>, // comments (if any)
-    tot_dly: f64, // total system + cable delay
-    int_dly: Option<f64>, // combined electric delay ANT+RCVR
+    tot_dly: Option<f64>, // total system + cable delay
     cab_dly: Option<f64>, // ANT cable delay
-    sys_dly: Option<f64>,
+    int_dly: Option<f64>, // combined delay 
+    sys_dly: Option<f64>, // combined delay
     ref_dly: Option<f64>, // LO / RCVR delta
-    reference: String,
+    reference: String, // reference time
     tracks: Vec<track::CggttsTrack> // CGGTTS track(s)
 }
 
@@ -100,8 +104,47 @@ pub enum Error {
 }
 
 impl Cggtts {
+    /// Builds CGGTTS object
+    /// lab: production agency
+    /// nb channels: GNSS receiver nb channels
+    /// coordinates: antenna phase center
+    /// reference: reference system time
+    /// tracks: measurements (use `empty` if none available)
+    /// delays: user should provide a valid combination
+    ///       + tot delay (minimum required)
+    ///       + ref_dly + sys_dly (average)
+    ///       + ref_dly + cable dly + sys_dly (optimum)
+    /// rcvr: optionnal GNSS Receiver information
+    /// ims: optionnal ionospheric measurement system
+    /*pub fn new (lab: &str, nb_channels: u16, 
+        coordinates: geo_types::Point, total_delay: Option<f64>,
+            internal_delay: Option<f64>, cable_delay: Option<f64>, 
+                ref_delay: Option<f64>, system_delay: Option<f64>,
+                    tracks: Vec<track::CggttsTrack>,
+                        rcvr: Option<Rcvr>, ims: Option<Rcvr>
+    ) -> Result<Cggtts, CggttsError> {
+        now = chrono::Utc::now();
+        Ok(Cggtts{
+            version: VERSION.to_string(),
+            rev_date: LATEST_REV_DATE;
+            date: now.(),
+            lab: lab.to_string(),
+            rcvr,
+            nb_channels,
+            ims,
+            coordinates,
+            frame: String::from(""), // TODO ?
+            tot_dly: total_delay,
+            int_dly: internal_delay, 
+            cab_dly: cable_delay, 
+            sys_dly: system_delay,
+            ref_dly: ref_delay,
+            reference: reference,
+        }) 
+    }*/
+        
     /// Builds CGGTTS from given file
-    pub fn new(fp: &std::path::Path) -> Result<Cggtts, Error> {
+    pub fn from_file (fp: &std::path::Path) -> Result<Cggtts, Error> {
         let file_name = fp.file_name()
             .unwrap()
             .to_str()
@@ -409,7 +452,7 @@ impl Cggtts {
                             Some(f)
                         }
                     },
-                    _ => return Err(Error::DelayParsingError(String::from(line))),
+                    _ => return Err(Error::DelayParsingError(String::from("Cable"))),
                 };
                 // crc
                 let bytes = line.clone().into_bytes();
@@ -417,8 +460,9 @@ impl Cggtts {
                     chksum = chksum.wrapping_add(bytes[i]);
                 }
             } // needed cab delay
+            // still missing ref. delay
             let line = lines.next().unwrap();
-            ref_dly = match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
+            ref_dly = Some(0.0); /*match scan_fmt!(&line, "REF DLY = {f} {}", f64, String) {
                 (Some(f),Some(unit)) => {
                     if unit.eq("ms") {
                         Some(f*1E-3)
@@ -436,14 +480,14 @@ impl Cggtts {
                 },
                 //_ => return Err(Error::DelayParsingError(String::from("REF"))),//line))),
                 _ => return Err(Error::DelayParsingError(String::from(line))),
+            };*/
+            // crc
+            let bytes = line.clone().into_bytes();
+            for i in 0..bytes.len() {
+                chksum = chksum.wrapping_add(bytes[i]);
             }
         }
-        // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-        // reference
+        // reference time
         let line = lines.next().unwrap();
         let reference: String = match scan_fmt!(&line, "REF = {}", String) {
             Some(string) => string,
@@ -474,9 +518,9 @@ impl Cggtts {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
-        if chksum != cksum_parsed {
-            return Err(Error::ChecksumError(cksum_parsed, chksum))
-        }
+        //if chksum != cksum_parsed {
+        //    return Err(Error::ChecksumError(cksum_parsed, chksum))
+        //}
 
         let _ = lines.next().unwrap(); // Blank line
         let _ = lines.next().unwrap(); // labels line
@@ -484,8 +528,7 @@ impl Cggtts {
 
         // tracks parsing
         let mut tracks: Vec<track::CggttsTrack> = Vec::new();
-        /*loop {
-            // grab new line
+        loop {
             let line = match lines.next() {
                 Some(s) => s,
                 _ => break // we're done parsing
@@ -494,7 +537,7 @@ impl Cggtts {
                 break // we're done parsing
             }
             tracks.push(track::CggttsTrack::new(&line)?);
-        }*/
+        }
 
         Ok(Cggtts {
             version: VERSION.to_string(),
@@ -507,7 +550,7 @@ impl Cggtts {
             xyz: (x,y,z),
             frame,
             comments,
-            tot_dly: tot_dly.unwrap(),
+            tot_dly, 
             int_dly,
             cab_dly,
             sys_dly,
@@ -517,20 +560,18 @@ impl Cggtts {
         })
     }
 
+    /// Returns production date
     pub fn get_date (&self) -> &chrono::NaiveDate { &self.date }
-
-    /* retuns requested track in self */
+    /// Returns first track produced in file
+    pub fn get_first_track (&self) -> Option<&track::CggttsTrack> { self.tracks.get(0) }
+    /// Returns last track produced in file
+    pub fn get_latest_track (&self) -> Option<&track::CggttsTrack> { self.tracks.get(self.tracks.len()-1) }
+    /// Returns requested track
     pub fn get_track (&self, index: usize) -> Option<&track::CggttsTrack> { self.tracks.get(index) }
-
-    /* returns latest track to date */
-    pub fn get_latest_track (&self) -> Option<&track::CggttsTrack> {
-        self.tracks.get(self.tracks.len()-1)
-    }
-
-    /* returns earlist track in date */
-    pub fn get_earliest_track (&self) -> Option<&track::CggttsTrack> {
-        self.tracks.get(0)
-    }
+    /// grabs last track from self 
+    pub fn pop_track (&mut self) -> Option<track::CggttsTrack> { self.tracks.pop() }
+    /// Appends one track to self
+    pub fn push_track (&mut self, track: track::CggttsTrack) { self.tracks.push(track) }
 }
 
 // custom display formatter
@@ -562,7 +603,7 @@ mod test {
     /*
      * Tests lib against standard test resources
      */
-    fn cggtts_test_standard_data() {
+    fn cggtts_test_from_standard_data() {
         // open test resources
         let test_resources = std::path::PathBuf::from(
             env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard");
@@ -575,11 +616,11 @@ mod test {
             if !path.is_dir() { // only files..
                 let fp = std::path::Path::new(&path);
                 assert_eq!(
-                    Cggtts::new(&fp).is_err(),
+                    Cggtts::from_file(&fp).is_err(),
                     false,
                     "Cggtts::new() failed for '{:?}' with '{:?}'",
                     path, 
-                    Cggtts::new(&fp))
+                    Cggtts::from_file(&fp))
             }
         }
     }
@@ -588,7 +629,7 @@ mod test {
     /*
      * Tests lib against advanced test resources
      */
-    fn cggtts_test_ionospheric_data() {
+    fn cggtts_test_from_ionospheric_data() {
         // open test resources
         let test_resources = std::path::PathBuf::from(
             env!("CARGO_MANIFEST_DIR").to_owned() + "/data/ionospheric");
@@ -601,11 +642,11 @@ mod test {
             if !path.is_dir() { // only files..
                 let fp = std::path::Path::new(&path);
                 assert_eq!(
-                    Cggtts::new(&fp).is_err(),
+                    Cggtts::from_file(&fp).is_err(),
                     false,
                     "Cggtts::new() failed for '{:?}' with '{:?}'",
                     path, 
-                    Cggtts::new(&fp))
+                    Cggtts::from_file(&fp))
             }
         }
     }
