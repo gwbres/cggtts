@@ -3,10 +3,14 @@
 //! A package to handle CGGTTS data files.
 //! Only 2E Version (latest) supported
 //!
+//! Only single frequency `Cggtts` is supported at the moment,
+//! dual frequency `Cggtts` to be supported in coming releases.
+//!
 //! url: https://github.com/gwbres/cggtts
 //!
-//! Refer to official doc: 
+//! Official BIPM `Cggtts` specifications:
 //! https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf
+//!
 
 mod track;
 use regex::Regex;
@@ -19,7 +23,12 @@ use scan_fmt::scan_fmt;
 const VERSION: &str = "2E";
 
 /// last revision date
-//const REV_DATE: &str = "2014-02-20";
+const REV_DATE: &str = "2014-02-20";
+
+/// BIPM specified tracking duration
+/// `Cggtts` tracks must respect that duration
+/// to be BIPM compliant, which is not mandatory 
+const BIPM_SPECIFIED_TRACKING_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
 
 /// `CGGTTS` structure
 #[derive(Debug)]
@@ -31,21 +40,23 @@ pub struct Cggtts {
     rcvr: Option<Rcvr>, // possible GNSS receiver infos
     nb_channels: u16, // nb of GNSS receiver channels
     ims: Option<Rcvr>, // IMS Ionospheric Measurement System (if any)
-    xyz: (f32,f32,f32), // antenna phase center coordinates [in m]
+    // antenna phase center coordinates [m]
+    // in ITFR spatial reference
+    coordinates: (f32,f32,f32), 
     frame: String,
     comments: Option<String>, // comments (if any)
-    tot_dly: Option<f64>, // total system + cable delay
+    tot_dly: Option<f64>, // absolute total delay
     cab_dly: Option<f64>, // ANT cable delay
-    int_dly: Option<f64>, // combined delay 
-    sys_dly: Option<f64>, // combined delay
-    ref_dly: Option<f64>, // LO / RCVR delta
+    int_dly: Option<f64>, // 
+    sys_dly: Option<f64>, // 
+    ref_dly: Option<f64>, // delay between local clock & receiver clock
     reference: String, // reference time
     tracks: Vec<track::CggttsTrack> // CGGTTS track(s)
 }
 
-/// GNSS receiver description
 #[derive(Clone, Debug)]
-struct Rcvr {
+/// `Rcvr` describes a GNSS receiver
+pub struct Rcvr {
     manufacturer: String,
     recv_type: String,
     serial_number: String,
@@ -98,56 +109,190 @@ pub enum Error {
     #[error("File Checksum error - expected '{0}' but '{1}' locally computed")]
     ChecksumError(u8, u8),
     #[error("CGGTTS Track error")]
-    CggttsTrackError(#[from] track::Error)
+    CggttsTrackError(#[from] track::Error),
+    #[error("Missing \"{0}\" delay information")]
+    MissingDelayInformation(String),
+}
+
+impl Default for Cggtts {
+    /// Buils default `CGGTTS` structure
+    fn default() -> Cggtts {
+        let today = chrono::Utc::today(); 
+        let rcvr: Option<Rcvr> = None;
+        let ims: Option<Rcvr> = None;
+        let tracks: Vec<track::CggttsTrack> = Vec::new();
+        let comments: Option<String> = None;
+        let delays: (Option<f64>,Option<f64>,Option<f64>,Option<f64>, Option<f64>) = (None, None, None, None, None);
+        Cggtts {
+            version: VERSION.to_string(),
+            rev_date: chrono::NaiveDate::parse_from_str(REV_DATE, "%Y-%m-%d")
+                .unwrap(),
+            date: today.naive_utc(),
+            lab: String::from("Unknown"),
+            nb_channels: 0,
+            coordinates: (0.0, 0.0, 0.0),
+            rcvr,
+            tracks,
+            ims,
+            reference: String::from("Unknown"),
+            comments,
+            frame: String::from("?"),
+            tot_dly: delays.0,
+            ref_dly: delays.1,
+            int_dly: delays.2,
+            sys_dly: delays.3,
+            cab_dly: delays.4,
+        }
+    }
 }
 
 impl Cggtts {
-    /// Builds CGGTTS object
-    /// lab: production agency
-    /// nb channels: GNSS receiver nb channels
-    /// coordinates: antenna phase center
-    /// reference: reference system time
-    /// tracks: measurements (use `empty` if none available)
-    /// delays: user should provide a valid combination
-    ///       + tot delay (minimum required)
-    ///       + ref_dly + sys_dly (average)
-    ///       + ref_dly + cable dly + sys_dly (optimum)
-    /// rcvr: optionnal GNSS Receiver information
-    /// ims: optionnal ionospheric measurement system
-    /*pub fn new (lab: &str, nb_channels: u16, 
-        coordinates: geo_types::Point, total_delay: Option<f64>,
-            internal_delay: Option<f64>, cable_delay: Option<f64>, 
-                ref_delay: Option<f64>, system_delay: Option<f64>,
-                    tracks: Vec<track::CggttsTrack>,
-                        rcvr: Option<Rcvr>, ims: Option<Rcvr>
-    ) -> Result<Cggtts, CggttsError> {
-        now = chrono::Utc::now();
-        Ok(Cggtts{
-            version: VERSION.to_string(),
-            rev_date: LATEST_REV_DATE;
-            date: now.(),
-            lab: lab.to_string(),
-            rcvr,
-            nb_channels,
-            ims,
-            coordinates,
-            frame: String::from(""), // TODO ?
-            tot_dly: total_delay,
-            int_dly: internal_delay, 
-            cab_dly: cable_delay, 
-            sys_dly: system_delay,
-            ref_dly: ref_delay,
-            reference: reference,
-        }) 
-    }*/
-        
+    /// builds default `Cggtts` object
+    pub fn new() -> Cggtts { Default::default() }
+
+    /// Returns production date
+    pub fn get_date (&self) -> chrono::NaiveDate { self.date }
+    /// Returns revision date
+    pub fn get_revision_date (&self) -> chrono::NaiveDate { self.rev_date }
+
+    /// Returns true if all tracks follow the tracking specifications
+    /// from BIPM, ie., all tracks last for BIPM_TRACKING_DURATION
+    pub fn matches_bipm_tracking_specs (&self) -> bool {
+        for i in 0..self.tracks.len() {
+            if self.tracks[i].get_duration() != BIPM_SPECIFIED_TRACKING_DURATION {
+                return false
+            }
+        }
+        true
+    }
+
+    /// assigns `lab` agency
+    pub fn set_lab_agency (&mut self, lab: &str) { self.lab = String::from(lab) }
+    /// returns `lab` agency
+    pub fn get_lab_agency (&self) -> &str { &self.lab } 
+    
+    /// assigns gnss receiver nb of channels
+    pub fn set_nb_channels (&mut self, ch: u16) { self.nb_channels = ch }
+    /// Returns gnss receiver nb of channels
+    pub fn get_nb_channels (&self) -> u16 { self.nb_channels }
+
+    /// assigns antenna phase center coordinates [m]
+    /// coordinates should use IRTF spatial reference
+    pub fn set_antenna_coordinates (&mut self, coords: (f32,f32,f32)) { self.coordinates = coords }
+    /// returns antenna phase center coordinates [m] IRTF reference
+    pub fn get_antenna_coordinates (&self) -> (f32,f32,f32) { self.coordinates }
+
+    /// assigns system reference time field
+    pub fn set_time_reference (&mut self, reference: &str) { self.reference = String::from(reference) }
+    /// returns system reference time field
+    pub fn get_reference_time (&self) -> &str { &self.reference }
+
+    /// returns total delay
+    /// basic use: 
+    ///    [ANT]---->[system]----> (clock) 
+    ///    |-------------------------------> total delay
+    ///
+    /// intermediate: 
+    ///    [ANT]------>[system]-------------------> (clock) 
+    ///    |-?->--?--->--------------->system delay 
+    ///                   ^
+    ///                   |---------------------------ref
+    /// cable and intrinsic delays are not known
+    /// but deduced by the delta knowledge
+    ///
+    /// advanced: 
+    ///    [ANT]------->[system]---> (clock) 
+    ///    |-a->--cab-->--------b-->system delay 
+    ///                   ^
+    ///                   |----------ref
+    /// full system knownledge, including internal granularity 
+    /// this scenario is required for Dual Frequency CGGTTS generation
+    pub fn get_total_delay (&self) -> Result<f64, Error> {
+        match self.tot_dly {
+            Some(delay) => Ok(delay), // basic usage
+            _ => { // detailed delays provided
+                // ref. dly always needed from there
+                match self.ref_dly {
+                    Some(ref_dly) => {
+                        match self.sys_dly {
+                            Some(sys_dly) => {
+                                // intermediate use case
+                                Ok(ref_dly + sys_dly)
+                            },
+                            None => {
+                                // advance usage requires cable + int delays then
+                                match self.int_dly {
+                                    Some(int_dly) => {
+                                        match self.cab_dly {
+                                            Some(cab_dly) => {
+                                                Ok(cab_dly + int_dly + ref_dly)
+                                            },
+                                            None => return Err(Error::MissingDelayInformation(String::from("cable"))),
+                                        }
+                                    },
+                                    None => return Err(Error::MissingDelayInformation(String::from("internal")))
+                                }
+                            }
+                        }
+                    },
+                    None => return Err(Error::MissingDelayInformation(String::from("ref"))),
+                }
+            }
+        }
+    }
+
+    /// assigns `total` delay
+    /// `total` delay comprises all internal delays
+    /// this interface should only be used when internal system 
+    /// is totally unknown, it is not recommended
+    pub fn set_total_delay (&mut self, dly: f64) { self.tot_dly = Some(dly) }
+
+    /// assigns `reference` delay
+    /// `reference` delay is defined as the time delay
+    /// between the local clock and receiver internal clock
+    pub fn set_reference_delay (&mut self, dly: f64) { self.ref_dly = Some(dly) }
+    /// returns `reference` delay (if provided)
+    pub fn get_reference_delay (&self) -> Option<f64> { self.ref_dly }
+    
+    /// assigns `internal` delay
+    /// `internal` delay is the time delay of the gnss signal
+    /// inside the antenna and inside the receiver, basically
+    /// excluding `cable` delay
+    pub fn set_internal_delay (&mut self, dly: f64) { self.int_dly = Some(dly) }
+    /// returns `internal` delay (if provided)
+    pub fn get_internal_delay (&self) -> Option<f64> { self.int_dly }
+    
+    /// assigns `cable` delay
+    /// `cable` delay is defined as the time delay from the antenna to receiver
+    pub fn set_cable_delay (&mut self, dly: f64) { self.cab_dly = Some(dly) }
+    /// returns `cable` delay (if provided)
+    pub fn get_cable_delay (&self) -> Option<f64> { self.cab_dly }
+    
+    /// assigns `system` delay
+    /// `system` delay is defined as `internal` + `cable` delay
+    /// in case it is impossible to differentiate the two
+    pub fn set_system_delay (&mut self, dly: f64) { self.sys_dly = Some(dly) }
+    /// returns `system` delay (if provided)
+    pub fn get_system_delay (&self) -> Option<f64> { self.sys_dly }
+    
+    /// Returns first track produced in file
+    pub fn get_first_track (&self) -> Option<&track::CggttsTrack> { self.tracks.get(0) }
+    /// Returns last track produced in file
+    pub fn get_latest_track (&self) -> Option<&track::CggttsTrack> { self.tracks.get(self.tracks.len()-1) }
+    /// Returns requested track
+    pub fn get_track (&self, index: usize) -> Option<&track::CggttsTrack> { self.tracks.get(index) }
+    /// grabs last track from self 
+    pub fn pop_track (&mut self) -> Option<track::CggttsTrack> { self.tracks.pop() }
+    /// Appends one track to self
+    pub fn push_track (&mut self, track: track::CggttsTrack) { self.tracks.push(track) }
+    
     /// Builds CGGTTS from given file
     pub fn from_file (fp: &std::path::Path) -> Result<Cggtts, Error> {
         let file_name = fp.file_name()
             .unwrap()
             .to_str()
                 .unwrap();
-        // regex to check for file naming convetion
+        // check against file naming convetion
         let file_re = Regex::new(r"(G|R|E|C|J)(S|M|Z)....[1-9][1-9]\.[1-9][1-9][1-9]")
             .unwrap();
         if !file_re.is_match(file_name) {
@@ -517,6 +662,7 @@ impl Cggtts {
             chksum = chksum.wrapping_add(bytes[i]);
         }
 
+        // TODO unlock checksum verification
         //if chksum != cksum_parsed {
         //    return Err(Error::ChecksumError(chksum, ck))
         //}
@@ -546,7 +692,7 @@ impl Cggtts {
             rcvr,
             ims,
             lab,
-            xyz: (x,y,z),
+            coordinates: (x,y,z), 
             frame,
             comments,
             tot_dly, 
@@ -558,30 +704,17 @@ impl Cggtts {
             tracks
         })
     }
-
-    /// Returns production date
-    pub fn get_date (&self) -> &chrono::NaiveDate { &self.date }
-    /// Returns first track produced in file
-    pub fn get_first_track (&self) -> Option<&track::CggttsTrack> { self.tracks.get(0) }
-    /// Returns last track produced in file
-    pub fn get_latest_track (&self) -> Option<&track::CggttsTrack> { self.tracks.get(self.tracks.len()-1) }
-    /// Returns requested track
-    pub fn get_track (&self, index: usize) -> Option<&track::CggttsTrack> { self.tracks.get(index) }
-    /// grabs last track from self 
-    pub fn pop_track (&mut self) -> Option<track::CggttsTrack> { self.tracks.pop() }
-    /// Appends one track to self
-    pub fn push_track (&mut self, track: track::CggttsTrack) { self.tracks.push(track) }
 }
 
 // custom display formatter
 impl std::fmt::Display for Cggtts {
     fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
-            f, "Version: '{}' | REV DATE '{}' | LAB '{}' | Nb Channels {}\nRECVR: {:?}\nIMS: {:?}\nXYZ: {:?}\nFRAME: {}\nCOMMENTS: {:#?}\nREFERENCE: {}\n",
+            f, "Version: '{}' | REV DATE '{}' | LAB '{}' | Nb Channels {}\nRECVR: {:?}\nIMS: {:?}\nCoordinates: {:?}\nFRAME: {}\nCOMMENTS: {:#?}\nREFERENCE: {}\n",
             self.version, self.rev_date, self.lab, self.nb_channels,
             self.rcvr,
             self.ims,
-            self.xyz,
+            self.coordinates,
             self.frame,
             self.comments,
             self.reference,
@@ -597,11 +730,96 @@ impl std::fmt::Display for Cggtts {
 #[cfg(test)]
 mod test {
     use super::*;
+    use float_cmp::approx_eq;
+    
+    #[test]
+    /// Tests default constructor 
+    fn cggtts_test_default() {
+        let cggtts = Cggtts::new();
+        let today = chrono::Utc::today();
+        let rev_date = chrono::NaiveDate::parse_from_str(REV_DATE,"%Y-%m-%d")
+            .unwrap();
+        assert_eq!(cggtts.lab, "Unknown");
+        assert_eq!(cggtts.nb_channels, 0);
+        assert_eq!(cggtts.frame, "?");
+        assert_eq!(cggtts.reference, "Unknown");
+        assert_eq!(cggtts.tot_dly, None);
+        assert_eq!(cggtts.ref_dly, None);
+        assert_eq!(cggtts.int_dly, None);
+        assert_eq!(cggtts.cab_dly, None);
+        assert_eq!(cggtts.sys_dly, None);
+        assert_eq!(cggtts.coordinates, (0.0,0.0,0.0));
+        assert_eq!(cggtts.rev_date, rev_date); 
+        assert_eq!(cggtts.date, today.naive_utc())
+    }
 
     #[test]
-    /*
-     * Tests lib against standard test resources
-     */
+    /// Tests basic usage 
+    fn cggtts_basic_use_case() {
+        let mut cggtts = Cggtts::new();
+        cggtts.set_lab_agency("TestLab");
+        cggtts.set_nb_channels(10);
+        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_total_delay(300E-9);
+        assert_eq!(cggtts.get_lab_agency(), "TestLab");
+        assert_eq!(cggtts.get_nb_channels(), 10);
+        assert_eq!(cggtts.get_antenna_coordinates(), (1.0,2.0,3.0));
+        assert_eq!(cggtts.get_system_delay().is_none(), true); // not provided
+        assert_eq!(cggtts.get_cable_delay().is_none(), true); // not provided
+        assert_eq!(cggtts.get_reference_delay().is_none(), true); // not provided
+        assert_eq!(cggtts.get_total_delay().is_ok(), true); // enough information
+        assert_eq!(cggtts.get_total_delay().unwrap(), 300E-9); // basic usage
+    }
+
+    #[test]
+    /// Test normal / intermediate usage
+    fn cgggts_intermediate_use_case() {
+        let mut cggtts = Cggtts::new();
+        cggtts.set_lab_agency("TestLab");
+        cggtts.set_nb_channels(10);
+        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_reference_delay(100E-9);
+        cggtts.set_system_delay(150E-9);
+        assert_eq!(cggtts.get_lab_agency(), "TestLab");
+        assert_eq!(cggtts.get_nb_channels(), 10);
+        assert_eq!(cggtts.get_antenna_coordinates(), (1.0,2.0,3.0));
+        assert_eq!(cggtts.get_cable_delay().is_some(), false); // not provided
+        assert_eq!(cggtts.get_reference_delay().is_some(), true); // provided
+        assert_eq!(cggtts.get_system_delay().is_some(), true); // provided
+        assert_eq!(cggtts.get_total_delay().is_ok(), true); // enough information
+        assert_eq!(cggtts.get_total_delay().unwrap(), 250E-9); // intermediate usage
+    }
+
+    #[test]
+    /// Test advanced usage
+    fn cgggts_advanced_use_case() {
+        let mut cggtts = Cggtts::new();
+        cggtts.set_lab_agency("TestLab");
+        cggtts.set_nb_channels(10);
+        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_reference_delay(100E-9);
+        cggtts.set_internal_delay(25E-9);
+        cggtts.set_cable_delay(300E-9);
+        assert_eq!(cggtts.get_lab_agency(), "TestLab");
+        assert_eq!(cggtts.get_nb_channels(), 10);
+        assert_eq!(cggtts.get_antenna_coordinates(), (1.0,2.0,3.0));
+        assert_eq!(cggtts.get_system_delay().is_some(), false); // not provided: we have granularity
+        assert_eq!(cggtts.get_cable_delay().is_some(), true); // provided
+        assert_eq!(cggtts.get_reference_delay().is_some(), true); // provided
+        assert_eq!(cggtts.get_internal_delay().is_some(), true); // provided
+        assert_eq!(cggtts.get_reference_delay().is_some(), true); // provided
+        assert_eq!(cggtts.get_total_delay().is_ok(), true); // enough information
+        assert!(
+            approx_eq!(f64,
+                cggtts.get_total_delay().unwrap(),
+                425E-9, // advanced usage
+                epsilon = 1E-9
+            )
+        )
+    }
+
+    #[test]
+    /// Tests standard file parsing
     fn cggtts_test_from_standard_data() {
         // open test resources
         let test_resources = std::path::PathBuf::from(
@@ -625,9 +843,7 @@ mod test {
     }
     
     #[test]
-    /*
-     * Tests lib against advanced test resources
-     */
+    /// Tests advanced file parsing
     fn cggtts_test_from_ionospheric_data() {
         // open test resources
         let test_resources = std::path::PathBuf::from(
@@ -640,12 +856,14 @@ mod test {
             let path = entry.path();
             if !path.is_dir() { // only files..
                 let fp = std::path::Path::new(&path);
+                let cggtts = Cggtts::from_file(&fp);
                 assert_eq!(
-                    Cggtts::from_file(&fp).is_err(),
+                    cggtts.is_err(), 
                     false,
                     "Cggtts::new() failed for '{:?}' with '{:?}'",
                     path, 
-                    Cggtts::from_file(&fp))
+                    cggtts); 
+                println!("{:?}", cggtts)
             }
         }
     }

@@ -81,7 +81,7 @@ pub struct CggttsTrack {
     sat_id: u8,
     class: CommonViewClassType,
     trktime: chrono::NaiveTime, // Tracking start date (hh:mm:ss)
-    duration: u32, // Tracking duration [in secs]
+    duration: std::time::Duration, // Tracking duration
     elevation: f64, // Elevation (angle) at Tracking midpoint [in degrees]
     azimuth: f64, // Azimuth (angle) at Tracking midpoint [in degrees]
     refsv: f64,
@@ -138,7 +138,7 @@ impl CggttsTrack {
         let (_, sat_id) = items.get(0).unwrap_or(&"").split_at(1);
         let class = CommonViewClassType::from_str(items.get(1).unwrap_or(&""))?;
         let trktime = chrono::NaiveTime::parse_from_str(items.get(3).unwrap_or(&""), "%H%M%S")?;
-        let duration = u32::from_str_radix(items.get(4).unwrap_or(&""), 10)?;
+        let duration_secs = u64::from_str_radix(items.get(4).unwrap_or(&""), 10)?;
         let elevation = f64::from_str(items.get(5).unwrap_or(&""))? * 0.1;
         let azimuth = f64::from_str(items.get(6).unwrap_or(&""))? * 0.1;
         let refsv = f64::from_str(items.get(7).unwrap_or(&""))? * 0.1E-9;
@@ -191,7 +191,7 @@ impl CggttsTrack {
             sat_id: u8::from_str_radix(sat_id, 10).unwrap_or(0),
             class,
             trktime,
-            duration,
+            duration: std::time::Duration::from_secs(duration_secs),
             elevation,
             azimuth,
             refsv,
@@ -212,17 +212,18 @@ impl CggttsTrack {
             frc
         })
     }
-
-    /* returns track (refsys, srsys) duplet */
-    pub fn get_refsys_srsys (&self) -> (f64, f64) { (self.refsys, self.srsys) }
-
-    /* returns track start time */ 
+    
+    /// returns track start time
     pub fn get_track_start_time (&self) -> chrono::NaiveTime { self.trktime }
+    /// returns track duration
+    pub fn get_duration (&self) -> std::time::Duration { self.duration }
 
-    /* returns true if track does have ionospheric data */
+    /// returns track (refsys, srsys) duplet 
+    pub fn get_refsys_srsys (&self) -> (f64, f64) { (self.refsys, self.srsys) }
+    
+    /// returns true if track comes with ionospheric parameters estimates
     pub fn has_ionospheric_data (&self) -> bool { self.msio.is_some() && self.smsi.is_some() && self.isg.is_some() }
-
-    /* returns ionospheric data triplet (msio, smsi, isg) */
+    /// returns ionospheric parameters estimates (if any)
     pub fn get_ionospheric_data (&self) -> Option<(f64, f64, f64)> {
         if self.has_ionospheric_data() {
             Some((self.msio.unwrap(),self.smsi.unwrap(),self.isg.unwrap()))
@@ -237,7 +238,7 @@ impl std::fmt::Display for CggttsTrack {
     // custom diplay formatter
     fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
-            f, "Constellation: {:?} | SAT #{}\nCommon View Class: '{:?}'\nStart Time: {} | Duration: {}\nElevation: {} | Azimuth: {}\nREFSV: {} | SRSV: {} | REFSYS: {} SRSYS: {}\nDSG: {} | IOE: {}\nMDTR: {} | SMDT: {} | MDIO: {} | SMDI: {} | MSIO: {:#?} | SMSI: {:#?} | ISG: {:#?}\nFR: {} | HC: {}",
+            f, "Constellation: {:?} | SAT #{}\nCommon View Class: '{:?}'\nStart Time: {} | Duration: {:?}\nElevation: {} | Azimuth: {}\nREFSV: {} | SRSV: {} | REFSYS: {} SRSYS: {}\nDSG: {} | IOE: {}\nMDTR: {} | SMDT: {} | MDIO: {} | SMDI: {} | MSIO: {:#?} | SMSI: {:#?} | ISG: {:#?}\nFR: {} | HC: {}",
             self.constellation, self.sat_id, self.class,
             self.trktime, self.duration,
             self.elevation, self.azimuth, self.refsv, self.srsv,
