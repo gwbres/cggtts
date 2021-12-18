@@ -1,7 +1,7 @@
 [package]
 name = "cggtts"
 version = "0.1.0"
-license-file = "License.txt"
+license-file = "LICENSE"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to handle and create CGGTTS data"
 homepage = "https://github.com/gwbres/cggtts"
