@@ -8,13 +8,11 @@
 //! Refer to official doc: 
 //! https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf
 
+mod track;
 use regex::Regex;
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
-
-/// CGGTTS track description
-mod track;
 
 /// supported CGGTTS version
 /// non matching CGGTTS file input will be rejected

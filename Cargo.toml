@@ -1,12 +1,14 @@
 [package]
 name = "cggtts"
-version = "0.0.1"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+license-file = "License.txt"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
-edition = "2018"
-readme = "README.md"
-description = "Package to handle CGGTTS data file"
+description = "Package to handle and create CGGTTS data"
 homepage = "https://github.com/gwbres/cggtts"
 keywords = ["positionning","time transfer","bipm","gnss","timing","common view","satellites"]
+edition = "2018"
+readme = "README.md"
 
 [dependencies]
 regex = "1"
@@ -15,4 +17,3 @@ chrono = "0.4"
 julianday = "0.2.0"
 scan_fmt = "0.1"
 geo-types = "0.7.2"
-rinex = { git = "https://github.com/gwbres/rinex.git" } 

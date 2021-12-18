@@ -1,27 +1,46 @@
-//! CGGTTS Track
-//! https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf
-//! TODO @ GBR <!> pb sur checksum - on ne peut pas utiliser '112' comme dit dans la doc
-//! TODO @ GBR |1-x| prochainement implemente' dans syref pour srsys ??
-//////////////////////////////////////////////////////////////////////////////
-
 use thiserror::Error;
 use std::str::FromStr;
 
-use rinex;
-
-/*
- * Common view class
- */
-#[derive(Clone, Debug, PartialEq)]
-enum CommonViewClassType {
-    SingleFile,
-    MultiFiles,
+/// Describes all known GNSS constellations
+#[derive(Clone, PartialEq, Debug)]
+pub enum Constellation {
+    GPS,
+    Glonass,
+    Beidou,
+    QZSS,
+    Galileo,
+    Mixed, // mixed constellation records
 }
 
-/*
- * Constellation Code denomination
- * see RINEX demoninations 
- */
+#[derive(Error, Debug)]
+pub enum ConstellationError {
+    #[error("unknown constellation '{0}'")]
+    UnknownConstellation(String),
+}
+
+impl std::str::FromStr for Constellation {
+    type Err = ConstellationError;
+    fn from_str (s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with("G") {
+            Ok(Constellation::GPS)
+        } else if s.starts_with("E") {
+            Ok(Constellation::Galileo)
+        } else if s.starts_with("R") {
+            Ok(Constellation::Glonass)
+        } else if s.starts_with("J") {
+            Ok(Constellation::QZSS)
+        } else if s.starts_with("C") {
+            Ok(Constellation::Beidou)
+        } else if s.starts_with("M") {
+            Ok(Constellation::Mixed)
+        } else {
+            Err(ConstellationError::UnknownConstellation(s.to_string()))
+        }
+    }
+}
+
+/// Constellation Code denomination
+/// see RINEX demoninations 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug)]
 enum ConstellationRinexCode {
@@ -40,19 +59,25 @@ enum ConstellationRinexCode {
 
 #[derive(Error, Debug)]
 pub enum ConstellationRinexCodeError {
-    #[error("unknown rinex constellation code '{0}'")]
+    #[error("unknown constellation code '{0}'")]
     UnknownCode(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+/// `CommonViewClassType` describes
+/// class of common view
+enum CommonViewClassType {
+    SingleFile,
+    MultiFiles,
 }
 
 const TRACK_WITH_IONOSPHERIC_DATA_LENGTH: usize = 24;
 const TRACK_WITHOUT_IONOSPHERIC_DATA_LENGTH: usize = 21;
 
-/*
- * CGGTTS Track 
- */
 #[derive(Debug, Clone)]
+/// `CggttsTrack` describes a CGGTTS measurement
 pub struct CggttsTrack {
-    constellation: rinex::Constellation,
+    constellation: Constellation,
     sat_id: u8,
     class: CommonViewClassType,
     trktime: chrono::NaiveTime, // Tracking start date (hh:mm:ss)
@@ -85,9 +110,6 @@ pub struct CggttsTrack {
     frc: ConstellationRinexCode 
 }
 
-/*
- * Error wrapper
- */
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("nb of white spaces does not match expected CGGTTS format")]
@@ -99,7 +121,7 @@ pub enum Error {
     #[error("failed to parse track time")]
     ChronoParseError(#[from] chrono::ParseError),
     #[error("unknown gnss constellation")]
-    ConstellationError(#[from] rinex::ConstellationError),
+    ConstellationError(#[from] ConstellationError),
     #[error("unknown constellation rinex code \"{0}\"")]
     ConstellationRinexCodeError(#[from] ConstellationRinexCodeError),
     #[error("failed to parse common view class")]
@@ -112,7 +134,7 @@ impl CggttsTrack {
     pub fn new (line: &str) -> Result<CggttsTrack, Error> {
         let cleaned_up = String::from(line.trim());
         let items: Vec<&str> = cleaned_up.split_ascii_whitespace().collect();
-        let constellation = rinex::Constellation::from_str(items.get(0).unwrap_or(&""))?; 
+        let constellation = Constellation::from_str(items.get(0).unwrap_or(&""))?; 
         let (_, sat_id) = items.get(0).unwrap_or(&"").split_at(1);
         let class = CommonViewClassType::from_str(items.get(1).unwrap_or(&""))?;
         let trktime = chrono::NaiveTime::parse_from_str(items.get(3).unwrap_or(&""), "%H%M%S")?;
@@ -129,11 +151,6 @@ impl CggttsTrack {
         let smdt = f64::from_str(items.get(14).unwrap_or(&""))? * 0.1E-12;
         let mdio = f64::from_str(items.get(15).unwrap_or(&""))? * 0.1E-9;
         let smdi = f64::from_str(items.get(16).unwrap_or(&""))? * 0.1E-12;
-
-        // TODO see next release
-        //if refsys > 100E-3 { 
-        //    refsys = 1.0 - refsys
-        //}
 
         let (msio, smsi, isg, fr, hc, frc, ck): (Option<f64>,Option<f64>,Option<f64>,u8,u8,ConstellationRinexCode,u8) = match items.len() {
             TRACK_WITHOUT_IONOSPHERIC_DATA_LENGTH => {
