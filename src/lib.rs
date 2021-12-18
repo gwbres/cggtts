@@ -304,7 +304,7 @@ impl Cggtts {
             },
             _ => return Err(Error::DateMjdFormatError),
         };
-
+        
         let mut chksum: u8 = 0;
         let file_content = std::fs::read_to_string(&fp).unwrap();
         let mut lines = file_content.split("\n").map(|x| x.to_string()).into_iter();
@@ -684,7 +684,7 @@ impl Cggtts {
         Ok(Cggtts {
             version: VERSION.to_string(),
             rev_date,
-            date: julianday::JulianDay::new((mjd * 1000.0) as i32).to_date(),
+            date: julianday::JulianDay::new(((mjd * 1000.0) + 2400000.5) as i32).to_date(),
             nb_channels,
             rcvr,
             ims,
