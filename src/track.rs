@@ -1,3 +1,4 @@
+use regex::Regex;
 use thiserror::Error;
 use chrono::Timelike;
 
@@ -15,17 +16,6 @@ pub enum Constellation {
     QZSS,
     Galileo,
     Mixed, // mixed constellation records
-}
-
-impl std::str::FromStr for CommonViewClassType {
-    type Err = std::str::Utf8Error;
-    fn from_str (s: &str) -> Result<Self, Self::Err> {
-        if s.eq("FF") {
-            Ok(CommonViewClassType::MultiFiles)
-        } else {
-            Ok(CommonViewClassType::SingleFile)
-        }
-    }
 }
 
 #[derive(Error, Debug)]
@@ -117,8 +107,21 @@ enum CommonViewClassType {
     MultiFiles,
 }
 
-const TRACK_WITH_IONOSPHERIC_DATA_LENGTH: usize = 24;
-const TRACK_WITHOUT_IONOSPHERIC_DATA_LENGTH: usize = 21;
+impl std::str::FromStr for CommonViewClassType {
+    type Err = std::str::Utf8Error;
+    fn from_str (s: &str) -> Result<Self, Self::Err> {
+        if s.eq("FF") {
+            Ok(CommonViewClassType::MultiFiles)
+        } else {
+            Ok(CommonViewClassType::SingleFile)
+        }
+    }
+}
+
+const TRACK_WITH_IONOSPHERIC_LENGTH           : usize = 24;
+const PADDED_TRACK_WITH_IONOSPHERIC_LENGTH    : usize = 25;
+const TRACK_WITHOUT_IONOSPHERIC_LENGTH        : usize = 21;
+const PADDED_TRACK_WITHOUT_IONOSPHERIC_LENGTH : usize = 22;
 
 #[derive(Debug, Clone)]
 /// `CggttsTrack` describes a `Cggtts` measurement
@@ -158,8 +161,8 @@ pub struct CggttsTrack {
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("nb of white spaces does not match expected CGGTTS format")]
-    FormatError,
+    #[error("track data format mismatch")]
+    InvalidDataFormatError(String),
     #[error("failed to parse int number")]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("failed to parse float number")]
@@ -172,8 +175,29 @@ pub enum Error {
     ConstellationRinexCodeError(#[from] ConstellationRinexCodeError),
     #[error("failed to parse common view class")]
     CommonViewClassError(#[from] std::str::Utf8Error),
+    #[error("crc calc() working on non ascii data \"{0}\"")]
+    NonAsciiData(String),
     #[error("checksum error - expecting \"{0}\" - got \"{1}\"")]
     ChecksumError(u8, u8),
+}
+
+
+/// computes crc for given str content
+pub fn calc_crc (content: &str) -> Result<u8, Error> {
+    match content.is_ascii() {
+        true => {
+            let mut ck: u8 = 0;
+            let mut ptr = content.encode_utf16();
+            for _ in 0..ptr.clone().count() {
+                ck = ck.wrapping_add(
+                    ptr.next()
+                    .unwrap()
+                    as u8)
+            }
+            Ok(ck)
+        },
+        false => return Err(Error::NonAsciiData(String::from(content))),
+    }
 }
 
 impl CggttsTrack {
@@ -245,7 +269,6 @@ impl CggttsTrack {
         self.smsi = Some(params.1);
         self.isg = Some(params.2)
     }
-
 }
 
 impl Default for CggttsTrack {
@@ -307,44 +330,91 @@ impl std::str::FromStr for CggttsTrack {
     type Err = Error; 
     /// Builds `CggttsTrack` from given str content
     fn from_str (line: &str) -> Result<Self, Self::Err> {
-        let cleaned_up = String::from(line.trim());
-        let items: Vec<&str> = cleaned_up.split_ascii_whitespace().collect();
-        let constellation = Constellation::from_str(items.get(0).unwrap_or(&""))?; 
-        let (_, sat_id) = items.get(0).unwrap_or(&"").split_at(1);
-        let class = CommonViewClassType::from_str(items.get(1).unwrap_or(&""))?;
-        let trktime = chrono::NaiveTime::parse_from_str(items.get(3).unwrap_or(&""), "%H%M%S")?;
-        let duration_secs = u64::from_str_radix(items.get(4).unwrap_or(&""), 10)?;
-        let elevation = f64::from_str(items.get(5).unwrap_or(&""))? * 0.1;
-        let azimuth = f64::from_str(items.get(6).unwrap_or(&""))? * 0.1;
-        let refsv = f64::from_str(items.get(7).unwrap_or(&""))? * 0.1E-9;
-        let srsv = f64::from_str(items.get(8).unwrap_or(&""))? * 0.1E-12;
-        let refsys = f64::from_str(items.get(9).unwrap_or(&""))? * 0.1E-9;
-        let srsys = f64::from_str(items.get(10).unwrap_or(&""))? * 0.1E-12;
-        let dsg = f64::from_str(items.get(11).unwrap_or(&""))? * 0.1E-9;
-        let ioe = u16::from_str_radix(items.get(12).unwrap_or(&""), 10)?;
-        let mdtr = f64::from_str(items.get(13).unwrap_or(&""))? * 0.1E-9;
-        let smdt = f64::from_str(items.get(14).unwrap_or(&""))? * 0.1E-12;
-        let mdio = f64::from_str(items.get(15).unwrap_or(&""))? * 0.1E-9;
-        let smdi = f64::from_str(items.get(16).unwrap_or(&""))? * 0.1E-12;
+        let cleanedup = String::from(line.trim());
+        let items: Vec<&str> = cleanedup.split_ascii_whitespace().collect();
+        // checking content validity
+        let content_is_valid = Regex::new(r"^(G|R|E|J|C) \d")
+            .unwrap();
+        let content_is_valid2 = Regex::new(r"^(G|R|E|J|C)\d\d")
+            .unwrap();
+        match content_is_valid.is_match(&cleanedup) {
+            false => {
+                match content_is_valid2.is_match(&cleanedup) {
+                    false => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
+                    _ => {},
+                }
+            },
+            _ => {},
+        };
 
-        let (msio, smsi, isg, fr, hc, frc, ck): (Option<f64>,Option<f64>,Option<f64>,u8,u8,ConstellationRinexCode,u8) = match items.len() {
-            TRACK_WITHOUT_IONOSPHERIC_DATA_LENGTH => {
-                (None,None,None,
-                u8::from_str_radix(items.get(17).unwrap_or(&""), 16)?, 
-                u8::from_str(items.get(18).unwrap_or(&""))?,
-                ConstellationRinexCode::from_str(items.get(19).unwrap_or(&""))?,
-                u8::from_str_radix(items.get(20).unwrap_or(&""), 16)?)
-            },
-            TRACK_WITH_IONOSPHERIC_DATA_LENGTH => {
-                (Some(f64::from_str(items.get(17).unwrap_or(&""))? * 0.1E-9), 
-                Some(f64::from_str(items.get(18).unwrap_or(&""))? * 0.1E-12), 
-                Some(f64::from_str(items.get(19).unwrap_or(&""))? * 0.1E-9),
-                u8::from_str_radix(items.get(20).unwrap_or(&""), 16)?, 
-                u8::from_str_radix(items.get(21).unwrap_or(&""), 16)?,
-                ConstellationRinexCode::from_str(items.get(22).unwrap_or(&""))?,
-                u8::from_str_radix(items.get(23).unwrap_or(&""), 16)?)
-            },
-            _ => return Err(Error::FormatError),
+        // sat # prn is right padded
+        let is_single_digit_prn = Regex::new(r"^. \d")
+            .unwrap();
+        let offset : usize = match is_single_digit_prn.is_match(&cleanedup) { 
+            true => 1,
+            false => 0,
+        };
+        if items.len() != TRACK_WITH_IONOSPHERIC_LENGTH+offset {
+            if items.len() != TRACK_WITHOUT_IONOSPHERIC_LENGTH+offset {
+                return Err(Error::InvalidDataFormatError(String::from(cleanedup)))
+            }
+        }
+
+        let constellation = Constellation::from_str(items.get(0)
+            .unwrap())?;
+        let (_, sat_id) = items.get(0).unwrap_or(&"").split_at(1);
+        let class = CommonViewClassType::from_str(items.get(1+offset).unwrap_or(&""))?;
+        let trktime = chrono::NaiveTime::parse_from_str(items.get(3+offset).unwrap_or(&""), "%H%M%S")?;
+        let duration_secs = u64::from_str_radix(items.get(4+offset).unwrap_or(&""), 10)?;
+        let elevation = f64::from_str(items.get(5+offset).unwrap_or(&""))? * 0.1;
+        let azimuth = f64::from_str(items.get(6+offset).unwrap_or(&""))? * 0.1;
+        let refsv = f64::from_str(items.get(7+offset).unwrap_or(&""))? * 0.1E-9;
+        let srsv = f64::from_str(items.get(8+offset).unwrap_or(&""))? * 0.1E-12;
+        let refsys = f64::from_str(items.get(9+offset).unwrap_or(&""))? * 0.1E-9;
+        let srsys = f64::from_str(items.get(10+offset).unwrap_or(&""))? * 0.1E-12;
+        let dsg = f64::from_str(items.get(11+offset).unwrap_or(&""))? * 0.1E-9;
+        let ioe = u16::from_str_radix(items.get(12+offset).unwrap_or(&""), 10)?;
+        let mdtr = f64::from_str(items.get(13+offset).unwrap_or(&""))? * 0.1E-9;
+        let smdt = f64::from_str(items.get(14+offset).unwrap_or(&""))? * 0.1E-12;
+        let mdio = f64::from_str(items.get(15+offset).unwrap_or(&""))? * 0.1E-9;
+        let smdi = f64::from_str(items.get(16+offset).unwrap_or(&""))? * 0.1E-12;
+
+        let (msio, smsi, isg, fr, hc, frc, ck) : 
+            (Option<f64>,Option<f64>,Option<f64>,u8,u8,ConstellationRinexCode,u8) 
+            = match items.len() {
+                TRACK_WITHOUT_IONOSPHERIC_LENGTH => {
+                    (None,None,None,
+                    u8::from_str_radix(items.get(17).unwrap_or(&""), 16)?, 
+                    u8::from_str(items.get(18).unwrap_or(&""))?,
+                    ConstellationRinexCode::from_str(items.get(19).unwrap_or(&""))?,
+                    u8::from_str_radix(items.get(20).unwrap_or(&""), 16)?)
+                },
+                TRACK_WITH_IONOSPHERIC_LENGTH => {
+                    (Some(f64::from_str(items.get(17).unwrap_or(&""))? * 0.1E-9), 
+                    Some(f64::from_str(items.get(18).unwrap_or(&""))? * 0.1E-12), 
+                    Some(f64::from_str(items.get(19).unwrap_or(&""))? * 0.1E-9),
+                    u8::from_str_radix(items.get(20).unwrap_or(&""), 16)?, 
+                    u8::from_str_radix(items.get(21).unwrap_or(&""), 16)?,
+                    ConstellationRinexCode::from_str(items.get(22).unwrap_or(&""))?,
+                    u8::from_str_radix(items.get(23).unwrap_or(&""), 16)?)
+                },
+                PADDED_TRACK_WITHOUT_IONOSPHERIC_LENGTH => {
+                    (None,None,None,
+                    u8::from_str_radix(items.get(17+1).unwrap_or(&""), 16)?, 
+                    u8::from_str(items.get(18+1).unwrap_or(&""))?,
+                    ConstellationRinexCode::from_str(items.get(19+1).unwrap_or(&""))?,
+                    u8::from_str_radix(items.get(20+1).unwrap_or(&""), 16)?)
+                },
+                PADDED_TRACK_WITH_IONOSPHERIC_LENGTH => {
+                    (Some(f64::from_str(items.get(17+1).unwrap_or(&""))? * 0.1E-9), 
+                    Some(f64::from_str(items.get(18+1).unwrap_or(&""))? * 0.1E-12), 
+                    Some(f64::from_str(items.get(19+1).unwrap_or(&""))? * 0.1E-9),
+                    u8::from_str_radix(items.get(20+1).unwrap_or(&""), 16)?, 
+                    u8::from_str_radix(items.get(21+1).unwrap_or(&""), 16)?,
+                    ConstellationRinexCode::from_str(items.get(22+1).unwrap_or(&""))?,
+                    u8::from_str_radix(items.get(23+1).unwrap_or(&""), 16)?)
+                },
+                _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
         };
         // checksum field
         let bytes = String::from(line.trim()).into_bytes();
@@ -353,7 +423,8 @@ impl std::str::FromStr for CggttsTrack {
             .unwrap(); // already matching
         let end_pos = line.rfind(last_payload_item)
             .unwrap();
-        for i in 0..end_pos+1 { // CK
+        //TODO use macro pls
+        for i in 0..end_pos+1 {
             chksum = chksum.wrapping_add(bytes[i])
         }
         // checksum verification
@@ -433,5 +504,20 @@ mod test {
                 epsilon = 1E-12
             )
         )
+    }
+
+    #[test]
+    /// Tests CRC calculation method
+    fn test_crc_calc() {
+        let content = vec![
+            "R24 FF 57000 000600  780 347 394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P"
+        ];
+        let expected = vec![0x0F];
+        for i in 0..content.len() {
+            let ck = calc_crc(content[i])
+                .unwrap();
+            let expect = expected[i];
+            assert_eq!(ck,expect,"Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",content[i],expect,ck)
+        }
     }
 }
