@@ -62,51 +62,51 @@ pub struct Rcvr {
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Failed to parse file")]
+    #[error("failed to parse file")]
     IoError(#[from] std::io::Error),
-    #[error("Failed to parse integer number")]
+    #[error("failed to parse integer number")]
     ParseIntError(#[from] std::num::ParseIntError),
-    #[error("File naming convention")]
+    #[error("file naming convention")]
     FileNamingConvention,
-    #[error("Failed to identify date of creation")]
+    #[error("failed to identify date of creation")]
     DateMjdFormatError,
-    #[error("Failed to parse MJD date of creation")]
+    #[error("failed to parse mjd date")]
     ParseFloatError(#[from] std::num::ParseFloatError),
-    #[error("Deprecated versions are not supported")]
+    #[error("deprecated versions are not supported")]
     DeprecatedVersion,
-    #[error("Version format mismatch")]
+    #[error("version format mismatch")]
     VersionFormatError,
-    #[error("Rev. date format mismatch")]
+    #[error("revision date format mismatch")]
     RevisionDateFormatError,
-    #[error("Failed to parse Rev. date")]
+    #[error("failed to parse revision date")]
     RevisionDateParsingError,
-    #[error("RCVR format mismatch")]
+    #[error("\"rcvr\" format mismatch")]
     RcvrFormatError,
-    #[error("Reference format mismatch")]
+    #[error("\"reference\" format mismatch")]
     ReferenceFormatError,
-    #[error("Failed to parse 'lab' field")]
+    #[error("failed to parse \"lab\" field")]
     LabParsingError,
-    #[error("Comments format mismatch")]
+    #[error("comments format mismatch")]
     CommentsFormatError,
-    #[error("IMS format mismatch")]
+    #[error("\"ims\" format mismatch")]
     ImsFormatError,
-    #[error("Frame format mismatch")]
+    #[error("frame format mismatch")]
     FrameFormatError,
-    #[error("Channel format mismatch")]
+    #[error("channel format mismatch")]
     ChannelFormatError,
-    #[error("Failed to parse '{0}' coordinates")]
+    #[error("failed to parse \"{0}\" coordinates")]
     CoordinatesParsingError(String),
-    #[error("'{0}' delay format mismatch")]
+    #[error("format mismatch for \"{0}\" delay")]
     DelayParsingError(String),
-    #[error("Checksum format error")]
+    #[error("checksum format error")]
     ChecksumFormatError,
-    #[error("Failed to parse checksum value")]
+    #[error("failed to parse checksum value")]
     ChecksumParsingError,
-    #[error("File Checksum error - expected '{0}' but '{1}' locally computed")]
+    #[error("checksum error, got \"{0}\" but \"{1}\" locally computed")]
     ChecksumError(u8, u8),
-    #[error("CGGTTS Track error")]
+    #[error("CggttsTrack error")]
     CggttsTrackError(#[from] track::Error),
-    #[error("Missing \"{0}\" delay information")]
+    #[error("missing \"{0}\" delay information")]
     MissingDelayInformation(String),
 }
 
@@ -305,9 +305,12 @@ impl Cggtts {
             _ => return Err(Error::DateMjdFormatError),
         };
         
-        let mut chksum: u8 = 0;
         let file_content = std::fs::read_to_string(&fp).unwrap();
-        let mut lines = file_content.split("\n").map(|x| x.to_string()).into_iter();
+        let mut lines = file_content.split("\n")
+            .map(|x| x.to_string())
+            //.map(|x| x.to_string() +"\n")
+            //.map(|x| x.to_string() +"\r"+"\n")
+                .into_iter();
 
         // version
         let line = lines.next().unwrap();
@@ -319,14 +322,8 @@ impl Cggtts {
             },
             _ => return Err(Error::VersionFormatError),
         };
-
-        // CRC is the %256 summation
-        // of all ASCII bytes contained in the header
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
+        // crc 
+        let mut cksum: u8 = track::calc_crc(&line)?;
         // rev date 
         let line = lines.next().unwrap();
         let rev_date: chrono::NaiveDate = match scan_fmt!(&line, "REV DATE = {}", String) {
@@ -339,11 +336,7 @@ impl Cggtts {
             _ => return Err(Error::RevisionDateFormatError),
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // rcvr
         let line = lines.next().unwrap();
         let rcvr: Option<Rcvr> = match line.contains("RCVR = RRRRRRRR") {
@@ -365,12 +358,8 @@ impl Cggtts {
                 }
             },
         };
-        // crc 
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
+        // crc
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // channel
         let line = lines.next().unwrap();
         let nb_channels: u16 = match scan_fmt!(&line, "CH = {d}", u16) {
@@ -378,13 +367,9 @@ impl Cggtts {
             _ => return Err(Error::ChannelFormatError),
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
-        // IMS information
-        // IMS = IIII is probably for demo simplicity => should be removed
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        // IMS
+        // TODO IMS empty should only be = 9999 
         let line = lines.next().unwrap();
         let ims : Option<Rcvr> = match line.contains("IMS = 99999") { 
             true => None,
@@ -411,13 +396,8 @@ impl Cggtts {
                 }
             }
         };
-
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // lab
         let line = lines.next().unwrap();
         let lab: String = match scan_fmt!(&line, "LAB = {}", String) {
@@ -431,10 +411,7 @@ impl Cggtts {
             _ => return Err(Error::LabParsingError),
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // X
         let line = lines.next().unwrap();
         let x: f32 = match scan_fmt!(&line, "X = {f}", f32) {
@@ -442,10 +419,7 @@ impl Cggtts {
             _ => return Err(Error::CoordinatesParsingError(String::from("X")))
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // Y
         let line = lines.next().unwrap();
         let y: f32 = match scan_fmt!(&line, "Y = {f}", f32) {
@@ -453,10 +427,7 @@ impl Cggtts {
             _ => return Err(Error::CoordinatesParsingError(String::from("Y")))
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // Y
         let line = lines.next().unwrap();
         let z: f32 = match scan_fmt!(&line, "Z = {f}", f32) {
@@ -464,10 +435,7 @@ impl Cggtts {
             _ => return Err(Error::CoordinatesParsingError(String::from("Z")))
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // frame 
         let line = lines.next().unwrap();
         let frame: String = match scan_fmt!(&line, "FRAME = {}", String) {
@@ -475,10 +443,7 @@ impl Cggtts {
             _ => return Err(Error::FrameFormatError),
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // comments 
         let line = lines.next().unwrap();
         let comments: Option<String> = match scan_fmt!(&line, "COMMENTS = {}", String) {
@@ -492,11 +457,7 @@ impl Cggtts {
             _ => return Err(Error::CommentsFormatError),
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // system & cable delays 
         let line = lines.next().unwrap();
         let mut ref_dly: Option<f64> = None;
@@ -568,10 +529,7 @@ impl Cggtts {
             }
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // ref delay ?
         if !tot_dly.is_some() {
             if int_dly.is_some() {
@@ -596,10 +554,7 @@ impl Cggtts {
                     _ => return Err(Error::DelayParsingError(String::from("Cable"))),
                 };
                 // crc
-                let bytes = line.clone().into_bytes();
-                for i in 0..bytes.len() {
-                    chksum = chksum.wrapping_add(bytes[i]);
-                }
+                cksum = cksum.wrapping_add(track::calc_crc(&line)?);
             } // needed cab delay
             // still missing ref. delay
             let line = lines.next().unwrap();
@@ -623,10 +578,7 @@ impl Cggtts {
                 _ => return Err(Error::DelayParsingError(String::from("Ref"))),
             };
             // crc
-            let bytes = line.clone().into_bytes();
-            for i in 0..bytes.len() {
-                chksum = chksum.wrapping_add(bytes[i]);
-            }
+            cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         }
         // reference time
         let line = lines.next().unwrap();
@@ -635,39 +587,32 @@ impl Cggtts {
             _ => return Err(Error::ReferenceFormatError),
         };
         // crc
-        let bytes = line.clone().into_bytes();
-        for i in 0..bytes.len() {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-            // checksum
+        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        // checksum
         let line = lines.next().unwrap();
-        let _cksum_parsed: u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
-            Some(string) => {
-                match u8::from_str_radix(&string, 16) {
+        let ck : u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
+            Some(s) => {
+                match u8::from_str_radix(&s, 16) {
                     Ok(hex) => hex,
                     _ => return Err(Error::ChecksumParsingError),
                 }
             },
             _ => return Err(Error::ChecksumFormatError),
         };
-
-        // CRC calc. ends on 'CHKSUM = ' (line 15)
+        // final crc
         let end_pos = line.find("= ")
             .unwrap(); // already matching
-        let bytes = line.clone().into_bytes();
-        for i in 0..end_pos+2 {
-            chksum = chksum.wrapping_add(bytes[i]);
-        }
-
-        // TODO unlock checksum verification
-        //if chksum != cksum_parsed {
-        //    return Err(Error::ChecksumError(chksum, ck))
+        cksum = cksum.wrapping_add(
+            track::calc_crc(
+                &line.split_at(end_pos+2).0)?);
+        // checksum verification
+        //if cksum != ck {
+        //    return Err(Error::ChecksumError(ck, cksum))
         //}
-
-        let _ = lines.next().unwrap(); // Blank line
-        let _ = lines.next().unwrap(); // labels line
-        let _ = lines.next().unwrap(); // units line currently discarded
-
+        /* blank lines */
+        let _ = lines.next().unwrap(); // Blank
+        let _ = lines.next().unwrap(); // labels
+        let _ = lines.next().unwrap(); // units currently discarded
         // tracks parsing
         let mut tracks: Vec<track::CggttsTrack> = Vec::new();
         loop {
@@ -833,10 +778,10 @@ mod test {
                 assert_eq!(
                     cggtts.is_err(),
                     false,
-                    "Cggtts::from_file() failed for '{:?}' with '{:?}'",
+                    "Cggtts::from_file() failed for \"{:?}\" with \"{:?}\"",
                     path,
                     cggtts);
-                println!("{:?}", cggtts)
+                println!("{:?}",cggtts)
             }
         }
     }
@@ -859,10 +804,9 @@ mod test {
                 assert_eq!(
                     cggtts.is_err(), 
                     false,
-                    "Cggtts::from_file() failed for '{:?}' with '{:?}'",
+                    "Cggtts::from_file() failed for \"{:?}\" with \"{:?}\"",
                     path, 
-                    cggtts); 
-                println!("{:?}", cggtts)
+                    cggtts)
             }
         }
     }
