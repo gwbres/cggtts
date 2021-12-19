@@ -14,6 +14,10 @@ CGGTTS Rust package todo list
  - [ ] file must comply with advanced delay knowledge 
  - [ ] frame descriptor must be parsed & used 
 
+### Cggtts::
+- [ ] simplify IMS/RCVR with a single scan_fmt! mismatch detection
+- [ ] use unit labels for generic Cggtts::track scaling
+
 ### Cggtts::track
 - [x] use from_str() instead of new()
 - [x] provide a default constructor
