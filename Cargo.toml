@@ -9,6 +9,8 @@ keywords = ["positionning","bipm","gnss","timing","satellites"]
 edition = "2018"
 readme = "README.md"
 
+exclude = ["data/",]
+
 [dependencies]
 regex = "1"
 thiserror = "1"
