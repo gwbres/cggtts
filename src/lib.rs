@@ -781,7 +781,7 @@ mod test {
                     "Cggtts::from_file() failed for \"{:?}\" with \"{:?}\"",
                     path,
                     cggtts);
-                println!("{:?}",cggtts)
+                println!("File \"{:?}\" {:#?}", &path, cggtts.unwrap())
             }
         }
     }
@@ -804,9 +804,10 @@ mod test {
                 assert_eq!(
                     cggtts.is_err(), 
                     false,
-                    "Cggtts::from_file() failed for \"{:?}\" with \"{:?}\"",
+                    "Cggtts::from_file() failed for \"{:#?}\" with \"{:#?}\"",
                     path, 
-                    cggtts)
+                    cggtts);
+                println!("File \"{:?}\" {:#?}", &path, cggtts.unwrap())
             }
         }
     }
