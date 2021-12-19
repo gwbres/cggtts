@@ -617,7 +617,9 @@ impl Cggtts {
             if line.len() == 0 { // empty line
                 break // we're done parsing
             }
-            tracks.push(track::CggttsTrack::from_str(&line)?);
+            if let Ok(track) = track::CggttsTrack::from_str(&line) {
+                tracks.push(track)
+            }
         }
 
         Ok(Cggtts {
