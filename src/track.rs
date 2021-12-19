@@ -417,20 +417,16 @@ impl std::str::FromStr for CggttsTrack {
                 _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
         };
         // checksum field
-        let bytes = String::from(line.trim()).into_bytes();
-        let mut chksum: u8 = 0;
-        let last_payload_item = items.get(items.len()-2)
+        let mut cksum: u8 = 0;
+        let end_pos = line.rfind(&format!("{:2X}",ck))
             .unwrap(); // already matching
-        let end_pos = line.rfind(last_payload_item)
-            .unwrap();
-        //TODO use macro pls
-        for i in 0..end_pos+1 {
-            chksum = chksum.wrapping_add(bytes[i])
-        }
-        // checksum verification
-        if chksum != ck {
-        //    return Err(Error::ChecksumError(chksum, ck))
-        }
+        cksum = cksum.wrapping_add(
+            calc_crc(
+                &line.split_at(end_pos).0)?);
+        // verification
+        //if cksum != ck {
+        //    return Err(Error::ChecksumError(cksum, ck))
+        //}
 
         Ok(CggttsTrack {
             constellation,
