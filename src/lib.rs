@@ -401,13 +401,7 @@ impl Cggtts {
         // lab
         let line = lines.next().unwrap();
         let lab: String = match scan_fmt!(&line, "LAB = {}", String) {
-            Some(lab) => {
-                if lab.eq("ABC") {
-                    String::from("Unknown")
-                } else {
-                    lab
-                }
-            },
+            Some(lab) => lab,
             _ => return Err(Error::LabParsingError),
         };
         // crc
