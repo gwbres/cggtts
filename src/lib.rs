@@ -692,7 +692,8 @@ mod test {
         assert_eq!(cggtts.sys_dly, None);
         assert_eq!(cggtts.coordinates, (0.0,0.0,0.0));
         assert_eq!(cggtts.rev_date, rev_date); 
-        assert_eq!(cggtts.date, today.naive_utc())
+        assert_eq!(cggtts.date, today.naive_utc());
+        println!("{:#?}", cggtts)
     }
 
     #[test]
@@ -711,6 +712,7 @@ mod test {
         assert_eq!(cggtts.get_reference_delay().is_none(), true); // not provided
         assert_eq!(cggtts.get_total_delay().is_ok(), true); // enough information
         assert_eq!(cggtts.get_total_delay().unwrap(), 300E-9); // basic usage
+        println!("{:#?}", cggtts)
     }
 
     #[test]
@@ -730,6 +732,7 @@ mod test {
         assert_eq!(cggtts.get_system_delay().is_some(), true); // provided
         assert_eq!(cggtts.get_total_delay().is_ok(), true); // enough information
         assert_eq!(cggtts.get_total_delay().unwrap(), 250E-9); // intermediate usage
+        println!("{:#?}", cggtts)
     }
 
     #[test]
@@ -757,7 +760,8 @@ mod test {
                 425E-9, // advanced usage
                 epsilon = 1E-9
             )
-        )
+        );
+        println!("{:#?}", cggtts)
     }
 
     #[test]
