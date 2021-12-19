@@ -13,6 +13,7 @@ CGGTTS Rust package todo list
 - [ ] support all features for dual frequency receivers
  - [ ] file must comply with advanced delay knowledge 
  - [ ] frame descriptor must be parsed & used 
+ - [ ] watch for INT DLY specs in this situation
 
 ### Cggtts::
 - [ ] simplify IMS/RCVR with a single scan_fmt! mismatch detection
