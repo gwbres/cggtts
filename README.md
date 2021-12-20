@@ -58,7 +58,18 @@ Retrieve Cggtts Data from a local file:
 
 ### Tracks manipulation
 
-Add some measurements to a previous **Cggtts** (basic)
+Study a CggttsTrack:
+
+```rust
+    let cggtts = Cggtts::from_file("data/standard/GZSY8259.506");
+    let track = cggtts.get_track(0);
+    prinln!("{:#?}", track);
+    println!("{}", track.get_start_time());
+    println!("{}", track.get_duration());
+    prinln!("{:#?}", track.get_refsys_srsys());
+```
+
+Add some measurements to a previous **Cggtts**
 
 ```rust
     let mut cggtts = Cggtts::new(); // basic struct,
@@ -77,7 +88,7 @@ Add some measurements to a previous **Cggtts** (basic)
     assert_eq!(t.set_elevation(), 90.0);
 ```
 
-Add some measurements to a previous **Cggtts** (advance)
+Add some measurements to a previous **Cggtts** with ionospheric params estimates
 
 ```rust
     // read some data
