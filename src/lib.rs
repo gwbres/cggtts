@@ -527,8 +527,7 @@ impl Cggtts {
                 _ => return Err(Error::DelayIdentificationError(String::from(line))),
             };
 
-            // carrier independant labels ?
-            if label.eq("CAB") || label.eq("REF") {
+            if label.eq("CAB") || label.eq("REF") { // carrier independent delay (simple)
                 // parse value
                 let start_off = line.find("=").unwrap();
                 let end_off   = line.rfind("ns").unwrap();
@@ -539,40 +538,38 @@ impl Cggtts {
                 } else if label.eq("REF") {
                     ref_dly = value
                 }
+            } else { // is carrier dependent delay
+                // 0. remove '{label} {dly} = '
+                let mut cleanedup = line.strip_prefix(&label)
+                    .unwrap();
+                cleanedup = cleanedup.strip_prefix(" DLY = ")
+                    .unwrap().trim();
+                // 1. parse CAL ID 
+                //  => for calibration report info
+                //  => then remove it to ease up last content identification
+                let offset = cleanedup.rfind("=")
+                    .unwrap();
+                let (before, after) = cleanedup.split_at(offset+1); 
+                let report = String::from(after.trim());
+                cleanedup = before.strip_suffix(" CAL_ID =")
+                    .unwrap();
+                // 2. final per carrier delay identification
+                // always comma seperated
+                let offset = cleanedup.find(",")
+                    .unwrap();
+                let (content1, content2) = cleanedup.split_at(offset);
+                // comma still contained on content2
+                let content2 = content2.strip_prefix(",")
+                    .unwrap()
+                    .trim();
+                println!("CONTENT1 '{}' CONTENT2 '{}'", content1, content2);
+                let (delay_ns1, constellation1, code1) = carrier_dependent_delay_parsing(content1);
+                let (delay_ns2, constellation2, code2) = carrier_dependent_delay_parsing(content2);
+                //'53.9 ns (GLO C1)' CONTENT2 ', 49.8 ns (GLO C2)'
+                // '53.9 ns (GLO C1)' CONTENT2 '49.8 ns (GLO C2)'
+                // build carrier dependent delays
             }
 
-            // SYS / INT delay have a complex form
-            // because they are specified for a specific carrier frequency
-            // therefore, tied to a specific constellation & calibration
-            // report can be also specified
-
-            // we encounter more complex pattern
-            // in dual frequency Cggtts
-            /*
-            let is_single_frequency = Regex::new(r"^... DLY = \d*\.\d ns")
-                .unwrap();
-            let value = match is_single_frequency.is_match(&line) {
-                true => {
-                    println!(">>SINGLE FREQ<<");
-                    match scan_fmt!(&line, "^[A-Z][A-Z][A-Z] DLY = {} {}*", f64, String) {
-                        (Some(value),_) => { // unit is always [ns]
-                            value * 1.0E-9
-                        },
-                        _ => return Err(Error::DelayParsingError(String::from(line))),
-                    }
-                },
-                false => {
-                    println!(">>DUAL FREQ<<");
-                    match scan_fmt!(&line, "^... DLY = {} {} [(]", f64, String) {
-                        (Some(value),_) => { // unit is always [ns]
-                            value * 1.0E-9 // TODO: (next release) 
-                                    // evaluate complex pattern for dual frequency Cggtts
-                        },
-                        _ => return Err(Error::DelayParsingError(String::from(line))),
-                    }
-                },
-            };
-            */
             // crc
             cksum = cksum.wrapping_add(
                 track::calc_crc(&line)?);
