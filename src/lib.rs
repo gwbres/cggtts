@@ -580,12 +580,6 @@ impl Cggtts {
                             .trim();
                         let (delay1, constellation, code1) = carrier_dependant_delay_parsing(content1)?; 
                         let (delay2, constellation, code2) = carrier_dependant_delay_parsing(content2)?; 
-                        //let mut values : Vec<f64> = Vec::new();
-                        //values.push(delay1);
-                        //values.push(delay2);
-                        //let mut codes  : Vec<String> = Vec::new();
-                        //codes.push(code1);
-                        //codes.push(code2);
                         (constellation,vec![delay1,delay2],vec![code1,code2]) //codes)
                     },
                     false => {
