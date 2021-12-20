@@ -87,6 +87,30 @@ impl CalibratedDelay {
     pub fn get_calibration_report (&self) -> &str { &self.report }
 }
 
+/// Identifies carrier dependant informations
+/// from a string shaped like '53.9 ns (GLO C1)'
+fn carrier_dependant_delay_parsing (string: &str) 
+        -> Result<(f64,track::Constellation,String),Error> 
+{
+    let (delay, const_str, code) : (f64, String, String) = match scan_fmt!(string, "{f} ns ({} {})", f64, String, String) {
+        (Some(delay),Some(constellation),Some(code)) => (delay,constellation,code),
+        _ => return Err(Error::FrequencyDependentDelayParsingError(String::from(string)))
+    };
+    let mut constellation: track::Constellation = track::Constellation::default();
+    if const_str.eq("GPS") {
+        constellation = track::Constellation::GPS
+    } else if const_str.eq("GLO") {
+        constellation = track::Constellation::Glonass
+    } else if const_str.eq("BDS") {
+        constellation = track::Constellation::Beidou
+    } else if const_str.eq("GAL") {
+        constellation = track::Constellation::Galileo
+    } else if const_str.eq("QZS") {
+        constellation = track::Constellation::QZSS
+    }
+    Ok((delay,constellation,code))
+}
+
 /// `Cggtts` structure
 #[derive(Debug)]
 pub struct Cggtts {
@@ -149,10 +173,8 @@ pub enum Error {
     CoordinatesParsingError(String),
     #[error("failed to identify delay value in line \"{0}\"")]
     DelayIdentificationError(String),
-    #[error("failed to parse delay value from line \"{0}\"")]
-    DelayParsingError(String),
-    #[error("unknown type of delay encountered on line \"{0}\"")]
-    UnknownDelayType(String),
+    #[error("failed to parse frequency dependent delay from \"{0}\"")]
+    FrequencyDependentDelayParsingError(String),
     #[error("checksum format error")]
     ChecksumFormatError,
     #[error("failed to parse checksum value")]
@@ -161,8 +183,6 @@ pub enum Error {
     ChecksumError(u8, u8),
     #[error("CggttsTrack error")]
     CggttsTrackError(#[from] track::Error),
-    #[error("missing \"{0}\" delay information")]
-    MissingDelayInformation(String),
 }
 
 impl Default for Cggtts {
@@ -372,9 +392,9 @@ impl Cggtts {
             //.map(|x| x.to_string() +"\n")
             //.map(|x| x.to_string() +"\r"+"\n")
                 .into_iter();
-
         // version
-        let line = lines.next().unwrap();
+        let line = lines.next()
+            .unwrap();
         let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
             Some(version) => {
                 if !version.eq(&VERSION) {
@@ -386,7 +406,8 @@ impl Cggtts {
         // crc 
         let mut cksum: u8 = track::calc_crc(&line)?;
         // rev date 
-        let line = lines.next().unwrap();
+        let line = lines.next()
+            .unwrap();
         let rev_date: chrono::NaiveDate = match scan_fmt!(&line, "REV DATE = {}", String) {
             Some(string) => {
                 match chrono::NaiveDate::parse_from_str(string.trim(), "%Y-%m-%d") {
@@ -399,7 +420,8 @@ impl Cggtts {
         // crc
         cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // rcvr
-        let line = lines.next().unwrap();
+        let line = lines.next()
+            .unwrap();
         let rcvr: Option<Rcvr> = match line.contains("RCVR = RRRRRRRR") {
             true => None,
             false => {
@@ -429,9 +451,9 @@ impl Cggtts {
         };
         // crc
         cksum = cksum.wrapping_add(track::calc_crc(&line)?);
-        // IMS
-        // TODO IMS empty should only be = 9999 
-        let line = lines.next().unwrap();
+        // ims 
+        let line = lines.next()
+            .unwrap();
         let ims : Option<Rcvr> = match line.contains("IMS = 99999") {
             true => None,
             false => { 
@@ -455,9 +477,10 @@ impl Cggtts {
         // crc
         cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // lab
-        let line = lines.next().unwrap();
-        let lab: String = match scan_fmt!(&line, "LAB = {}", String) {
-            Some(lab) => lab,
+        let line = lines.next()
+            .unwrap();
+        let lab: String = match line.strip_prefix("LAB = ") {
+            Some(s) => String::from(s.trim()),
             _ => return Err(Error::LabParsingError),
         };
         // crc
@@ -471,15 +494,17 @@ impl Cggtts {
         // crc
         cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // Y
-        let line = lines.next().unwrap();
+        let line = lines.next()
+            .unwrap();
         let y: f32 = match scan_fmt!(&line, "Y = {f}", f32) {
             Some(f) => f,
             _ => return Err(Error::CoordinatesParsingError(String::from("Y")))
         };
         // crc
         cksum = cksum.wrapping_add(track::calc_crc(&line)?);
-        // Y
-        let line = lines.next().unwrap();
+        // Z
+        let line = lines.next()
+            .unwrap();
         let z: f32 = match scan_fmt!(&line, "Z = {f}", f32) {
             Some(f) => f,
             _ => return Err(Error::CoordinatesParsingError(String::from("Z")))
@@ -487,7 +512,8 @@ impl Cggtts {
         // crc
         cksum = cksum.wrapping_add(track::calc_crc(&line)?);
         // frame 
-        let line = lines.next().unwrap();
+        let line = lines.next()
+            .unwrap();
         let frame: String = match scan_fmt!(&line, "FRAME = {}", String) {
             Some(fr) => fr,
             _ => return Err(Error::FrameFormatError),
@@ -514,11 +540,6 @@ impl Cggtts {
         let mut tot_dly : Option<CalibratedDelay> = None; 
         let mut ref_dly = 0.0_f64; 
         let mut cab_dly = 0.0_f64; 
-
-// for single freq
-//SYS DLY = 000.0 ns (GPS C1)     CAL_ID = NA
-// for dual freq
-//INT DLY =  53.9 ns (GLO C1), 49.8 ns (GLO C2) CAL_ID = 1nnn-yyyy"
 
         while line.contains("DLY") {
             // determine delay denomination
@@ -552,22 +573,46 @@ impl Cggtts {
                 let (before, after) = cleanedup.split_at(offset+1); 
                 let report = String::from(after.trim());
                 cleanedup = before.strip_suffix(" CAL_ID =")
-                    .unwrap();
-                // 2. final per carrier delay identification
-                // always comma seperated
-                let offset = cleanedup.find(",")
-                    .unwrap();
-                let (content1, content2) = cleanedup.split_at(offset);
-                // comma still contained on content2
-                let content2 = content2.strip_prefix(",")
                     .unwrap()
                     .trim();
-                println!("CONTENT1 '{}' CONTENT2 '{}'", content1, content2);
-                let (delay_ns1, constellation1, code1) = carrier_dependent_delay_parsing(content1);
-                let (delay_ns2, constellation2, code2) = carrier_dependent_delay_parsing(content2);
-                //'53.9 ns (GLO C1)' CONTENT2 ', 49.8 ns (GLO C2)'
-                // '53.9 ns (GLO C1)' CONTENT2 '49.8 ns (GLO C2)'
-                // build carrier dependent delays
+                println!("CLEANED UP '{}'", cleanedup);
+                // final delay identification
+                let (constellation, values, codes) : 
+                    (track::Constellation, Vec<f64>, Vec<String>)
+                    = match cleanedup.contains(",") 
+                {
+                    true => {
+                        // (A) dual frequency: comma separated infos
+                        let offset = cleanedup.find(",")
+                            .unwrap();
+                        let (content1, content2) = cleanedup.split_at(offset);
+                        let content2 = content2.strip_prefix(",")
+                            .unwrap()
+                            .trim();
+                        let (delay1, constellation, code1) = carrier_dependant_delay_parsing(content1)?; 
+                        let (delay2, constellation, code2) = carrier_dependant_delay_parsing(content2)?; 
+                        //let mut values : Vec<f64> = Vec::new();
+                        //values.push(delay1);
+                        //values.push(delay2);
+                        //let mut codes  : Vec<String> = Vec::new();
+                        //codes.push(code1);
+                        //codes.push(code2);
+                        (constellation,vec![delay1,delay2],vec![code1,code2]) //codes)
+                    },
+                    false => {
+                        // (B) single frequency: simple 
+                        let (delay, constellation, code) = carrier_dependant_delay_parsing(cleanedup)?;
+                        (constellation,vec![delay],vec![code])
+                    }
+                };
+                // mapp to corresponding structure
+                if label.eq("TOT") {
+                    tot_dly = Some(CalibratedDelay::new(constellation, values, codes, &report))
+                } else if label.eq("SYS") {
+                    sys_dly = Some(CalibratedDelay::new(constellation, values, codes, &report))
+                } else if label.eq("INT") {
+                    int_dly = Some(CalibratedDelay::new(constellation, values, codes, &report))
+                }
             }
 
             // crc
@@ -760,7 +805,7 @@ mod test {
         );*/
         println!("{:#?}", cggtts)
     }
-/*    
+    
     #[test]
     /// Tests standard file parsing
     fn cggtts_test_from_standard_data() {
@@ -786,7 +831,7 @@ mod test {
             }
         }
     }
-*/    
+    
     #[test]
     /// Tests advanced file parsing
     fn cggtts_test_from_ionospheric_data() {
