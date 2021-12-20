@@ -272,65 +272,54 @@ impl Cggtts {
     /// In more advanced usage, returns the combination
     /// of all delays for each carrier frequencies
     pub fn total_delay (&self) -> CalibratedDelay {
-        let (constellation, report) :
-            (track::Constellation,
-            String) = match &self.tot_dly {
+        let mut ret = CalibratedDelay::default();
+        match &self.tot_dly {
             Some(delay) => {
-                (delay.constellation,
-                String::from(delay.get_calibration_report()))
+                // parsing / user did provide a total delay
+                ret.constellation = delay.constellation.clone();
+                for i in 0..delay.values.len() {
+                    ret.codes.push(delay.codes[i].clone());
+                    ret.values.push(delay.values[i]);
+                }
+                ret.report = String::from(delay.get_calibration_report())
             },
             None => {
-                (track::Constellation::GPS,
-                String::from("None"))
-            }
-        };
-/*
-                // parsing / user did not provide
-                // a total delay,
+                // parsing / user did not provide a total delay
                 // we must evaluate it ourselves
-                let (constellation, mut values, codes, report) :
-                = match &self.int_dly {
-                    Some(delay) => { // int delay specified
-                        let mut delays: Vec<f64> = Vec::new();
-                        // int delay defined as (A+B)
+                match &self.int_dly {
+                    // internal delay specified
+                    // gets *2 (A+B) definition
+                    Some(delay) => { 
+                        // int delay specified
+                        ret.constellation = delay.constellation.clone();
                         for i in 0..delay.values.len() { 
-                            delays.push(delay.values[i] * 2.0_f64)
+                            ret.codes.push(delay.codes[i].clone()); 
+                            ret.values.push(delay.values[i] * 2.0_f64) // (A+B)
                         }
-                        (delay.get_constellation(),
-                        delays.to_vec(),
-                        delay.get_codes().to_vec(),
-                        String::from(delay.get_calibration_report()))
-
                     },
                     None => {
                         // int delay not specified
                         // => should have a system delay then
                         match &self.sys_dly {
                             Some(delay) => {
-                                let mut delays: Vec<f64> = Vec::new();
+                                // system delay specified
+                                ret.constellation = delay.constellation.clone();
                                 for i in 0..delay.values.len() {
-                                    delays.push(delay.values[i])
+                                    ret.codes.push(delay.codes[i].clone());
+                                    ret.values.push(delay.values[i]);
                                 }
-                                (delay.get_constellation(),
-                                delays.to_vec(),
-                                delay.get_codes().to_vec(),
-                                String::from(delay.get_calibration_report()))
-                            }
+                            },
+                            None => {} // no delay at all, 0 assumed then
                         }
                     }
-                };
+                }
+                // always add cab delay
+                for i in 0..ret.values.len() {
+                    ret.values[i] += self.cab_dly
+                }
+            }
         }
-*/
-        // add cable delay to all retrieved values
-        //for i in 0..values.len() {
-        //    values[i] += self.cab_dly
-        //}
-        CalibratedDelay {
-            constellation,
-            values: Vec::new(),
-            codes: Vec::new(),
-            report,
-        }
+        ret
     }
     
     /// Returns number of tracks contained in self
