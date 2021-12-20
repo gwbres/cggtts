@@ -39,7 +39,7 @@ pub struct Rcvr {
     software_number: String,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 /// `CalibratedDelay` are delays that are
 /// specified to a specific carrier frequency,
 /// thefore, to a specific `GNSS` constellation.
@@ -65,12 +65,12 @@ impl Default for CalibratedDelay {
 
 impl CalibratedDelay {
     /// Builds a new `CalibratedDelay` object
-    pub fn new(constellation: track::Constellation, values: Vec<f64>, codes: Vec<String>, report: &str) -> CalibratedDelay {
+    pub fn new(constellation: track::Constellation, values: Vec<f64>, codes: Vec<String>, report: Option<&str>) -> CalibratedDelay {
         CalibratedDelay {
             constellation,
             values,
             codes,
-            report: String::from(report),
+            report: report.unwrap_or("NA").to_string(),
         }
     }
     /// Returns constellation against which this delay
@@ -351,7 +351,18 @@ impl Cggtts {
         }
         ret
     }
-    
+
+    /// Sets `system` delay (refer to README)
+    pub fn set_system_delay (&mut self, delay: CalibratedDelay) { self.sys_dly = Some(delay.clone()) }
+    /// Sets `internal` delay (refer to README)
+    pub fn set_internal_delay (&mut self, delay: CalibratedDelay) { self.int_dly = Some(delay.clone()) }
+    /// Sets `total` delay (refer to README)
+    pub fn set_total_delay (&mut self, delay: CalibratedDelay) { self.tot_dly = Some(delay.clone()) }
+    /// Sets `cable` delay (refer to README)
+    pub fn set_cable_delay (&mut self, delay: f64) { self.cab_dly = delay }
+    /// Sets `ref` delay (refer to README)
+    pub fn set_ref_delay (&mut self, delay: f64) { self.ref_dly = delay }
+
     /// Builds `Cggtts` from given file.
     /// File must respect naming convention.
     pub fn from_file (fp: &std::path::Path) -> Result<Cggtts, Error> {
@@ -590,11 +601,11 @@ impl Cggtts {
                 };
                 // mapp to corresponding structure
                 if label.eq("TOT") {
-                    tot_dly = Some(CalibratedDelay::new(constellation, values, codes, &report))
+                    tot_dly = Some(CalibratedDelay::new(constellation, values, codes, Some(&report)))
                 } else if label.eq("SYS") {
-                    sys_dly = Some(CalibratedDelay::new(constellation, values, codes, &report))
+                    sys_dly = Some(CalibratedDelay::new(constellation, values, codes, Some(&report)))
                 } else if label.eq("INT") {
-                    int_dly = Some(CalibratedDelay::new(constellation, values, codes, &report))
+                    int_dly = Some(CalibratedDelay::new(constellation, values, codes, Some(&report)))
                 }
             }
 
@@ -767,9 +778,9 @@ mod test {
         cggtts.set_lab_agency("TestLab");
         cggtts.set_nb_channels(10);
         cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_cable_delay(300E-9);
         //cggtts.set_reference_delay(100E-9);
         //cggtts.set_internal_delay(25E-9);
-        //cggtts.set_cable_delay(300E-9);
         assert_eq!(cggtts.get_lab_agency(), "TestLab");
         assert_eq!(cggtts.get_nb_channels(), 10);
         assert_eq!(cggtts.get_antenna_coordinates(), (1.0,2.0,3.0));
