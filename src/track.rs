@@ -8,14 +8,20 @@ use chrono::Timelike;
 pub const BIPM_SPECIFIED_TRACKING_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
 
 /// Describes all known GNSS constellations
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Constellation {
     GPS,
     Glonass,
     Beidou,
     QZSS,
     Galileo,
-    Mixed, // mixed constellation records
+    Mixed,
+}
+
+impl Default for Constellation {
+    fn default() -> Constellation {
+        Constellation::GPS
+    }
 }
 
 #[derive(Error, Debug)]
@@ -206,7 +212,7 @@ impl CggttsTrack {
     pub fn new() -> CggttsTrack { Default::default() }
 
     /// Returns track start time
-    pub fn get_track_start_time (&self) -> chrono::NaiveTime { self.trktime }
+    pub fn get_start_time (&self) -> chrono::NaiveTime { self.trktime }
     /// Returns track duration
     pub fn get_duration (&self) -> std::time::Duration { self.duration }
     /// Assigns track duration
