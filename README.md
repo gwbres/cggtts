@@ -11,18 +11,13 @@ Satellites time transfers.
 
 [CGGTTS Specifications](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
 
-Supported version: "2E". Older versions are rejected by this library.
+Supported version: **2E**.   
+Older CGGTTS format are _rejected_ by this library.
 
-## Examples
+### Cggtts file analysis
 
-For compelling examples, refer to the integrated test methods.
+Retrieve data from a local CGGTTS compliant file:
 
-### Cggtts File Parsing
-
-Retrieve Cggtts Data from a local file:
-
-* File must be at least revision "2E"
-* older revisions will be rejected
 * File name must follow naming conventions, refer to specifications
 
 ```rust
@@ -39,26 +34,9 @@ Retrieve Cggtts Data from a local file:
     assert_eq!(cggtts.has_ionospheric_parameters(), true); // dual carrier session
 ```
 
-### Basic constructor
+#### Data analysis
 
-```rust
-    let mut cggtts = Cggtts::new(); // Unknown system delays, see down below
-    cggtts.set_lab_agency("MyLab");
-    cggtts.set_nb_channels(10);
-    // Antenna phase center coordinates [m] 
-    // uses IRTF spatial referencing
-    cggtts.set_antenna_coordinates(
-        (+4027881.79.0,+306998.67,+4919499.36)
-    );
-    println!("{:#?}", cggtts);
-    assert_eq!(cggtts.get_total_delay(), 0.0); // system delays are not known
-    assert_eq!(cggtts.support_dual_frequency(), false); // not enough information
-    cggtts.to_file("XXXX0159.572").unwrap();
-```
-
-### Tracks manipulation
-
-Study a CggttsTrack:
+Measurements are stored within the list of _CggttsTracks_
 
 ```rust
     let cggtts = Cggtts::from_file("data/standard/GZSY8259.506");
@@ -69,26 +47,45 @@ Study a CggttsTrack:
     prinln!("{:#?}", track.get_refsys_srsys());
 ```
 
-Add some measurements to a previous **Cggtts**
+_CggttsTracks_ are easily manipulated
 
 ```rust
-    let mut cggtts = Cggtts::new(); // basic struct,
-    // Unknown system delays, see down below
-    // -> add some measurements
-    let mut track = track::Cggttrack::new(); // basic track
-    // customize a little
-    track.set_azimuth(90.0);
-    track.set_elevation(180.0);   
-    track.set_duration(Cggtts::track::BIPM_SPECIFIED_TRACKING_DURATION); // standard
-    cggtts.add_track(track);
-
     let t = cggtts.pop(); // grab 1
     assert_eq!(cggtts.len(), 0); // consumed
     assert_eq!(t.get_azimuth(), 180.0);
     assert_eq!(t.set_elevation(), 90.0);
 ```
 
-Add some measurements to a previous **Cggtts** with ionospheric params estimates
+### CGGTTS production
+
+Using the basic constructor gets you started quickly
+
+```rust
+    let mut cggtts = Cggtts::new();
+    cggtts.set_lab_agency("MyLab");
+    cggtts.set_nb_channels(10);
+    
+    // Antenna phase center coordinates [m] 
+    // is specified in IRTF spatial referencing
+    cggtts.set_antenna_coordinates((+4027881.79.0,+306998.67,+4919499.36));
+    println!("{:#?}", cggtts);
+    assert_eq!(cggtts.get_total_delay(), 0.0); // system delays is not specified
+    assert_eq!(cggtts.support_dual_frequency(), false); // not enough information
+    cggtts.to_file("XXXX0159.572").unwrap(); // produce a CGGTTS
+```
+
+Add some measurements to a _Cggtts_
+
+```rust
+    let mut track = track::Cggttrack::new(); // basic track
+    // customize a little
+    track.set_azimuth(90.0);
+    track.set_elevation(180.0);   
+    track.set_duration(Cggtts::track::BIPM_SPECIFIED_TRACKING_DURATION); // standard
+    cggtts.add_track(track);
+```
+
+Add ionospheric parameters estimates
 
 ```rust
     // read some data
@@ -98,20 +95,25 @@ Add some measurements to a previous **Cggtts** with ionospheric params estimates
     let mut track = track::Cggttrack::new(); // basic track
     // customize
     track.set_duration(Cggtts::track::BIPM_SPECIFIED_TRACKING_DURATION); // respect standard
-    track.set_elevation(90.0);
-    track.set_azimuth(180.0);
-    track.set_refsys_srsys((1E-9,1E-12));
+    track.set_refsys_srsys((1E-9,1E-12)); // got some data
     cggtts.push_track(track); // ionospheric_parameters not provided
-                       // will get blanked out on this line
+          // will get blanked out on this line
     
-    track.set_ionospheric_parameters((alpha, beta)));
-    cggtts.push_track(track); // respects previous context
-    cggtts.to_file("RZOP0159.573"); // produce a new file
+    let params = (5.0E-9, 0.1E-12, 1E-9); // see (msio, smsi, isg) specifications
+    track.set_ionospheric_parameters(params));
+    cggtts.push_track(track);
+    cggtts.to_file("RZOP0159.573"); // fully populated
 ```
 
-## System delays definition
+### System delays
 
-**Delays are always specified in [ns]**
+When we refer to system delays we refer to propagation induced delays.
+
+In _Cggtts_ files, delays are always specified in **[ns]**.  
+Ths library manipulates delays in seconds, but converts them
+back to **[ns]** in file operations.
+
+#### Definitions
 
 ```
 +--------+               +---------- system ---------+ +++++++++++
@@ -124,22 +126,121 @@ Add some measurements to a previous **Cggtts** with ionospheric params estimates
  +++++++                                               +++++++++++
 ```
 
-* total delay is defined as ANT + cable + A + B
-* (A+B) is defined as internal delay, internaly delays inside
+* "total" delay is defined as ANT + cable + A + B
+* (A+B) is defined as internal delay, propagation delay inside
 the receiver & the antenna
-* if (A+B) granularity is not known, we then refer to (A+B)=system delay
-in case it is known
+* in case we do not have the (A+B) granularity, we then refer to (A+B)=system delay
+
 * cable delay refers to the RF cable delay
+
 * ref delay is the time offset between the time reference (whose name is "Reference" field),
 and the receiver internal clock
 
-Three scenarios:
-(0) total unknown = 0 is what you get with ::new()
-(1) system delay + ref delay (basic)
-(1*) int delay +
+* internal (A+B) or system delay are mutually exclusive.
+User is expected to use either one of them.  
+In case user specifies both, this lib will not crash but prefer (A+B) (advaced system definition)
 
-## System delays in dual frequency context
-In dual frequency context, total and system delays are related
-to carrier frequency. Therefore in must be specified for which
-GNSS constellation and which carrier.
-This is why **Cggtts.get_total_delay()** is returns a calibrated delay object
+* when internal (A+B) delay or system delay is provided,
+the standard expects a Ref delay too. 
+In case the user did not specify a Ref delay, we set it to 0 ns
+to still have a valid Cggtts generated.
+
+#### Case of Dual Frequency CGGTTS
+In dual frequency context (two carriers), 
+_total_, _system_, _internal_ should be specified
+for each carrier frequency.
+
+_cable_ and _ref_ delays are not tied to a carrier frequency.
+
+#### Delays and CGGTTS production interface
+
+This library provdes an easy to use interface to specify your system
+when publishing a CGGTTS:
+
+__(A)__ basic use: system delays are not known
+```rust
+let mut cggtts = Cggtts::new(); // default
+assert_eq!(cggtts.get_total_delay(), 0.0); // no specifications
+```
+
+__(A*)__ basic use: usually the RF cable delay is easilly determined.
+```rust
+let mut cggtts = Cggtts::new(); // default
+cggtts.set_cable_delay(10E-9); // [s] !!
+assert_eq!(cggtts.get_total_delay(), 10E-9); // that's a starting point
+cggtts.to_file("GZXXDD.DDD");
+```
+
+This definition does not match a standard definition.
+To still generate a standardized CGGTTS, the lib in this context declares
+a single frequency TOTAL DELAY of 10 ns.
+
+__(A**)__ basic use: total delay is known.
+Total delay is always tied to a GNSS constellation, like 
+intermediate & advanced examples down below.
+In case you don't know, use the default constructor:
+```rust
+let mut cggtts = Cggtts::new(); // default
+cggtts.set_cable_delay(10E-9); // [s] !!
+let mut delay = CalibratedDelay::default(); // default
+delay.delays.push(100E-9); // [s]!!
+assert_eq!(cggtts.get_total_delay(), 110E-9);
+```
+
+__(B)__ intermediate use: 
+system delay is known and
+we know the RF cable delay. System delay is always tied to a 
+constellation:
+
+```rust
+let mut cggtts = Cggtts::new(); // default
+cggtts.set_cable_delay(10E-9); // [s] !!
+
+let delay = CalibratedDelay::new(
+    constellation: track::Constellation::GPS,
+    values: vec![150E-9],
+    codes: vec!["C1"], // GPS::C1
+    report: None
+ );
+
+cggtts.set_system_delay(delay); 
+assert_eq!(cggtts.get_total_delay(), 150-9+10E-9);
+cggtts.to_file("GZXXDD.DDD");
+```
+
+__(B*)__ same hypothesis but in a dual frequency context.
+Therefore we specify a delay for each carrier frequency: 
+
+```rust
+let mut cggtts = Cggtts::new(); // default
+cggtts.set_cable_delay(25E-9); // [s] !!
+
+let delay = CalibratedDelay::new(
+    constellation: track::Constellation::Glonass,
+    values: vec![150E-9,345E-9],
+    codes: vec!["C1", "P1"], // Glonass::C1&P1
+    report: None
+ );
+
+cggtts.set_system_delay(delay); 
+assert_eq!(cggtts.get_total_delay(), 150-9+10E-9);
+cggtts.to_file("GZXXDD.DDD");
+```
+
+__(C)__ advance use: (A+B) intrinsic delays are known 
+
+```rust
+let mut cggtts = Cggtts::new(); // default
+cggtts.set_cable_delay(25E-9); // [s] !!
+
+let delay = CalibratedDelay::new(
+    constellation: track::Constellation::Galileo,
+    values: vec![50E-9],
+    codes: vec!["E1"], // Galileo::E1
+    report: "some-calibration-info"
+ );
+
+cggtts.set_internal_delay(delay); 
+assert_eq!(cggtts.get_total_delay(), 50E-9+50E-9+25E-9);
+cggtts.to_file("GZXXDD.DDD");
+```
