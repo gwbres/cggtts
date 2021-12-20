@@ -11,18 +11,13 @@ Satellites time transfers.
 
 [CGGTTS Specifications](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
 
-Supported version: "2E". Older versions are rejected by this library.
+Supported version: **2E**.   
+Older CGGTTS format are _rejected_ by this library.
 
-## Examples
+### Cggtts file analysis
 
-For compelling examples, refer to the integrated test methods.
+Retrieve data from a local CGGTTS compliant file:
 
-### Cggtts File Parsing
-
-Retrieve Cggtts Data from a local file:
-
-* File must be at least revision "2E"
-* older revisions will be rejected
 * File name must follow naming conventions, refer to specifications
 
 ```rust
@@ -39,26 +34,9 @@ Retrieve Cggtts Data from a local file:
     assert_eq!(cggtts.has_ionospheric_parameters(), true); // dual carrier session
 ```
 
-### Basic constructor
+#### Data analysis
 
-```rust
-    let mut cggtts = Cggtts::new(); // Unknown system delays, see down below
-    cggtts.set_lab_agency("MyLab");
-    cggtts.set_nb_channels(10);
-    // Antenna phase center coordinates [m] 
-    // uses IRTF spatial referencing
-    cggtts.set_antenna_coordinates(
-        (+4027881.79.0,+306998.67,+4919499.36)
-    );
-    println!("{:#?}", cggtts);
-    assert_eq!(cggtts.get_total_delay(), 0.0); // system delays are not known
-    assert_eq!(cggtts.support_dual_frequency(), false); // not enough information
-    cggtts.to_file("XXXX0159.572").unwrap();
-```
-
-### Tracks manipulation
-
-Study a CggttsTrack:
+Measurements are stored within the list of _CggttsTracks_
 
 ```rust
     let cggtts = Cggtts::from_file("data/standard/GZSY8259.506");
@@ -69,26 +47,45 @@ Study a CggttsTrack:
     prinln!("{:#?}", track.get_refsys_srsys());
 ```
 
-Add some measurements to a previous **Cggtts**
+_CggttsTracks_ are easily manipulated
 
 ```rust
-    let mut cggtts = Cggtts::new(); // basic struct,
-    // Unknown system delays, see down below
-    // -> add some measurements
-    let mut track = track::Cggttrack::new(); // basic track
-    // customize a little
-    track.set_azimuth(90.0);
-    track.set_elevation(180.0);   
-    track.set_duration(Cggtts::track::BIPM_SPECIFIED_TRACKING_DURATION); // standard
-    cggtts.add_track(track);
-
     let t = cggtts.pop(); // grab 1
     assert_eq!(cggtts.len(), 0); // consumed
     assert_eq!(t.get_azimuth(), 180.0);
     assert_eq!(t.set_elevation(), 90.0);
 ```
 
-Add some measurements to a previous **Cggtts** with ionospheric params estimates
+### CGGTTS production
+
+Using the basic constructor gets you started quickly
+
+```rust
+    let mut cggtts = Cggtts::new();
+    cggtts.set_lab_agency("MyLab");
+    cggtts.set_nb_channels(10);
+    
+    // Antenna phase center coordinates [m] 
+    // is specified in IRTF spatial referencing
+    cggtts.set_antenna_coordinates((+4027881.79.0,+306998.67,+4919499.36));
+    println!("{:#?}", cggtts);
+    assert_eq!(cggtts.get_total_delay(), 0.0); // system delays is not specified
+    assert_eq!(cggtts.support_dual_frequency(), false); // not enough information
+    cggtts.to_file("XXXX0159.572").unwrap(); // produce a CGGTTS
+```
+
+Add some measurements to a _Cggtts_
+
+```rust
+    let mut track = track::Cggttrack::new(); // basic track
+    // customize a little
+    track.set_azimuth(90.0);
+    track.set_elevation(180.0);   
+    track.set_duration(Cggtts::track::BIPM_SPECIFIED_TRACKING_DURATION); // standard
+    cggtts.add_track(track);
+```
+
+Add ionospheric parameters estimates
 
 ```rust
     // read some data
@@ -98,15 +95,14 @@ Add some measurements to a previous **Cggtts** with ionospheric params estimates
     let mut track = track::Cggttrack::new(); // basic track
     // customize
     track.set_duration(Cggtts::track::BIPM_SPECIFIED_TRACKING_DURATION); // respect standard
-    track.set_elevation(90.0);
-    track.set_azimuth(180.0);
-    track.set_refsys_srsys((1E-9,1E-12));
+    track.set_refsys_srsys((1E-9,1E-12)); // got some data
     cggtts.push_track(track); // ionospheric_parameters not provided
-                       // will get blanked out on this line
+          // will get blanked out on this line
     
-    track.set_ionospheric_parameters((alpha, beta)));
-    cggtts.push_track(track); // respects previous context
-    cggtts.to_file("RZOP0159.573"); // produce a new file
+    let params = (5.0E-9, 0.1E-12, 1E-9); // see (msio, smsi, isg) specifications
+    track.set_ionospheric_parameters(params));
+    cggtts.push_track(track);
+    cggtts.to_file("RZOP0159.573"); // fully populated
 ```
 
 ## System delays definition
