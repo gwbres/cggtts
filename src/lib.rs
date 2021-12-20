@@ -1,17 +1,18 @@
 //! CGGTTS Rust package
 //!
-//! A package to handle CGGTTS data files.
-//!
-//! Only "2E" Version (latest to date) supported
-//!
-//! Only single frequency `Cggtts` is supported at the moment,
-//! dual frequency `Cggtts` to be supported in coming releases.
-//!
-//! Homepage: <https://github.com/gwbres/cggtts>
+//! Rust package to parse and manipulate CGGTTS data files.
+//! CGGTTS data files are dedicated to common view (two way satellite)
+//! time transfer.
 //!
 //! Official BIPM `Cggtts` specifications:
 //! <https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf>
 //!
+//! Only single frequency `Cggtts` is supported at the moment,
+//! dual frequency `Cggtts` to be supported in coming releases.
+//! 
+//! Only "2E" Version (latest to date) supported
+//!
+//! Homepage: <https://github.com/gwbres/cggtts>
 
 pub mod track;
 use regex::Regex;
