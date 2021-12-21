@@ -24,6 +24,19 @@ impl Default for Constellation {
     }
 }
 
+impl std::fmt::Display for Constellation {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Constellation::GPS => fmt.write_str("GPS"),
+            Constellation::Glonass => fmt.write_str("GLO"),
+            Constellation::Beidou => fmt.write_str("BDS"),
+            Constellation::QZSS => fmt.write_str("QZS"),
+            Constellation::Galileo => fmt.write_str("GAL"),
+            _ => fmt.write_str("M"),
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum ConstellationError {
     #[error("unknown constellation '{0}'")]
