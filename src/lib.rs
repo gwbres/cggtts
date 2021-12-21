@@ -590,7 +590,7 @@ impl Cggtts {
                             .unwrap()
                             .trim();
                         let (delay1, constellation, code1) = carrier_dependant_delay_parsing(content1)?; 
-                        let (delay2, constellation, code2) = carrier_dependant_delay_parsing(content2)?; 
+                        let (delay2, _, code2) = carrier_dependant_delay_parsing(content2)?; 
                         (constellation,vec![delay1,delay2],vec![code1,code2]) //codes)
                     },
                     false => {
@@ -708,7 +708,6 @@ impl std::fmt::Display for Cggtts {
 #[cfg(test)]
 mod test {
     use super::*;
-    use float_cmp::approx_eq;
     
     #[test]
     /// Tests default constructor 
