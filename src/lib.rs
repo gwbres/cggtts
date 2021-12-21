@@ -15,6 +15,7 @@
 //! Homepage: <https://github.com/gwbres/cggtts>
 
 pub mod track;
+use std::io::{Write};
 use regex::Regex;
 use thiserror::Error;
 use std::str::FromStr;
@@ -25,7 +26,7 @@ use scan_fmt::scan_fmt;
 const VERSION: &str = "2E";
 
 /// latest revision date
-const REV_DATE: &str = "2014-02-20";
+const LATEST_REV_DATE: &str = "2014-02-20";
 
 #[derive(Clone, Debug)]
 /// `Rcvr` describes a GNSS receiver
@@ -37,6 +38,21 @@ pub struct Rcvr {
     serial_number: String,
     year: u16,
     software_number: String,
+}
+
+impl std::fmt::Display for Rcvr { 
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.write_str(&self.manufacturer)?;
+        fmt.write_str(" ")?;
+        fmt.write_str(&self.recv_type)?;
+        fmt.write_str(" ")?;
+        fmt.write_str(&self.serial_number)?;
+        fmt.write_str(" ")?;
+        fmt.write_str(&self.year.to_string())?;
+        fmt.write_str(" ")?;
+        fmt.write_str(&self.software_number)?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -60,6 +76,24 @@ impl Default for CalibratedDelay {
             codes: Vec::new(),
             report: String::from("NA"),
         }
+    }
+}
+
+impl std::fmt::Display for CalibratedDelay { 
+//INT DLY = 53.9 ns (GLO C1), 49.8 ns (GLO C2) CAL_ID = 1nnn-yyyy
+//SYS DLY = 000.0 ns (GPS C1)     CAL_ID = NA
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.values.len() == 1 {
+            fmt.write_str(&format!("{:.1} ns ({} {})", self.values[0], self.constellation, self.codes[0]))?
+        } else {
+            // CSV
+            //for i in 0..self.values.len()-1 {
+            //    fmt.write_str(format!("{:.1} ns ({} {})"), self.values[i], self.codes[i])?
+            //}
+        }
+        // calibration report info
+        fmt.write_str(&format!("     CAL_ID = {}", self.report))?;
+        Ok(())
     }
 }
 
@@ -199,7 +233,7 @@ impl Default for Cggtts {
     fn default() -> Cggtts {
         Cggtts {
             version: VERSION.to_string(),
-            rev_date: chrono::NaiveDate::parse_from_str(REV_DATE, "%Y-%m-%d")
+            rev_date: chrono::NaiveDate::parse_from_str(LATEST_REV_DATE, "%Y-%m-%d")
                 .unwrap(),
             date: chrono::Utc::today().naive_utc(),
             lab: String::from("Unknown"),
@@ -249,6 +283,9 @@ impl Cggtts {
     pub fn set_nb_channels (&mut self, ch: u16) { self.nb_channels = ch }
     /// Returns GNSS receiver number of channels
     pub fn get_nb_channels (&self) -> u16 { self.nb_channels }
+
+    /// Assigns `Rcvr` hardware description
+    pub fn set_rcvr_infos (&mut self, rcvr: Rcvr) { self.rcvr = Some(rcvr) }
 
     /// Assigns antenna phase center coordinates [m],
     /// coordinates should use `IRTF` referencing
@@ -363,8 +400,7 @@ impl Cggtts {
     /// Sets `ref` delay (refer to README)
     pub fn set_ref_delay (&mut self, delay: f64) { self.ref_dly = delay }
 
-    /// Builds `Cggtts` from given file.
-    /// File must respect naming convention.
+    /// Builds self from given `Cggtts` file.
     pub fn from_file (fp: &std::path::Path) -> Result<Cggtts, Error> {
         let file_name = fp.file_name()
             .unwrap()
@@ -575,7 +611,6 @@ impl Cggtts {
                 cleanedup = before.strip_suffix(" CAL_ID =")
                     .unwrap()
                     .trim();
-                println!("CLEANED UP '{}'", cleanedup);
                 // final delay identification
                 let (constellation, values, codes) : 
                     (track::Constellation, Vec<f64>, Vec<String>)
@@ -682,27 +717,65 @@ impl Cggtts {
             tracks
         })
     }
-}
-
-// custom display formatter
-impl std::fmt::Display for Cggtts {
-    fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f, "Version: '{}' | REV DATE '{}' | LAB '{}' | Nb Channels {}\nRECVR: {:?}\nIMS: {:?}\nCoordinates: {:?}\nFRAME: {}\nCOMMENTS: {:#?}\nREFERENCE: {}\n",
-            self.version, self.rev_date, self.lab, self.nb_channels,
-            self.rcvr,
-            self.ims,
-            self.coordinates,
-            self.frame,
-            self.comments,
-            self.reference,
-        ).unwrap();
-        write! (f, "-------------------------\n").unwrap();
-        for i in 0..self.tracks.len() {
-            write! (f, "MEAS #{}: {}\n",i, self.tracks[i]).unwrap()
+    
+    /// Writes self into a `Cggtts` file
+    pub fn to_file (&self, fp: &std::path::Path) -> std::io::Result<()> {
+        let mut fd = std::fs::File::create(&fp)?;
+        writeln!(&mut fd,
+"CGGTTS GENERIC DATA FORMAT VERSION = {}
+REV DATE = {}
+RCVR = {}
+CH = {}
+IMS = {}
+LAB = {}
+X = {}
+Y = {}
+Z = {}
+FRAME = {}
+COMMENTS = {}",
+            VERSION,
+            LATEST_REV_DATE,
+            self.rcvr.clone()
+                .map(|r| r.to_string())
+                .unwrap_or(String::from("RRRRRRRR")),
+            self.nb_channels,
+            self.ims.clone()
+                .map(|r| r.to_string())
+                .unwrap_or(String::from("99999")),
+            self.lab,
+            format!("{:.3}", self.coordinates.0),
+            format!("{:.3}", self.coordinates.1),
+            format!("{:.3}", self.coordinates.2),
+            &self.frame,
+            self.comments.clone()
+                .map(|r| r.to_string())
+                .unwrap_or(String::from("NO COMMENTS")),
+        )?;
+        // system delays
+        if let Some(delay) = &self.tot_dly {
+            // total delay defined
+            writeln!(&mut fd, "TOT DLY = {}", delay.to_string())?;
+        } else {
+            // total delay not defined
+            // => SYS or INT DELAY ?
+            // INT DELAY prioritary
+            /*if let Some(delay) = self.int_dly {
+                writeln!(&mut fd, "INT DLY {}", delay.to_string())?
+            } else if let Some(delay) = self.sys_dly {
+                writeln!(&mut fd, "SYS DLY {}", delay.to_string())?
+            } else {
+                // neither SYS / INT delay
+                // => specify null SYS DLY
+                writeln!(&mut fd, "SYS DLY = 000.0 ns (GPS C1)     CAL_ID = NA")? 
+            }*/
+            // other delays always there
+            writeln!(&mut fd, "CAB DLY = {} ns", format!("{:.1}", self.cab_dly))?;
+            writeln!(&mut fd, "REF DLY = {} ns", format!("{:.1}", self.ref_dly))?;
         }
-        write!(f, "\n")
+        writeln!(&mut fd, "REF = {}", self.reference.to_string())?;
+        Ok(())
     }
+
 }
 
 #[cfg(test)]
@@ -714,7 +787,7 @@ mod test {
     fn cggtts_test_default() {
         let cggtts = Cggtts::new();
         let today = chrono::Utc::today();
-        let rev_date = chrono::NaiveDate::parse_from_str(REV_DATE,"%Y-%m-%d")
+        let rev_date = chrono::NaiveDate::parse_from_str(LATEST_REV_DATE,"%Y-%m-%d")
             .unwrap();
         assert_eq!(cggtts.lab, "Unknown");
         assert_eq!(cggtts.nb_channels, 0);
@@ -801,6 +874,7 @@ mod test {
     
     #[test]
     /// Tests standard file parsing
+/*
     fn cggtts_test_from_standard_data() {
         // open test resources
         let test_resources = std::path::PathBuf::from(
@@ -824,7 +898,7 @@ mod test {
             }
         }
     }
-    
+*/
     #[test]
     /// Tests advanced file parsing
     fn cggtts_test_from_ionospheric_data() {
@@ -849,5 +923,50 @@ mod test {
                 println!("File \"{:?}\" {:#?}", &path, cggtts.unwrap())
             }
         }
+    }
+
+    #[test]
+    /// Tests basci `Cggtts` to file
+    fn default_cggtts_to_file() {
+        let cggtts = Cggtts::default();
+        let fp = std::path::Path::new("data/output/GZXXXXDD.DD0");
+        assert_eq!(cggtts.to_file(fp).is_err(), false)
+    }
+
+    #[test]
+    /// Tests customized `Cggtts` to file
+    fn basic_cggtts_to_file() {
+        let mut cggtts = Cggtts::default();
+
+        // identify receiver hw
+        let rcvr = Rcvr {
+            manufacturer: String::from("SomeManufacturer"),
+            recv_type: String::from("SomeKind"), 
+            serial_number: String::from("XXXXXX"), 
+            year: 2021, 
+            software_number: String::from("v00"),
+        };
+        cggtts.set_rcvr_infos(rcvr);
+
+        // add some more infos
+        cggtts.set_lab_agency("MyLab");
+        cggtts.set_nb_channels(10);
+        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_time_reference("UTC(k)");
+
+        // set a total delay
+        //let delay: Vec<f64> = Vec::from([100E-9]);
+        //let codes: Vec<track::ConstellationRinexCode> = 
+        //    Vec::from([track::ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C]);
+        let total_delay = CalibratedDelay {
+            constellation: track::Constellation::Glonass,
+            values: vec![100E-9_f64],
+            codes: vec![String::from("C1")], 
+            report: String::from("NA"),
+        };
+        cggtts.set_total_delay(total_delay);
+
+        let fp = std::path::Path::new("data/output/GZXXXXDD.DD1");
+        assert_eq!(cggtts.to_file(fp).is_err(), false)
     }
 }
