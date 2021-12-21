@@ -80,18 +80,19 @@ impl Default for CalibratedDelay {
 }
 
 impl std::fmt::Display for CalibratedDelay { 
-//INT DLY = 53.9 ns (GLO C1), 49.8 ns (GLO C2) CAL_ID = 1nnn-yyyy
-//SYS DLY = 000.0 ns (GPS C1)     CAL_ID = NA
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         if self.values.len() == 1 {
-            fmt.write_str(&format!("{:.1} ns ({} {})", self.values[0], self.constellation, self.codes[0]))?
+            fmt.write_str(&format!("{:.1} ns ({} {})", self.values[0] * 1E9, self.constellation, self.codes[0]))?
         } else {
             // CSV
-            //for i in 0..self.values.len()-1 {
-            //    fmt.write_str(format!("{:.1} ns ({} {})"), self.values[i], self.codes[i])?
-            //}
+            for i in 0..self.values.len()-1 {
+                fmt.write_str(&format!("{:.1} ns ({} {}), ", 
+                    self.values[i] *1E9, self.constellation, self.codes[i]))? 
+            }
+            fmt.write_str(&format!("{:.1} ns ({} {})", 
+                self.values[self.values.len()-1] *1E9, self.constellation, 
+                    self.codes[self.values.len()-1]))?
         }
-        // calibration report info
         fmt.write_str(&format!("     CAL_ID = {}", self.report))?;
         Ok(())
     }
@@ -346,7 +347,10 @@ impl Cggtts {
                                     ret.values.push(delay.values[i]);
                                 }
                             },
-                            None => {} // no delay at all, 0 assumed then
+                            None => { // no delay at all, 0 assumed then
+                                ret.values.push(0.0);
+                                ret.codes.push(String::from("C1"))
+                            },
                         }
                     }
                 }
@@ -759,18 +763,24 @@ COMMENTS = {}",
             // total delay not defined
             // => SYS or INT DELAY ?
             // INT DELAY prioritary
-            /*if let Some(delay) = self.int_dly {
-                writeln!(&mut fd, "INT DLY {}", delay.to_string())?
-            } else if let Some(delay) = self.sys_dly {
-                writeln!(&mut fd, "SYS DLY {}", delay.to_string())?
+            if let Some(delay) = &self.int_dly {
+                writeln!(&mut fd, "INT DLY = {}", delay.to_string())?;
+            } else if let Some(delay) = &self.sys_dly {
+                writeln!(&mut fd, "SYS DLY = {}", delay.to_string())?;
             } else {
                 // neither SYS / INT delay
                 // => specify null SYS DLY
-                writeln!(&mut fd, "SYS DLY = 000.0 ns (GPS C1)     CAL_ID = NA")? 
-            }*/
+                let null_delay = CalibratedDelay {
+                    constellation: track::Constellation::default(),
+                    values: vec![0.0_f64],
+                    codes: vec![String::from("C1")],
+                    report: String::from("NA"),
+                };
+                writeln!(&mut fd, "SYS DLY = {}", null_delay.to_string())? 
+            }
             // other delays always there
-            writeln!(&mut fd, "CAB DLY = {} ns", format!("{:.1}", self.cab_dly))?;
-            writeln!(&mut fd, "REF DLY = {} ns", format!("{:.1}", self.ref_dly))?;
+            writeln!(&mut fd, "CAB DLY = {} ns", format!("{:.1}", self.cab_dly *1E9))?;
+            writeln!(&mut fd, "REF DLY = {} ns", format!("{:.1}", self.ref_dly *1E9))?;
         }
         writeln!(&mut fd, "REF = {}", self.reference.to_string())?;
         Ok(())
@@ -786,21 +796,23 @@ mod test {
     /// Tests default constructor 
     fn cggtts_test_default() {
         let cggtts = Cggtts::new();
-        let today = chrono::Utc::today();
-        let rev_date = chrono::NaiveDate::parse_from_str(LATEST_REV_DATE,"%Y-%m-%d")
-            .unwrap();
-        assert_eq!(cggtts.lab, "Unknown");
-        assert_eq!(cggtts.nb_channels, 0);
-        assert_eq!(cggtts.frame, "?");
-        assert_eq!(cggtts.reference, "Unknown");
-        //assert_eq!(cggtts.tot_dly, None);
-        //assert_eq!(cggtts.ref_dly, None);
-        //assert_eq!(cggtts.int_dly, None);
-        //assert_eq!(cggtts.cab_dly, None);
-        //assert_eq!(cggtts.sys_dly, None);
-        assert_eq!(cggtts.coordinates, (0.0,0.0,0.0));
-        assert_eq!(cggtts.rev_date, rev_date); 
-        assert_eq!(cggtts.date, today.naive_utc());
+        assert_eq!(cggtts.lab, "Unknown"); // default
+        assert_eq!(cggtts.nb_channels, 0); // default
+        assert_eq!(cggtts.frame, "?"); // default ..
+        assert_eq!(cggtts.reference, "Unknown"); // default..
+        assert_eq!(cggtts.coordinates, (0.0,0.0,0.0)); // empty..
+        assert_eq!(cggtts.rev_date,
+            chrono::NaiveDate::parse_from_str(LATEST_REV_DATE, "%Y-%m-%d")
+            .unwrap());
+        assert_eq!(cggtts.date, chrono::Utc::today().naive_utc());
+        assert_eq!(cggtts.tot_dly.is_none(), true);
+        assert_eq!(cggtts.int_dly.is_none(), true);
+        assert_eq!(cggtts.sys_dly.is_none(), true);
+        assert_eq!(cggtts.cab_dly, 0.0);
+        assert_eq!(cggtts.ref_dly, 0.0);
+        println!("{:#?}", cggtts.total_delay());
+        assert_eq!(cggtts.total_delay().values.len(), 1); // single freq Cggts by default
+        assert_eq!(cggtts.total_delay().values[0], 0.0); // not specified
         println!("{:#?}", cggtts)
     }
 
@@ -954,19 +966,129 @@ mod test {
         cggtts.set_antenna_coordinates((1.0,2.0,3.0));
         cggtts.set_time_reference("UTC(k)");
 
-        // set a total delay
-        //let delay: Vec<f64> = Vec::from([100E-9]);
-        //let codes: Vec<track::ConstellationRinexCode> = 
-        //    Vec::from([track::ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C]);
-        let total_delay = CalibratedDelay {
+        // define a total delay
+        let delay = CalibratedDelay {
             constellation: track::Constellation::Glonass,
             values: vec![100E-9_f64],
             codes: vec![String::from("C1")], 
             report: String::from("NA"),
         };
-        cggtts.set_total_delay(total_delay);
+        cggtts.set_total_delay(delay);
 
         let fp = std::path::Path::new("data/output/GZXXXXDD.DD1");
+        assert_eq!(cggtts.to_file(fp).is_err(), false)
+    }
+    
+    #[test]
+    /// Tests customized `Cggtts` to file
+    fn dual_frequency_cggtts_to_file() {
+        let mut cggtts = Cggtts::default();
+
+        // identify receiver hw
+        let rcvr = Rcvr {
+            manufacturer: String::from("SomeManufacturer"),
+            recv_type: String::from("SomeKind"), 
+            serial_number: String::from("XXXXXX"), 
+            year: 2021, 
+            software_number: String::from("v00"),
+        };
+        cggtts.set_rcvr_infos(rcvr);
+
+        // add some more infos
+        cggtts.set_lab_agency("MyLab");
+        cggtts.set_nb_channels(10);
+        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_time_reference("UTC(k)");
+
+        // set a total delay
+        let total_delay = CalibratedDelay {
+            constellation: track::Constellation::Glonass,
+            values: vec![100E-9, 150E-9],
+            codes: vec![String::from("C1"),String::from("C2")], 
+            report: String::from("NA"),
+        };
+        cggtts.set_total_delay(total_delay);
+        println!("{:#?}",cggtts);
+
+        let fp = std::path::Path::new("data/output/GZXXXXDD.DD2");
+        assert_eq!(cggtts.to_file(fp).is_err(), false)
+    }
+    
+    #[test]
+    /// Tests customized `Cggtts` to file (B)
+    fn cggtts_with_system_delay_to_file() {
+        let mut cggtts = Cggtts::default();
+
+        // identify receiver hw
+        let rcvr = Rcvr {
+            manufacturer: String::from("SomeManufacturer"),
+            recv_type: String::from("SomeKind"), 
+            serial_number: String::from("XXXXXX"), 
+            year: 2021, 
+            software_number: String::from("v00"),
+        };
+        cggtts.set_rcvr_infos(rcvr);
+
+        // add some more infos
+        cggtts.set_lab_agency("MyLab");
+        cggtts.set_nb_channels(10);
+        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_time_reference("UTC(k)");
+
+        // define a total delay
+        let delay = CalibratedDelay {
+            constellation: track::Constellation::Glonass,
+            values: vec![100E-9_f64],
+            codes: vec![String::from("C2")], 
+            report: String::from("NA"),
+        };
+        cggtts.set_system_delay(delay);
+        cggtts.set_cable_delay(50E-9);
+        cggtts.set_ref_delay(100E-9);
+        let total_delay = cggtts.total_delay();
+        assert_eq!(total_delay.values.len(), 1); // single freq
+        assert_eq!(total_delay.values[0], 100E-9+50E-9); // single freq
+
+        let fp = std::path::Path::new("data/output/GZXXXXDD.DD3");
+        assert_eq!(cggtts.to_file(fp).is_err(), false)
+    }
+    
+    #[test]
+    /// Tests customized `Cggtts` to file (C)
+    fn cggtts_with_internal_delay_to_file() {
+        let mut cggtts = Cggtts::default();
+
+        // identify receiver hw
+        let rcvr = Rcvr {
+            manufacturer: String::from("SomeManufacturer"),
+            recv_type: String::from("SomeKind"), 
+            serial_number: String::from("XXXXXX"), 
+            year: 2021, 
+            software_number: String::from("v00"),
+        };
+        cggtts.set_rcvr_infos(rcvr);
+
+        // add some more infos
+        cggtts.set_lab_agency("MyLab");
+        cggtts.set_nb_channels(10);
+        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_time_reference("UTC(k)");
+
+        // define a total delay
+        let delay = CalibratedDelay {
+            constellation: track::Constellation::GPS,
+            values: vec![25E-9_f64],
+            codes: vec![String::from("C1")], 
+            report: String::from("NA"),
+        };
+        cggtts.set_internal_delay(delay);
+        cggtts.set_cable_delay(100E-9);
+        cggtts.set_ref_delay(50E-9);
+        let total_delay = cggtts.total_delay();
+        assert_eq!(total_delay.values.len(), 1); // single freq
+        assert_eq!(cggtts.total_delay().values[0], 25E-9+25E-9+100E-9); 
+
+        let fp = std::path::Path::new("data/output/GZXXXXDD.DD4");
         assert_eq!(cggtts.to_file(fp).is_err(), false)
     }
 }
