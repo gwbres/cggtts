@@ -430,9 +430,9 @@ impl std::str::FromStr for CggttsTrack {
             calc_crc(
                 &line.split_at(end_pos).0)?);
         // verification
-        //if cksum != ck {
-        //    return Err(Error::ChecksumError(cksum, ck))
-        //}
+        if cksum != ck {
+            return Err(Error::ChecksumError(cksum, ck))
+        }
 
         Ok(CggttsTrack {
             constellation,
