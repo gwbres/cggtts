@@ -9,7 +9,7 @@ Y =  +306998.67 m
 Z = +4919499.36 m
 FRAME = ITRF, PZ-90->ITRF Dx = 0.0 m, Dy = 0.0 m, Dz = 0.0 m, ds = 0.0, Rx = 0.0, Ry = 0.0, Rz = 0.000000
 COMMENTS = NO COMMENTS
-INT DLY = 53.9 ns (GLO C1), 49.8 ns (GLO C2) CAL_ID = 1nnn-yyyy
+INT DLY = 53.9 ns (GLO C1), 49.8 ns (GLO C2)     CAL_ID = 1nnn-yyyy
 CAB DLY = 237.0 ns
 REF DLY = 149.6 ns
 REF = UTC(ABC)
