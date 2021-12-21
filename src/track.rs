@@ -7,6 +7,13 @@ use chrono::Timelike;
 /// to be BIPM compliant, which is not mandatory 
 pub const BIPM_SPECIFIED_TRACKING_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
 
+/// labels in case we provide Ionospheric parameters estimates
+pub const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
+"SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
+
+pub const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
+"SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
+
 /// Describes all known GNSS constellations
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Constellation {
@@ -117,7 +124,7 @@ impl std::str::FromStr for ConstellationRinexCode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 /// `CommonViewClassType` describes
 /// whether this common view is based on a unique 
 /// Satellite Vehicule, or a combination of SVs
@@ -330,18 +337,26 @@ impl Default for CggttsTrack {
 }
 
 impl std::fmt::Display for CggttsTrack {
-    /// custom diplay formatter
-    fn fmt (&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f, "Constellation: {:?} | SAT #{}\nCommon View Class: '{:?}'\nStart Time: {} | Duration: {:?}\nElevation: {} | Azimuth: {}\nREFSV: {} | SRSV: {} | REFSYS: {} SRSYS: {}\nDSG: {} | IOE: {}\nMDTR: {} | SMDT: {} | MDIO: {} | SMDI: {} | MSIO: {:#?} | SMSI: {:#?} | ISG: {:#?}\nFR: {} | HC: {}",
-            self.constellation, self.sat_id, self.class,
-            self.trktime, self.duration,
-            self.elevation, self.azimuth, self.refsv, self.srsv,
-            self.refsys, self.srsys,
-            self.dsg, self.ioe,
-            self.mdtr, self.smdt, self.mdio, self.smdi, self.msio, self.smsi, self.isg,
-            self.fr, self.hc, //self.frc
-        )
+    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut string = String::new();
+        match self.constellation {
+            Constellation::GPS => string.push_str("G"),
+            Constellation::Glonass => string.push_str("R"),
+            Constellation::Beidou => string.push_str("B"),
+            Constellation::QZSS => string.push_str("Q"),
+            Constellation::Galileo => string.push_str("E"),
+            _ => string.push_str("M"),
+        }
+        string.push_str(&format!("{: >2}", self.sat_id));
+        string.push_str(&format!(" {:02X}", self.class as u8));
+        // self.trktime.format("%H%M%S");
+        // let fmt = StrftimeItems::new("%dH%M%S")
+        //string.push_str(self.trktime.strptime());
+        string.push_str(&format!(" {:0>3}", self.duration.as_secs()));
+        string.push_str(&format!(" {:0>3}", (self.elevation * 10.0) as u16));
+        string.push_str(&format!(" {:0>3}", (self.azimuth * 10.0) as u16));
+        //string.push_str(&format!("     {}", (self.refsv * 10.0) as u16));
+        fmt.write_str(&string)
     }
 }
 

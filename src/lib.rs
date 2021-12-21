@@ -287,6 +287,8 @@ impl Cggtts {
 
     /// Assigns `Rcvr` hardware description
     pub fn set_rcvr_infos (&mut self, rcvr: Rcvr) { self.rcvr = Some(rcvr) }
+    /// Assigns `IMS` evluation device description
+    pub fn set_ims_infos (&mut self, ims: Rcvr) { self.ims = Some(ims) }
 
     /// Assigns antenna phase center coordinates [m],
     /// coordinates should use `IRTF` referencing
@@ -377,8 +379,10 @@ impl Cggtts {
     /// Appends one track to self (if possible)
     pub fn push_track (&mut self, track: track::CggttsTrack) { self.tracks.push(track) }
 
-    /// returns true if self is `Dual Frequency Cggtts`
-    pub fn is_dual_frequency (&self) -> bool { self.total_delay().values.len() == 1 }
+    /// returns true if self is `Single Frequency Cggtts`
+    pub fn is_single_frequency (&self) -> bool { self.total_delay().values.len() == 1 }
+    /// returns true if self is `Single Frequency Cggtts`
+    pub fn is_dual_frequency (&self) -> bool { !self.is_single_frequency() }
 
     /// Returns true if self contains ionospheric information
     pub fn has_ionospheric_parameters (&self) -> bool {
@@ -783,6 +787,23 @@ COMMENTS = {}",
             writeln!(&mut fd, "REF DLY = {} ns", format!("{:.1}", self.ref_dly *1E9))?;
         }
         writeln!(&mut fd, "REF = {}", self.reference.to_string())?;
+        // <!> TODO <!>
+        // CKSUM = {:2X}
+
+        writeln!(&mut fd)?; // blank separator
+        if self.has_ionospheric_parameters() {
+            writeln!(&mut fd, "{}", track::TRACK_LABELS_WITH_IONOSPHERIC_DATA)?;
+            writeln!(&mut fd, "{}",
+"              hhmmss s .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns")?
+        } else {
+            writeln!(&mut fd, "{}", track::TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA)?;
+            writeln!(&mut fd, "{}",
+"             hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s")?
+        }
+
+        for i in 0..self.tracks.len() {
+            writeln!(&mut fd, "{}", self.tracks[i])?
+        }
         Ok(())
     }
 
@@ -1089,6 +1110,64 @@ mod test {
         assert_eq!(cggtts.total_delay().values[0], 25E-9+25E-9+100E-9); 
 
         let fp = std::path::Path::new("data/output/GZXXXXDD.DD4");
+        assert_eq!(cggtts.to_file(fp).is_err(), false)
+    }
+    
+    #[test]
+    /// Another test..
+    fn cggtts_with_ionospheric_parameters () {
+        let mut cggtts = Cggtts::default();
+
+        // identify receiver hw
+        let rcvr = Rcvr {
+            manufacturer: String::from("SomeManuf1"),
+            recv_type: String::from("SomeKind1"), 
+            serial_number: String::from("XXXXXX"), 
+            year: 2021, 
+            software_number: String::from("v01"),
+        };
+        cggtts.set_rcvr_infos(rcvr);
+
+        // IMS infos
+        let ims = Rcvr {
+            manufacturer: String::from("SomeManuf2"),
+            recv_type: String::from("SomeKind2"), 
+            serial_number: String::from("YYYY"), 
+            year: 2022,
+            software_number: String::from("v02"),
+        };
+        cggtts.set_ims_infos(ims);
+
+        // add some more infos
+        cggtts.set_lab_agency("MyLab");
+        cggtts.set_nb_channels(10);
+        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
+        cggtts.set_time_reference("UTC(USNO)");
+
+        // define a delay
+        let delay = CalibratedDelay {
+            constellation: track::Constellation::GPS,
+            values: vec![25E-9_f64],
+            codes: vec![String::from("C1")], 
+            report: String::from("NA"),
+        };
+        cggtts.set_internal_delay(delay);
+        cggtts.set_cable_delay(100E-9);
+        cggtts.set_ref_delay(50E-9);
+
+        // add some measurements
+        let mut track = track::CggttsTrack::default();
+        track.set_satellite_id(0x01);
+        cggtts.tracks.push(track);
+        let mut track = track::CggttsTrack::default();
+        track.set_satellite_id(0x11);
+        cggtts.tracks.push(track);
+
+        let total_delay = cggtts.total_delay();
+        assert_eq!(total_delay.values.len(), 1); // single freq
+        assert_eq!(cggtts.total_delay().values[0], 25E-9+25E-9+100E-9); 
+
+        let fp = std::path::Path::new("data/output/GZXXXXDD.DD5");
         assert_eq!(cggtts.to_file(fp).is_err(), false)
     }
 }
