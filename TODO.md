@@ -3,20 +3,20 @@ CGGTTS Rust package todo list
 
 ### CRC 
 - [ ] use and verify Cggtts::header CRC field 
-- [ ] use and verify Cggtts::track CRC field 
+- [x] use and verify Cggtts::track CRC field 
 
 ### File writer
 - [ ] provide a file writer interface
- - [ ] test system delay interface
+ - [x] test system delay interface
 
 ### Dual frequency
-- [ ] support all features for dual frequency receivers
- - [ ] file must comply with advanced delay knowledge 
+- [x] support all features for dual frequency receivers
+ - [x] file must comply with advanced delay knowledge 
  - [ ] frame descriptor must be parsed & used 
- - [ ] watch for INT DLY specs in this situation
+ - [x] watch for INT DLY specs in this situation
 
 ### Cggtts::
-- [ ] simplify IMS/RCVR with a single scan_fmt! mismatch detection
+- [x] simplify IMS/RCVR with a single scan_fmt! mismatch detection
 - [ ] use unit labels for generic Cggtts::track scaling
 
 ### Cggtts::track
@@ -26,4 +26,4 @@ CGGTTS Rust package todo list
 
 ### Documentation
 - [x] provide some use cases 
-- [ ] doc on system delays 
+- [x] doc on system delays 
