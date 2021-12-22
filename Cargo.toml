@@ -6,6 +6,7 @@ authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to handle and create CGGTTS data"
 homepage = "https://github.com/gwbres/cggtts"
 keywords = ["positionning","bipm","gnss","timing","satellites"]
+categories = ["science","parsing"]
 edition = "2018"
 readme = "README.md"
 
