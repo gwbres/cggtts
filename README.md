@@ -1,6 +1,7 @@
 # CGGTTS 
 Rust package to manipulate CGGTTS (BIPM) data files
 
+[![crates.io](https://img.shields.io/crates/v/cggtts.svg)](https://crates.io/crates/cggtts)
 [![Rust](https://github.com/gwbres/cggtts/actions/workflows/rust.yml/badge.svg)](https://github.com/gwbres/cggtts/actions/workflows/rust.yml)
 [![codecov](https://codecov.io/gh/gwbres/cggtts/branch/main/graph/badge.svg)](https://codecov.io/gh/gwbres/cggtts)
 
