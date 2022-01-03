@@ -37,6 +37,30 @@ pub struct Rcvr {
     software_number: String,
 }
 
+#[derive(Error, Debug)]
+pub enum CrcError {
+    #[error("failed to compute CRC over non utf8 data")] 
+    NonAsciiData(String),
+}
+
+/// computes crc for given str content
+pub fn calc_crc (content: &str) -> Result<u8, CrcError> {
+    match content.is_ascii() {
+        true => {
+            let mut ck: u8 = 0;
+            let mut ptr = content.encode_utf16();
+            for _ in 0..ptr.clone().count() {
+                ck = ck.wrapping_add(
+                    ptr.next()
+                    .unwrap()
+                    as u8)
+            }
+            Ok(ck)
+        },
+        false => return Err(CrcError::NonAsciiData(String::from(content))),
+    }
+}
+
 impl std::fmt::Display for Rcvr { 
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.write_str(&self.manufacturer)?;
@@ -211,6 +235,8 @@ pub enum Error {
     ChecksumFormatError,
     #[error("failed to parse checksum value")]
     ChecksumParsingError,
+    #[error("crc calc() failed over non utf8 data: \"{0}\"")]
+    NonAsciiData(#[from] CrcError),
     #[error("checksum error, got \"{0}\" but \"{1}\" locally computed")]
     ChecksumError(u8, u8),
     #[error("CggttsTrack error")]
@@ -445,7 +471,7 @@ impl Cggtts {
             _ => return Err(Error::VersionFormatError),
         };
         // crc 
-        let mut cksum: u8 = track::calc_crc(&line)?;
+        let mut cksum: u8 = calc_crc(&line)?;
         // rev date 
         let line = lines.next()
             .unwrap();
@@ -459,7 +485,7 @@ impl Cggtts {
             _ => return Err(Error::RevisionDateFormatError),
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // rcvr
         let line = lines.next()
             .unwrap();
@@ -483,7 +509,7 @@ impl Cggtts {
             },
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // channel
         let line = lines.next().unwrap();
         let nb_channels: u16 = match scan_fmt!(&line, "CH = {d}", u16) {
@@ -491,7 +517,7 @@ impl Cggtts {
             _ => return Err(Error::ChannelFormatError),
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // ims 
         let line = lines.next()
             .unwrap();
@@ -516,7 +542,7 @@ impl Cggtts {
             }
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // lab
         let line = lines.next()
             .unwrap();
@@ -525,7 +551,7 @@ impl Cggtts {
             _ => return Err(Error::LabParsingError),
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // X
         let line = lines.next().unwrap();
         let x: f32 = match scan_fmt!(&line, "X = {f}", f32) {
@@ -533,7 +559,7 @@ impl Cggtts {
             _ => return Err(Error::CoordinatesParsingError(String::from("X")))
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // Y
         let line = lines.next()
             .unwrap();
@@ -542,7 +568,7 @@ impl Cggtts {
             _ => return Err(Error::CoordinatesParsingError(String::from("Y")))
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // Z
         let line = lines.next()
             .unwrap();
@@ -551,7 +577,7 @@ impl Cggtts {
             _ => return Err(Error::CoordinatesParsingError(String::from("Z")))
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // frame 
         let line = lines.next()
             .unwrap();
@@ -560,7 +586,7 @@ impl Cggtts {
             _ => return Err(Error::FrameFormatError),
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // comments 
         let line = lines.next()
             .unwrap();
@@ -571,7 +597,7 @@ impl Cggtts {
             }
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // next line
         let mut line = lines.next()
             .unwrap();
@@ -651,7 +677,7 @@ impl Cggtts {
 
             // crc
             cksum = cksum.wrapping_add(
-                track::calc_crc(&line)?);
+                calc_crc(&line)?);
             // grab next
             line = lines.next()
                 .unwrap();
@@ -661,7 +687,7 @@ impl Cggtts {
             _ => return Err(Error::ReferenceFormatError),
         };
         // crc
-        cksum = cksum.wrapping_add(track::calc_crc(&line)?);
+        cksum = cksum.wrapping_add(calc_crc(&line)?);
         // checksum
         let line = lines.next().unwrap();
         let ck : u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
@@ -677,7 +703,7 @@ impl Cggtts {
         let end_pos = line.find("= ")
             .unwrap(); // already matching
         cksum = cksum.wrapping_add(
-            track::calc_crc(
+            calc_crc(
                 &line.split_at(end_pos+2).0)?);
         // checksum verification
         //if cksum != ck {
@@ -724,50 +750,65 @@ impl Cggtts {
     }
     
     /// Writes self into a `Cggtts` file
-    pub fn to_file (&self, fp: &std::path::Path) -> std::io::Result<()> {
-        let mut fd = std::fs::File::create(&fp)?;
-        writeln!(&mut fd,
-"CGGTTS GENERIC DATA FORMAT VERSION = {}
-REV DATE = {}
-RCVR = {}
-CH = {}
-IMS = {}
-LAB = {}
-X = {}
-Y = {}
-Z = {}
-FRAME = {}
-COMMENTS = {}",
-            VERSION,
-            LATEST_REV_DATE,
-            self.rcvr.clone()
-                .map(|r| r.to_string())
-                .unwrap_or(String::from("RRRRRRRR")),
-            self.nb_channels,
-            self.ims.clone()
-                .map(|r| r.to_string())
-                .unwrap_or(String::from("99999")),
-            self.lab,
-            format!("{:.3}", self.coordinates.0),
-            format!("{:.3}", self.coordinates.1),
-            format!("{:.3}", self.coordinates.2),
-            &self.frame,
-            self.comments.clone()
-                .map(|r| r.to_string())
-                .unwrap_or(String::from("NO COMMENTS")),
-        )?;
+    pub fn to_file (&self, fp: &str) -> Result<(), Error> {
+        let mut content = String::new();
+
+        let line = format!("CGGTTS GENERIC DATA FORMAT VERSION = {}\n", VERSION);
+        content.push_str(&line);
+        let line = format!("REV DATE = {}\n", LATEST_REV_DATE);
+        content.push_str(&line);
+
+        if let Some(rcvr) = &self.rcvr {
+            let line = format!("RCVR = {}\n", &rcvr.to_string());
+            content.push_str(&line);
+        } else {
+            content.push_str("RCVR = RRRRRRRR\n")
+        }
+        
+        let line = format!("CH = {}\n", self.nb_channels); 
+        content.push_str(&line);
+
+        if let Some(ims) = &self.ims {
+            let line = format!("IMS = {}\n", &ims.to_string());
+            content.push_str(&line)
+        } else {
+            content.push_str("IMS = 99999\n")
+        }
+        
+        let line = format!("LAB = {}\n", self.nb_channels); 
+        content.push_str(&line);
+        let line = format!("X = {}\n", self.coordinates.0); 
+        content.push_str(&line);
+        let line = format!("Y = {}\n", self.coordinates.1); 
+        content.push_str(&line);
+        let line = format!("Z = {}\n", self.coordinates.2); 
+        content.push_str(&line);
+        let line = format!("FRAME = {}\n", self.frame); 
+        content.push_str(&line);
+
+        if let Some(comments) = &self.comments {
+            let line = format!("COMMENTS = {}\n", comments.to_string());
+            content.push_str(&line);
+        
+        } else {
+            content.push_str("COMMENTS = NO COMMENTS\n")
+        }
+
         // system delays
         if let Some(delay) = &self.tot_dly {
             // total delay defined
-            writeln!(&mut fd, "TOT DLY = {}", delay.to_string())?;
+            content.push_str(&format!("TOT DLY = {}\n", delay.to_string()))
+        
         } else {
             // total delay not defined
             // => SYS or INT DELAY ?
             // INT DELAY prioritary
             if let Some(delay) = &self.int_dly {
-                writeln!(&mut fd, "INT DLY = {}", delay.to_string())?;
+                content.push_str(&format!("INT DLY = {}\n", delay))
+
             } else if let Some(delay) = &self.sys_dly {
-                writeln!(&mut fd, "SYS DLY = {}", delay.to_string())?;
+                content.push_str(&format!("SYS DLY = {}\n", delay))
+            
             } else {
                 // neither SYS / INT delay
                 // => specify null SYS DLY
@@ -777,31 +818,33 @@ COMMENTS = {}",
                     codes: vec![String::from("C1")],
                     report: String::from("NA"),
                 };
-                writeln!(&mut fd, "SYS DLY = {}", null_delay.to_string())? 
+                content.push_str(&format!("SYS DLY = {}\n", null_delay))
             }
             // other delays always there
-            writeln!(&mut fd, "CAB DLY = {} ns", format!("{:.1}", self.cab_dly *1E9))?;
-            writeln!(&mut fd, "REF DLY = {} ns", format!("{:.1}", self.ref_dly *1E9))?;
+            content.push_str(&format!("CAB DLY = {:.1}\n", self.cab_dly * 1E9));
+            content.push_str(&format!("REF DLY = {:.1}\n", self.ref_dly * 1E9))
         }
-        writeln!(&mut fd, "REF = {}", self.reference.to_string())?;
-        // <!> TODO <!>
-        // CKSUM = {:2X}
+        content.push_str(&format!("REF = {}\n", self.reference.to_string()));
+        content.push_str(&format!("CKSUM = {:2X}\n", calc_crc(&content)?));
+        content.push_str("\n"); // blank
 
-        writeln!(&mut fd)?; // blank separator
         if self.has_ionospheric_parameters() {
-            writeln!(&mut fd, "{}", track::TRACK_LABELS_WITH_IONOSPHERIC_DATA)?;
-            writeln!(&mut fd, "{}",
-"              hhmmss s .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns")?
+            content.push_str(track::TRACK_LABELS_WITH_IONOSPHERIC_DATA);
+            content.push_str("\n");
+            content.push_str(
+"              hhmmss s .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns\n")
         } else {
-            writeln!(&mut fd, "{}", track::TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA)?;
-            writeln!(&mut fd, "{}",
-"             hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s")?
+            content.push_str(track::TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA);
+            content.push_str("\n");
+            content.push_str(
+"             hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s\n")
         }
 
         for i in 0..self.tracks.len() {
-            writeln!(&mut fd, "{}", self.tracks[i])?
+            content.push_str(&self.tracks[i].to_string());
+            content.push_str("\n")
         }
-        Ok(())
+        Ok(std::fs::write(fp, content)?) 
     }
 
 }
@@ -904,7 +947,6 @@ mod test {
     
     #[test]
     /// Tests standard file parsing
-/*
     fn cggtts_test_from_standard_data() {
         // open test resources
         let test_resources = std::path::PathBuf::from(
@@ -928,7 +970,6 @@ mod test {
             }
         }
     }
-*/
     #[test]
     /// Tests advanced file parsing
     fn cggtts_test_from_ionospheric_data() {
@@ -959,8 +1000,7 @@ mod test {
     /// Tests basci `Cggtts` to file
     fn default_cggtts_to_file() {
         let cggtts = Cggtts::default();
-        let fp = std::path::Path::new("data/output/GZXXXXDD.DD0");
-        assert_eq!(cggtts.to_file(fp).is_err(), false)
+        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD0").is_err(), false)
     }
 
     #[test]
@@ -992,9 +1032,7 @@ mod test {
             report: String::from("NA"),
         };
         cggtts.set_total_delay(delay);
-
-        let fp = std::path::Path::new("data/output/GZXXXXDD.DD1");
-        assert_eq!(cggtts.to_file(fp).is_err(), false)
+        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD1").is_err(), false)
     }
     
     #[test]
@@ -1027,9 +1065,7 @@ mod test {
         };
         cggtts.set_total_delay(total_delay);
         println!("{:#?}",cggtts);
-
-        let fp = std::path::Path::new("data/output/GZXXXXDD.DD2");
-        assert_eq!(cggtts.to_file(fp).is_err(), false)
+        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD2").is_err(), false)
     }
     
     #[test]
@@ -1066,9 +1102,7 @@ mod test {
         let total_delay = cggtts.total_delay();
         assert_eq!(total_delay.values.len(), 1); // single freq
         assert_eq!(total_delay.values[0], 100E-9+50E-9); // single freq
-
-        let fp = std::path::Path::new("data/output/GZXXXXDD.DD3");
-        assert_eq!(cggtts.to_file(fp).is_err(), false)
+        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD3").is_err(), false)
     }
     
     #[test]
@@ -1105,9 +1139,7 @@ mod test {
         let total_delay = cggtts.total_delay();
         assert_eq!(total_delay.values.len(), 1); // single freq
         assert_eq!(cggtts.total_delay().values[0], 25E-9+25E-9+100E-9); 
-
-        let fp = std::path::Path::new("data/output/GZXXXXDD.DD4");
-        assert_eq!(cggtts.to_file(fp).is_err(), false)
+        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD4").is_err(), false)
     }
     
     #[test]
@@ -1163,8 +1195,20 @@ mod test {
         let total_delay = cggtts.total_delay();
         assert_eq!(total_delay.values.len(), 1); // single freq
         assert_eq!(cggtts.total_delay().values[0], 25E-9+25E-9+100E-9); 
-
-        let fp = std::path::Path::new("data/output/GZXXXXDD.DD5");
-        assert_eq!(cggtts.to_file(fp).is_err(), false)
+        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD5").is_err(), false)
+    }
+    #[test]
+    /// Tests CRC calculation method
+    fn test_crc_calc() {
+        let content = vec![
+            "R24 FF 57000 000600  780 347 394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P"
+        ];
+        let expected = vec![0x0F];
+        for i in 0..content.len() {
+            let ck = calc_crc(content[i])
+                .unwrap();
+            let expect = expected[i];
+            assert_eq!(ck,expect,"Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",content[i],expect,ck)
+        }
     }
 }

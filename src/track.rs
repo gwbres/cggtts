@@ -2,6 +2,8 @@ use regex::Regex;
 use thiserror::Error;
 use chrono::Timelike;
 
+use crate::{CrcError, calc_crc};
+
 /// `BIPM` tracking duration specifications.
 /// `Cggtts` tracks must respect that duration
 /// to be BIPM compliant, which is not mandatory 
@@ -201,29 +203,10 @@ pub enum Error {
     ConstellationRinexCodeError(#[from] ConstellationRinexCodeError),
     #[error("failed to parse common view class")]
     CommonViewClassError(#[from] std::str::Utf8Error),
-    #[error("crc calc() working on non ascii data \"{0}\"")]
-    NonAsciiData(String),
+    #[error("crc calc() failed over non utf8 data: \"{0}\"")]
+    NonAsciiData(#[from] CrcError),
     #[error("checksum error - expecting \"{0}\" - got \"{1}\"")]
     ChecksumError(u8, u8),
-}
-
-
-/// computes crc for given str content
-pub fn calc_crc (content: &str) -> Result<u8, Error> {
-    match content.is_ascii() {
-        true => {
-            let mut ck: u8 = 0;
-            let mut ptr = content.encode_utf16();
-            for _ in 0..ptr.clone().count() {
-                ck = ck.wrapping_add(
-                    ptr.next()
-                    .unwrap()
-                    as u8)
-            }
-            Ok(ck)
-        },
-        false => return Err(Error::NonAsciiData(String::from(content))),
-    }
 }
 
 impl CggttsTrack {
@@ -534,20 +517,5 @@ mod test {
                 epsilon = 1E-12
             )
         )
-    }
-
-    #[test]
-    /// Tests CRC calculation method
-    fn test_crc_calc() {
-        let content = vec![
-            "R24 FF 57000 000600  780 347 394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P"
-        ];
-        let expected = vec![0x0F];
-        for i in 0..content.len() {
-            let ck = calc_crc(content[i])
-                .unwrap();
-            let expect = expected[i];
-            assert_eq!(ck,expect,"Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",content[i],expect,ck)
-        }
     }
 }
