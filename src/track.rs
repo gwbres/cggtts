@@ -91,6 +91,25 @@ pub enum ConstellationRinexCode {
     NonSupportedCode,
 }
 
+impl std::fmt::Display for ConstellationRinexCode {
+    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let s = match self {
+            ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C => String::from("L1C"),
+            ConstellationRinexCode::GPS_GLO_L1P => String::from("L1P"),
+            ConstellationRinexCode::GAL_E1 => String::from("E1C"),
+            ConstellationRinexCode::GAL_E1E5a => String::from("E5C"),
+            ConstellationRinexCode::QZSS_L1C => String::from("Q1C"),
+            ConstellationRinexCode::BEIDOU_B1i => String::from("B1C"),
+            ConstellationRinexCode::BEIDOU_BliB2i => String::from("B1C"),
+            ConstellationRinexCode::GPS_C1_P1C2_P2 => String::from("P1C"),
+            ConstellationRinexCode::GLO_C1_P1C2_P2 => String::from("Q5C"),
+            ConstellationRinexCode::GZSS_C1C5 => String::from("Q5C"),
+            ConstellationRinexCode::NonSupportedCode => String::from("???"),
+        };
+        fmt.write_str(&s)
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum ConstellationRinexCodeError {
     #[error("unknown constellation code '{0}'")]
@@ -332,13 +351,36 @@ impl std::fmt::Display for CggttsTrack {
         }
         string.push_str(&format!("{: >2}", self.sat_id));
         string.push_str(&format!(" {:02X}", self.class as u8));
+        string.push_str(" 57000");
+
         // self.trktime.format("%H%M%S");
         // let fmt = StrftimeItems::new("%dH%M%S")
         //string.push_str(self.trktime.strptime());
         string.push_str(&format!(" {:0>3}", self.duration.as_secs()));
         string.push_str(&format!(" {:0>3}", (self.elevation * 10.0) as u16));
         string.push_str(&format!(" {:0>3}", (self.azimuth * 10.0) as u16));
-        //string.push_str(&format!("     {}", (self.refsv * 10.0) as u16));
+        string.push_str(&format!(" {}", (self.refsv  * 1.0E10) as i32));
+        string.push_str(&format!(" {}", (self.srsv   * 1.0E13) as i32));
+        string.push_str(&format!(" {}", (self.refsys * 1.0E10) as i32));
+        string.push_str(&format!(" {}", (self.srsys  * 1.0E13) as i32));
+        string.push_str(&format!(" {}", (self.dsg    * 1.0E10) as i32));
+        string.push_str(&format!(" {}", self.ioe));
+        string.push_str(&format!(" {}", (self.mdtr   * 1.0E10) as i32));
+        string.push_str(&format!(" {}", (self.smdt   * 1.0E13) as i32));
+        string.push_str(&format!(" {}", (self.mdio   * 1.0E10) as i32));
+        string.push_str(&format!(" {}", (self.smdi   * 1.0E13) as i32));
+        
+        if let Some((msio, smsi, isg)) = self.get_ionospheric_parameters() {
+            string.push_str(&format!(" {}", (msio * 1.0E10) as i32));
+            string.push_str(&format!(" {}", (smsi * 1.0E13) as i32));
+            string.push_str(&format!(" {}", (isg *  1.0E10) as i32))       
+        }
+        string.push_str(&format!(" {:2X}", self.fr));
+        string.push_str(&format!(" {:2X}", self.hc));
+        string.push_str(&format!(" {}", self.frc));
+        if let Ok(crc) = calc_crc(&string) {
+            string.push_str(&format!(" {:2X}", crc))
+        } 
         fmt.write_str(&string)
     }
 }

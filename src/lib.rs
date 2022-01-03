@@ -11,12 +11,12 @@
 //!
 //! Homepage: <https://github.com/gwbres/cggtts>
 
-pub mod track;
-use std::io::{Write};
 use regex::Regex;
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
+
+pub mod track;
 
 /// supported `Cggtts` version,
 /// non matching input files will be rejected
