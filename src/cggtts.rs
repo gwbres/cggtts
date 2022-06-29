@@ -5,9 +5,9 @@ use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
 
-use crate::LATEST_REVISION;
-use crate::LATEST_RELEASE_DATE;
-use crate::{Track, CalibratedDelay};
+//use crate::LATEST_REVISION;
+//use crate::LATEST_RELEASE_DATE;
+use crate::{Track, delay::SystemDelay, CalibratedDelay};
 
 /*
             version: VERSION.to_string(),
@@ -34,7 +34,7 @@ pub enum CrcError {
 }
 
 /// computes crc for given str content
-pub fn calc_crc (content: &str) -> Result<u8, CrcError> {
+fn calc_crc (content: &str) -> Result<u8, CrcError> {
     match content.is_ascii() {
         true => {
             let mut ck: u8 = 0;
@@ -72,7 +72,7 @@ impl std::fmt::Display for Rcvr {
 #[derive(Debug, Clone)]
 pub struct Cggtts {
     pub date: chrono::NaiveDate, 
-    /// lab where measurements were performed (if unknown)
+    /// laboratory / agency where measurements were performed (if unknown)
     pub lab: Option<String>, 
     /// possible GNSS receiver infos
     pub rcvr: Option<Rcvr>, 
@@ -80,21 +80,24 @@ pub struct Cggtts {
     pub nb_channels: u16, 
     /// IMS Ionospheric Measurement System (if any)
     pub ims: Option<Rcvr>, 
+    /// Description of Reference time system (if any)
+    pub time_ref_system: Option<String>, 
+    /// Spacial reference used in Coordinates, (if any),
+    /// ITRF is prefered
+    pub coords_ref_system: Option<String>,
     /// Antenna phase center coordinates [m]
-    /// in `ITFR` spatial reference
+    /// in `ITFR`, `ECEF` or other spatial systems
     pub coordinates: rust_3d::Point3D, 
-    /// frame field
-    pub frame: String,
     /// Comments (if any..)
     pub comments: Option<String>, 
-    /// Summation of internal delays,
-    /// refer to [Delay] object definition,
-    /// to understand their meaning
-    pub delays: Vec<CalibratedDelay>;
-    /// reference time
-    pub reference: String, 
+    /// Describes the measurement systems delay.
+    /// Refer to [Delay] enum,
+    /// to understand their meaning.
+    /// Refer to [SystemDelay] and [CalibratedDelay] to understand
+    /// how to specify the measurement systems delay.
+    pub delay: SystemDelay, 
     /// Tracks: actual measurements / realizations
-    pub tracks: Vec<Track>
+    pub tracks: Vec<Track>,
 }
 
 #[derive(Error, Debug)]
@@ -145,38 +148,30 @@ pub enum Error {
     NonAsciiData(#[from] CrcError),
     #[error("checksum error, got \"{0}\" but \"{1}\" locally computed")]
     ChecksumError(u8, u8),
-    #[error("CggttsTrack error")]
-    CggttsTrackError(#[from] track::Error),
+    //#[error("CggttsTrack error")]
+    //CggttsTrackError(#[from] track::Error),
 }
 
 impl Default for Cggtts {
     /// Buils default `Cggtts` structure,
     /// with production date set to now().
-    ///
-    /// If nothing more is done regarding `System Delays`,
-    /// the system is specified for an uncalibrated and unknown
-    /// total delay.
-    ///
-    /// For more precise use, the user should specify
-    /// at least a `total delay` or a esimation
-    /// of internal / cable delays is even better
     fn default() -> Cggtts {
         Cggtts {
             date: chrono::Utc::today().naive_utc(),
-            lab: String::from("Unknown"),
+            lab: None,
             nb_channels: 0,
-            coordinates: (0.0, 0.0, 0.0),
+            coordinates: rust_3d::Point3D {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
             rcvr: None,
             tracks: Vec::new(),
             ims: None, 
-            reference: String::from("Unknown"),
+            coords_ref_system: None,
+            time_ref_system: None,
             comments: None,
-            frame: String::from("?"),
-            tot_dly: None,
-            int_dly: None,
-            sys_dly: None,
-            cab_dly: 0.0_f64,
-            ref_dly: 0.0_f64,
+            delay: SystemDelay::new(), 
         }
     }
 }
@@ -185,21 +180,22 @@ impl Cggtts {
     /// Builds `Cggtts` object with desired attributes.
     /// Date is set to `now` by default, use
     /// `with_date()` to customize.
-    pub fn new (lab: Option<String>, nb_channels: u16, rcvr: Option<Rcvr>) -> Self { 
+    pub fn new (lab: Option<&str>, nb_channels: u16, rcvr: Option<Rcvr>) -> Self { 
         let mut c = Self::default();
         if let Some(lab) = lab {
-            c.with_lab_agency(lab)
+            c = c.with_lab_agency(lab);
         }
-        c.with_nb_channels(nb_channels);
-        if Some(rcvr) = rcvr {
-            c.with_receiver(rcvr)
+        c = c.with_nb_channels(nb_channels);
+        if let Some(rcvr) = rcvr {
+            c = c.with_receiver(rcvr);
         }
+        c
     }
 
     /// Returns true if all tracks follow 
     /// BIPM tracking specifications
     pub fn follows_bipm_specs (&self) -> bool {
-        for track in self.tracks {
+        for track in self.tracks.iter() {
             if !track.follows_bipm_specs() {
                 return false
             }
@@ -216,14 +212,14 @@ impl Cggtts {
     }
     
     /// Returns ̀`Cggtts` with desired number of channels
-    pub fn with_nb_channes (&self, ch: u16) { 
+    pub fn with_nb_channels (&self, ch: u16) -> Self { 
         let mut c = self.clone();
         c.nb_channels = ch;
         c
     }
 
     /// Returns `Cggtts` with desired Receiver infos
-    pub fn with_receiver (&self, rcvr: Rcvr) { 
+    pub fn with_receiver (&self, rcvr: Rcvr) -> Self { 
         let mut c = self.clone();
         c.rcvr = Some(rcvr);
         c
@@ -231,7 +227,7 @@ impl Cggtts {
 
     /// Returns `Cggtts` with desired `IMS` evaluation
     /// hardware infos
-    pub fn with_ims_infos (&self, ims: Rcvr) { 
+    pub fn with_ims_infos (&self, ims: Rcvr) -> Self { 
         let mut c = self.clone();
         c.ims = Some(ims);
         c
@@ -246,146 +242,38 @@ impl Cggtts {
         c
     }
     
-    /// returns `Cggtts` with desired reference time system
-    pub fn with_time_reference (&self, reference: &str) { 
+    /// Returns `Cggtts` with desired reference time system description 
+    pub fn with_time_reference_system (&self, reference: &str) -> Self { 
         let mut c = self.clone();
-        c.reference = reference.to_string();
+        c.time_ref_system = Some(reference.to_string());
         c
     }
 
-    /// Returns `cggtts` with desired extra delay value.
-    /// If other delay values have already been specified,
-    /// this extra delay must correspond to an already existing
-    /// GNSS system, otherwise it is not added internally.
-    /// This obviously does not stand, if user specifies his
-    /// delay on the `Mixed` GNSS constellation, which is not recommended
-    pub fn with_delay (&self, CalibratedDelay: delay) -> Cggtts {
+    /// Returns `Cggtts` with desired Coordinates reference system
+    pub fn with_coords_reference_system (&self, reference: &str) -> Self {
         let mut c = self.clone();
-        let mut matches: bool = true;
-        for dly in self.delays {
-            if delay.constellation != Constellation::Mixed {
-                if dly.constellation != Constellation::Mixed {
-                    matches = false;
-                    break
-                }
-            }
-        }
-        if !matches {
-            return;
-        }
-        c.delays.push(delay);
+        c.coords_ref_system = Some(reference.to_string());
         c
     }
 
-    /// Evaluates total delay of this measurement system,
-    /// with summation of all declared internal delays
-    pub fn total_delay (&self) -> CalibratedDelay {
-        let mut ret = CalibratedDelay::default();
-        match &self.tot_dly {
-            Some(delay) => {
-                // parsing / user did provide a total delay
-                ret.constellation = delay.constellation.clone();
-                for i in 0..delay.values.len() {
-                    ret.codes.push(delay.codes[i].clone());
-                    ret.values.push(delay.values[i]);
-                }
-                ret.report = String::from(delay.get_calibration_report())
-            },
-            None => {
-                // parsing / user did not provide a total delay
-                // we must evaluate it ourselves
-                match &self.int_dly {
-                    // internal delay specified
-                    // gets *2 (A+B) definition
-                    Some(delay) => { 
-                        // int delay specified
-                        ret.constellation = delay.constellation.clone();
-                        for i in 0..delay.values.len() { 
-                            ret.codes.push(delay.codes[i].clone()); 
-                            ret.values.push(delay.values[i] * 2.0_f64) // (A+B)
-                        }
-                    },
-                    None => {
-                        // int delay not specified
-                        // => should have a system delay then
-                        match &self.sys_dly {
-                            Some(delay) => {
-                                // system delay specified
-                                ret.constellation = delay.constellation.clone();
-                                for i in 0..delay.values.len() {
-                                    ret.codes.push(delay.codes[i].clone());
-                                    ret.values.push(delay.values[i]);
-                                }
-                            },
-                            None => { // no delay at all, 0 assumed then
-                                ret.values.push(0.0);
-                                ret.codes.push(String::from("C1"))
-                            },
-                        }
-                    }
-                }
-                // always add cab delay
-                for i in 0..ret.values.len() {
-                    ret.values[i] += self.cab_dly
-                }
+    pub fn with_comments (&self, comments: &str) -> Self {
+        let mut c = self.clone();
+        c.comments = Some(comments.to_string());
+        c
+    }
+
+    /// Returns true if Self only contains tracks (measurements)
+    /// that have ionospheric parameter estimates
+    pub fn has_ionospheric_data (&self) -> bool {
+        for track in self.tracks.iter() {
+            if !track.has_ionospheric_data() {
+                return false
             }
         }
-        ret
-    }
-    
-    /// Returns number of tracks contained in self
-    pub fn len(&self) -> usize { self.tracks.len() }
-
-    /// Returns first track produced in file (if any)
-    pub fn first_track (&self) -> Option<&track::CggttsTrack> { 
-        self.tracks.get(0) 
-    }
-    
-    /// Returns last track produced in file (if any)
-    pub fn latest_track (&self) -> Option<&track::CggttsTrack> { 
-        self.tracks.get(self.tracks.len()-1) 
+        true
     }
 
-    /// returns true if self is `Single Frequency Cggtts`
-    pub fn is_single_frequency (&self) -> bool { 
-        self.total_delay().values.len() == 1 
-    }
-    
-    /// returns true if self is `Single Frequency Cggtts`
-    pub fn is_dual_frequency (&self) -> bool { 
-        !self.is_single_frequency() 
-    }
-
-    /// Returns true if self contains ionospheric information
-    pub fn has_ionospheric_parameters (&self) -> bool {
-        let mut ret = false;
-        for i in 0..self.len() {
-            if self.get_track(i)
-                .unwrap()
-                    .has_ionospheric_parameters() {
-                        ret = true
-                    }
-        }
-        ret
-    }
-
-    /// Builds `Cggtts` with given `CalibratedDelay` defined as `System delay` 
-    pub fn with_system_delay (&self, delay: CalibratedDelay) -> Cggtts {
-        Cggtts {
-            version: self.version.clone(),
-            recv_date: self.recv_date.clone(),
-            sys_dly: Some(delay),
-        }
-    }
-    /// Sets `internal` delay (refer to README)
-    pub fn set_internal_delay (&mut self, delay: CalibratedDelay) { self.int_dly = Some(delay.clone()) }
-    /// Sets `total` delay (refer to README)
-    pub fn set_total_delay (&mut self, delay: CalibratedDelay) { self.tot_dly = Some(delay.clone()) }
-    /// Sets `cable` delay (refer to README)
-    pub fn set_cable_delay (&mut self, delay: f64) { self.cab_dly = delay }
-    /// Sets `ref` delay (refer to README)
-    pub fn set_ref_delay (&mut self, delay: f64) { self.ref_dly = delay }
-
+/*
     /// Builds self from given `Cggtts` file.
     pub fn from_file (fp: &std::path::Path) -> Result<Cggtts, Error> {
         let file_name = fp.file_name()
@@ -703,7 +591,6 @@ impl Cggtts {
             tracks
         })
     }
-    
     /// Writes self into a `Cggtts` file
     pub fn to_file (&self, fp: &str) -> Result<(), Error> {
         let mut content = String::new();
@@ -800,5 +687,28 @@ impl Cggtts {
             content.push_str("\n")
         }
         Ok(std::fs::write(fp, content)?) 
+    }
+*/
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_crc() {
+        let content = vec![
+            "R24 FF 57000 000600  780 347 394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P",
+            "G99 99 59509 002200 0780 099 0099 +9999999999 +99999 +9999989831   -724    35 999 9999 +999 9999 +999 00 00 L1C"
+        ];
+        let expected = vec![
+            0x0F, 
+            0x71,
+        ];
+        for i in 0..content.len() {
+            let ck = calc_crc(content[i])
+                .unwrap();
+            let expect = expected[i];
+            assert_eq!(ck,expect,"Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",content[i],expect,ck)
+        }
     }
 }
