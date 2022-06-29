@@ -188,7 +188,9 @@ pub struct Track {
     pub mdio: f64, 
     /// Slope of the modelled ionospheric delay corresponding to the solution D in section 2.3.3.
     pub smdi: f64, 
-    /// Optionnal Ionospheric Data
+    /// Optionnal Ionospheric Data.
+    /// Technically, these require a dual carrier
+    /// GNSS receiver for their evaluation
     pub ionospheric: Option<IonosphericData>,
     /// Glonass Channel Frequency [1:24], O for other GNSS
     pub fr: GlonassChannel, 
