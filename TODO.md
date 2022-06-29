@@ -12,7 +12,7 @@ kind of delay is already declared, or overwrite previous value
 - [ ] use unit labels for generic Cggtts::track scaling
 
 ## Dual frequency
-- [x] support all features for dual frequency receivers
+- [ ] support all features for dual frequency receivers
  - [x] file must comply with advanced delay knowledge 
  - [ ] frame descriptor must be parsed & used 
- - [x] watch for INT DLY specs in this situation
+ - [ ] improve Delay definitions, we must have a SystemDelay for both carrier frequencies
