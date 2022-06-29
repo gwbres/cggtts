@@ -193,13 +193,15 @@ fn carrier_dependant_delay_parsing (string: &str)
 
 /// System Delay describe the total measurement systems delay
 /// to be used in `Cggtts`
+#[derive(Clone, PartialEq, Debug)]
 pub struct SystemDelay {
     /// Internal group of delays
     pub delays: Vec<CalibratedDelay>,
 }
 
 impl SystemDelay {
-    /// Builds a new system delay description
+    /// Builds a new system delay description,
+    /// with empty fields. Use `add_delay()` to customize.
     pub fn new () -> Self {
         Self {
             delays: Vec::with_capacity(3),
@@ -245,16 +247,16 @@ impl SystemDelay {
             let delay = self.delays[i].delay;
             let constell = self.delays[i].constellation;
             match delay { 
-                Delay::Internal(existing) => {
+                Delay::Internal(_) => {
                     if let Delay::Internal(v) = new.delay {
                         // Already exists, but kinds do match
-                        let mut at_least_one_mixed = new.constellation == Constellation::Mixed; 
-                        at_least_one_mixed |= constell == Constellation::Mixed;
-                        if new.constellation == self.delays[i].constellation {
+                        if new.constellation == constell {
                             // perfect constellation match
                             self.delays[i] 
                                 .add_value(v);
                         } else if new.constellation == Constellation::Mixed {
+                            self.delays[i] 
+                                .add_value(v);
                             rework = true
                         }
                         matched = true;
@@ -263,15 +265,15 @@ impl SystemDelay {
                         continue
                     }
                 },
-                Delay::RfCable(existing) => {
+                Delay::RfCable(_) => {
                     if let Delay::RfCable(v) = new.delay {
                         // Already exists, but kinds do match
-                        let mut at_least_one_mixed = new.constellation == Constellation::Mixed; 
-                        at_least_one_mixed |= constell == Constellation::Mixed;
-                        if new.constellation == self.delays[i].constellation || at_least_one_mixed {
+                        if new.constellation == constell {
                             self.delays[i] 
                                 .add_value(v);
                         } else if new.constellation == Constellation::Mixed {
+                            self.delays[i] 
+                                .add_value(v);
                             rework = true
                         }
                         matched = true;
@@ -280,15 +282,15 @@ impl SystemDelay {
                         continue
                     }
                 },
-                Delay::Reference(existing) => {
+                Delay::Reference(_) => {
                     if let Delay::Reference(v) = new.delay {
                         // Already exists, but kinds do match
-                        let mut at_least_one_mixed = new.constellation == Constellation::Mixed; 
-                        at_least_one_mixed |= constell == Constellation::Mixed;
-                        if new.constellation == self.delays[i].constellation || at_least_one_mixed {
+                        if new.constellation == constell {
                             self.delays[i] 
                                 .add_value(v);
                         } else if new.constellation == Constellation::Mixed {
+                            self.delays[i] 
+                                .add_value(v);
                             rework = true
                         }
                         matched = true;

@@ -81,7 +81,7 @@ mod delay {
                 info: None,
             }
         );
-        assert_eq!(system_delay.trusted(), true);
+        assert_eq!(system_delay.trusted(), false);
         assert_eq!(system_delay.value(), 90.0);
         
         // permitted add: Mixed against GPS constellation 
