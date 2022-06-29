@@ -6,14 +6,14 @@
 /// represent. <!> Delays are always specified in nanoseconds <!> 
 /// Use these value to increase system definition
 /// and overall accuracy and take automate compensations
+use rinex::Constellation;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Delay {
     /// Delay defined as `internal`
     Internal(f64),
-    /// Delay defined as `System` delay
-    System(f64),
     /// Cable / RF delay
-    RFCable(f64),
+    RfCable(f64),
     /// `Reference` delay
     Reference(f64),
 }
@@ -22,7 +22,7 @@ impl Default for Delay {
     /// Default Delay is a total delay of 0 nanoseconds,
     /// ie., completly unknown delay
     fn default() -> Delay {
-        Delay::Total(0.0_f64)
+        Delay::RfCable(0.0_f64)
     }
 }
 
@@ -31,16 +31,34 @@ impl Delay {
     pub fn value (&self) -> f64 {
         match self {
             Delay::Internal(d) => *d,
-            Delay::System(d) => *d,
-            Delay::RFCable(d) => *d,
+            Delay::RfCable(d) => *d,
             Delay::Reference(d) => *d,
-            Delay::Total(d) => *d,
         }
     }
 
     /// Returns (`unwraps`) itself in seconds
     pub fn value_seconds (&self) -> f64 {
         self.value() * 1.0E-9
+    }
+
+    /// Adds given value in nanoseconds, to Self, regardless of delay type
+    pub fn add_value (&self, v: f64) -> Self {
+        match self {
+            Delay::Internal(d) => Delay::Internal(*d + v), 
+            Delay::RfCable(d) => Delay::RfCable(*d + v), 
+            Delay::Reference(d) => Delay::Reference(*d + v), 
+        }
+    }
+
+    /// Converts self to calibrated delay,
+    /// by associating a constellation and possible
+    /// calibration process information
+    pub fn calibrate (&self, constellation: Constellation, info: Option<String>) -> CalibratedDelay {
+        CalibratedDelay {
+            delay: self.clone(),
+            constellation,
+            info,
+        }
     }
 }
 
@@ -52,12 +70,12 @@ impl Delay {
 /// might be available
 pub struct CalibratedDelay {
     /// GNSS constellation
-    constellation: rinex::Constellation,
+    pub constellation: Constellation,
     /// Actualy delay value
-    delay: Delay,
+    pub delay: Delay,
     /// Calibration process information,
     /// usually laboraty code, ie., who performed that calibration
-    info: Option<String>,
+    pub info: Option<String>,
 }
 
 impl Default for CalibratedDelay {
@@ -65,7 +83,7 @@ impl Default for CalibratedDelay {
     /// `Mixed` constellation, to mark this delay as non really specified
     fn default() -> CalibratedDelay {
         CalibratedDelay {
-            constellation: rinex::Constellation::Mixed, 
+            constellation: Constellation::Mixed, 
             delay: Delay::default(),
             info: None,
         }
@@ -98,7 +116,7 @@ impl CalibratedDelay {
     pub fn new (delay: Delay, info: Option<&str>) -> Self {
         Self {
             delay,
-            constellation: rinex::Constellation::Mixed,
+            constellation: Constellation::Mixed,
             info: {
                 if let Some(info) = info {
                     Some(info.to_string())
@@ -110,7 +128,7 @@ impl CalibratedDelay {
     }
 
     /// Adds constellation against which this delay was calibrated
-    pub fn with_constellation (&self, c: rinex::Constellation) -> Self {
+    pub fn with_constellation (&self, c: Constellation) -> Self {
         Self {
             delay: self.delay,
             constellation: c,
@@ -118,17 +136,32 @@ impl CalibratedDelay {
         }
     }
 
-    /// Returns true if this calibrated can be trusted,
-    /// ie., was calibrated for a specific GNSS constellation,
-    /// not `mixed` 
+    /// Returns true if this calibrated delay can be trusted,
+    /// ie., was calibrated against a specific `GNSS` constellation.
     pub fn trusted (&self) -> bool {
-        self.constellation != rinex::Constellation::Mixed
+        self.constellation != Constellation::Mixed
     }
 
     /// Non trusted calibration, means this delay was not calibrated
     /// against a specific GNSS constellation
     pub fn non_trusted (&self) -> bool {
         !self.trusted()
+    }
+
+    /// Adds given delay value, in nanoseconds, to self
+    pub fn add_value (&mut self, value: f64) {
+        self.delay = self.delay
+            .add_value(value)
+    }
+
+    /// Returns delay value in nanoseconds
+    pub fn value (&self) -> f64 {
+        self.delay.value()
+    }
+
+    /// Returns delay value in seconds
+    pub fn value_seconds (&self) -> f64 {
+        self.delay.value_seconds()
     }
 }
 
@@ -158,3 +191,135 @@ fn carrier_dependant_delay_parsing (string: &str)
 }
 */
 
+/// System Delay describe the total measurement systems delay
+/// to be used in `Cggtts`
+pub struct SystemDelay {
+    /// Internal group of delays
+    pub delays: Vec<CalibratedDelay>,
+}
+
+impl SystemDelay {
+    /// Builds a new system delay description
+    pub fn new () -> Self {
+        Self {
+            delays: Vec::with_capacity(3),
+        }
+    }
+
+    /// Returns true if System delay can be trusted,
+    /// meaning, all specified values are specified
+    /// against a unique `GNSS` constellation
+    pub fn trusted (&self) -> bool {
+        for i in 0..self.delays.len() {
+            if !self.delays[i].trusted() {
+                return false
+            }
+        }
+        true
+    }
+
+    /// Adds new calibrated delay to Self.
+    /// User should avoid declaring Calibrated Delay against unspecified constellation
+    /// (= `Constellation::Mixed`).
+    /// * (1) If user already specified same kind of delay, it is accumulated to existing value.
+    /// It is possible to add negative delay value. In case of (1), 
+    /// it will decrease the contribution of this kind of delay
+    /// * (2) If other kinds of delay were previously specified,
+    /// GNSS system used in calibration must match already declared systems,
+    /// except in the two following scenarios
+    /// * (2a) if we're introducing a Delay value calibrated against `Constellation::Mixed` 
+    /// and previous values were specified against a specific GNSS system,
+    /// we redefine all calibration values to `Constellation::Mixed`, calibration is
+    /// `untrusted()`: avoid this scenario.
+    /// * (2b) if we're introducing a Delay value calibrated against a specific 
+    /// Constellation while other values were declared as `Constellation::Mixed`,
+    /// we introduce the given delay as `Constellation::Mixed`.
+    pub fn add_delay (&mut self, new: CalibratedDelay) {
+        if self.delays.len() == 0 {
+            self.delays.push(new);
+            return;
+        }
+        let mut rework = false;
+        let mut matched = false;
+        for i in 0..self.delays.len() {
+            let delay = self.delays[i].delay;
+            let constell = self.delays[i].constellation;
+            match delay { 
+                Delay::Internal(existing) => {
+                    if let Delay::Internal(v) = new.delay {
+                        // Already exists, but kinds do match
+                        let mut at_least_one_mixed = new.constellation == Constellation::Mixed; 
+                        at_least_one_mixed |= constell == Constellation::Mixed;
+                        if new.constellation == self.delays[i].constellation {
+                            // perfect constellation match
+                            self.delays[i] 
+                                .add_value(v);
+                        } else if new.constellation == Constellation::Mixed {
+                            rework = true
+                        }
+                        matched = true;
+                        break;
+                    } else {
+                        continue
+                    }
+                },
+                Delay::RfCable(existing) => {
+                    if let Delay::RfCable(v) = new.delay {
+                        // Already exists, but kinds do match
+                        let mut at_least_one_mixed = new.constellation == Constellation::Mixed; 
+                        at_least_one_mixed |= constell == Constellation::Mixed;
+                        if new.constellation == self.delays[i].constellation || at_least_one_mixed {
+                            self.delays[i] 
+                                .add_value(v);
+                        } else if new.constellation == Constellation::Mixed {
+                            rework = true
+                        }
+                        matched = true;
+                        break
+                    } else {
+                        continue
+                    }
+                },
+                Delay::Reference(existing) => {
+                    if let Delay::Reference(v) = new.delay {
+                        // Already exists, but kinds do match
+                        let mut at_least_one_mixed = new.constellation == Constellation::Mixed; 
+                        at_least_one_mixed |= constell == Constellation::Mixed;
+                        if new.constellation == self.delays[i].constellation || at_least_one_mixed {
+                            self.delays[i] 
+                                .add_value(v);
+                        } else if new.constellation == Constellation::Mixed {
+                            rework = true
+                        }
+                        matched = true;
+                        break
+                    } else {
+                        continue
+                    }
+                }
+            }
+        }
+        if !matched {
+            self.delays.push(new);
+        }
+        if rework {
+            for i in 0..self.delays.len() {
+                self.delays[i].constellation = Constellation::Mixed 
+            }
+        }
+    }
+
+    /// Returns measurement systems total delay in nanoseconds
+    pub fn value (&self) -> f64 {
+        let mut dly: f64 = 0.0;
+        for i in 0..self.delays.len() {
+            dly += self.delays[i].value()
+        }
+        dly
+    }
+
+    /// Returns measurement systems total delay in seconds
+    pub fn value_seconds (&self) -> f64 {
+        self.value() * 1E-9
+    }
+}
