@@ -5,15 +5,15 @@ use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
 
-pub mod delay;
-pub mod track;
+use crate::LATEST_REVISION;
+use crate::LATEST_RELEASE_DATE;
+use crate::{Track, CalibratedDelay};
 
-/// supported `Cggtts` version,
-/// non matching input files will be rejected
-const VERSION: &str = "2E";
-
-/// latest revision date
-const LATEST_REV_DATE: &str = "2014-02-20";
+/*
+            version: VERSION.to_string(),
+            rev_date: chrono::NaiveDate::parse_from_str(LATEST_REV_DATE, "%Y-%m-%d")
+                .unwrap(),
+*/
 
 #[derive(Clone, Debug)]
 /// `Rcvr` describes a GNSS receiver
@@ -66,28 +66,35 @@ impl std::fmt::Display for Rcvr {
     }
 }
 
-/// `Cggtts` structure
-#[derive(Debug)]
+/// `Cggtts` structure comprises
+/// a measurement system and 
+/// and its Common View realizations (`tracks`)
+#[derive(Debug, Clone)]
 pub struct Cggtts {
-    pub version: String, // file version info
-    pub rev_date: chrono::NaiveDate, // revision date 
-    pub date: chrono::NaiveDate, // production / creation date
-    pub lab: String, // lab where measurements were performed (possibly unknown)
-    pub rcvr: Option<Rcvr>, // possible GNSS receiver infos
-    pub nb_channels: u16, // nb of GNSS receiver channels
-    pub ims: Option<Rcvr>, // IMS Ionospheric Measurement System (if any)
-    pub // Antenna phase center coordinates [m]
-    pub // in `ITFR` spatial reference
-    pub coordinates: (f32,f32,f32), 
+    pub date: chrono::NaiveDate, 
+    /// lab where measurements were performed (if unknown)
+    pub lab: Option<String>, 
+    /// possible GNSS receiver infos
+    pub rcvr: Option<Rcvr>, 
+    /// nb of GNSS receiver channels
+    pub nb_channels: u16, 
+    /// IMS Ionospheric Measurement System (if any)
+    pub ims: Option<Rcvr>, 
+    /// Antenna phase center coordinates [m]
+    /// in `ITFR` spatial reference
+    pub coordinates: rust_3d::Point3D, 
+    /// frame field
     pub frame: String,
-    pub comments: Option<String>, // comments (if any)
-    pub tot_dly: Option<CalibratedDelay>,
-    pub int_dly: Option<CalibratedDelay>,
-    pub sys_dly: Option<CalibratedDelay>,
-    pub cab_dly: f64,
-    pub ref_dly: f64,
-    pub reference: String, // reference time
-    pub tracks: Vec<track::CggttsTrack> // CGGTTS track(s)
+    /// Comments (if any..)
+    pub comments: Option<String>, 
+    /// Summation of internal delays,
+    /// refer to [Delay] object definition,
+    /// to understand their meaning
+    pub delays: Vec<CalibratedDelay>;
+    /// reference time
+    pub reference: String, 
+    /// Tracks: actual measurements / realizations
+    pub tracks: Vec<Track>
 }
 
 #[derive(Error, Debug)]
@@ -155,9 +162,6 @@ impl Default for Cggtts {
     /// of internal / cable delays is even better
     fn default() -> Cggtts {
         Cggtts {
-            version: VERSION.to_string(),
-            rev_date: chrono::NaiveDate::parse_from_str(LATEST_REV_DATE, "%Y-%m-%d")
-                .unwrap(),
             date: chrono::Utc::today().naive_utc(),
             lab: String::from("Unknown"),
             nb_channels: 0,
@@ -178,61 +182,103 @@ impl Default for Cggtts {
 }
 
 impl Cggtts {
-    /// Builds `Cggtts` object with default attributes
-    pub fn new() -> Cggtts { Default::default() }
-    
-    /// Returns production date
-    pub fn get_date (&self) -> chrono::NaiveDate { self.date }
-    /// Returns revision date
-    pub fn get_revision_date (&self) -> chrono::NaiveDate { self.rev_date }
+    /// Builds `Cggtts` object with desired attributes.
+    /// Date is set to `now` by default, use
+    /// `with_date()` to customize.
+    pub fn new (lab: Option<String>, nb_channels: u16, rcvr: Option<Rcvr>) -> Self { 
+        let mut c = Self::default();
+        if let Some(lab) = lab {
+            c.with_lab_agency(lab)
+        }
+        c.with_nb_channels(nb_channels);
+        if Some(rcvr) = rcvr {
+            c.with_receiver(rcvr)
+        }
+    }
 
-    /// Returns true if all tracks follow the tracking specifications
-    /// from `BIPM`, ie., all tracks last for `CggttsTrack::BIPM_SPECIFIED_TRACKING_DURATION`
-    pub fn matches_bipm_tracking_specs (&self) -> bool {
-        for i in 0..self.tracks.len() {
-            if self.tracks[i].get_duration() != track::BIPM_SPECIFIED_TRACKING_DURATION {
+    /// Returns true if all tracks follow 
+    /// BIPM tracking specifications
+    pub fn follows_bipm_specs (&self) -> bool {
+        for track in self.tracks {
+            if !track.follows_bipm_specs() {
                 return false
             }
         }
         true
     }
 
-    /// Assigns `lab` agency
-    pub fn set_lab_agency (&mut self, lab: &str) { self.lab = String::from(lab) }
-    /// Returns `lab` agency
-    pub fn get_lab_agency (&self) -> &str { &self.lab } 
+    /// Returns `Cggtts` with same attributes
+    /// but desired `Lab` agency
+    pub fn with_lab_agency (&self, lab: &str) -> Self { 
+        let mut c = self.clone();
+        c.lab = Some(lab.to_string());
+        c
+    }
     
-    /// Assigns GNSS receiver number of channels
-    pub fn set_nb_channels (&mut self, ch: u16) { self.nb_channels = ch }
-    /// Returns GNSS receiver number of channels
-    pub fn get_nb_channels (&self) -> u16 { self.nb_channels }
+    /// Returns ̀`Cggtts` with desired number of channels
+    pub fn with_nb_channes (&self, ch: u16) { 
+        let mut c = self.clone();
+        c.nb_channels = ch;
+        c
+    }
 
-    /// Assigns `Rcvr` hardware description
-    pub fn set_rcvr_infos (&mut self, rcvr: Rcvr) { self.rcvr = Some(rcvr) }
-    /// Assigns `IMS` evluation device description
-    pub fn set_ims_infos (&mut self, ims: Rcvr) { self.ims = Some(ims) }
+    /// Returns `Cggtts` with desired Receiver infos
+    pub fn with_receiver (&self, rcvr: Rcvr) { 
+        let mut c = self.clone();
+        c.rcvr = Some(rcvr);
+        c
+    }
 
-    /// Assigns antenna phase center coordinates [m],
-    /// coordinates should use `IRTF` referencing
-    pub fn set_antenna_coordinates (&mut self, coords: (f32,f32,f32)) { self.coordinates = coords }
-    /// Returns antenna phase center coordinates [m], `IRTF` referencing
-    pub fn get_antenna_coordinates (&self) -> (f32,f32,f32) { self.coordinates }
+    /// Returns `Cggtts` with desired `IMS` evaluation
+    /// hardware infos
+    pub fn with_ims_infos (&self, ims: Rcvr) { 
+        let mut c = self.clone();
+        c.ims = Some(ims);
+        c
+    }
 
-    /// Assigns reference time label
-    pub fn set_time_reference (&mut self, reference: &str) { self.reference = String::from(reference) }
-    /// Returns reference time label
-    pub fn get_reference_time (&self) -> &str { &self.reference }
+    /// Returns `cggtts` but with desired antenna phase center
+    /// coordinates, coordinates should be in `IRTF` reference system,
+    /// and expressed in meter.
+    pub fn with_antenna_coordinates (&self, coords: rust_3d::Point3D) -> Self {
+        let mut c = self.clone();
+        c.coordinates = coords;
+        c
+    }
+    
+    /// returns `Cggtts` with desired reference time system
+    pub fn with_time_reference (&self, reference: &str) { 
+        let mut c = self.clone();
+        c.reference = reference.to_string();
+        c
+    }
 
-    /// Evaluates total system delay as `CalibratedDelay`.
-    /// 
-    /// If no system delays were specified by user
-    /// or parsed from a file: this returns a null + uncalibrated. 
-    /// 
-    /// Returns delay in case some specific
-    /// values were specified .
-    ///
-    /// In more advanced usage, returns the combination
-    /// of all delays for each carrier frequencies
+    /// Returns `cggtts` with desired extra delay value.
+    /// If other delay values have already been specified,
+    /// this extra delay must correspond to an already existing
+    /// GNSS system, otherwise it is not added internally.
+    /// This obviously does not stand, if user specifies his
+    /// delay on the `Mixed` GNSS constellation, which is not recommended
+    pub fn with_delay (&self, CalibratedDelay: delay) -> Cggtts {
+        let mut c = self.clone();
+        let mut matches: bool = true;
+        for dly in self.delays {
+            if delay.constellation != Constellation::Mixed {
+                if dly.constellation != Constellation::Mixed {
+                    matches = false;
+                    break
+                }
+            }
+        }
+        if !matches {
+            return;
+        }
+        c.delays.push(delay);
+        c
+    }
+
+    /// Evaluates total delay of this measurement system,
+    /// with summation of all declared internal delays
     pub fn total_delay (&self) -> CalibratedDelay {
         let mut ret = CalibratedDelay::default();
         match &self.tot_dly {
@@ -754,370 +800,5 @@ impl Cggtts {
             content.push_str("\n")
         }
         Ok(std::fs::write(fp, content)?) 
-    }
-
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    
-    #[test]
-    /// Tests default constructor 
-    fn cggtts_test_default() {
-        let cggtts = Cggtts::new();
-        assert_eq!(cggtts.lab, "Unknown"); // default
-        assert_eq!(cggtts.nb_channels, 0); // default
-        assert_eq!(cggtts.frame, "?"); // default ..
-        assert_eq!(cggtts.reference, "Unknown"); // default..
-        assert_eq!(cggtts.coordinates, (0.0,0.0,0.0)); // empty..
-        assert_eq!(cggtts.rev_date,
-            chrono::NaiveDate::parse_from_str(LATEST_REV_DATE, "%Y-%m-%d")
-            .unwrap());
-        assert_eq!(cggtts.date, chrono::Utc::today().naive_utc());
-        assert_eq!(cggtts.tot_dly.is_none(), true);
-        assert_eq!(cggtts.int_dly.is_none(), true);
-        assert_eq!(cggtts.sys_dly.is_none(), true);
-        assert_eq!(cggtts.cab_dly, 0.0);
-        assert_eq!(cggtts.ref_dly, 0.0);
-        println!("{:#?}", cggtts.total_delay());
-        assert_eq!(cggtts.total_delay().values.len(), 1); // single freq Cggts by default
-        assert_eq!(cggtts.total_delay().values[0], 0.0); // not specified
-        println!("{:#?}", cggtts)
-    }
-
-    #[test]
-    /// Tests basic usage 
-    fn cggtts_basic_use_case() {
-        let mut cggtts = Cggtts::new();
-        cggtts.set_lab_agency("TestLab");
-        cggtts.set_nb_channels(10);
-        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
-        //cggtts.set_total_delay(300E-9);
-        assert_eq!(cggtts.get_lab_agency(), "TestLab");
-        assert_eq!(cggtts.get_nb_channels(), 10);
-        assert_eq!(cggtts.get_antenna_coordinates(), (1.0,2.0,3.0));
-        //assert_eq!(cggtts.get_system_delay().is_none(), true); // not provided
-        //assert_eq!(cggtts.get_cable_delay().is_none(), true); // not provided
-        //assert_eq!(cggtts.get_reference_delay().is_none(), true); // not provided
-        //assert_eq!(cggtts.get_total_delay().is_ok(), true); // enough information
-        //assert_eq!(cggtts.get_total_delay().unwrap(), 300E-9); // basic usage
-        println!("{:#?}", cggtts)
-    }
-
-    #[test]
-    /// Test normal / intermediate usage
-    fn cgggts_intermediate_use_case() {
-        let mut cggtts = Cggtts::new();
-        cggtts.set_lab_agency("TestLab");
-        cggtts.set_nb_channels(10);
-        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
-        //cggtts.set_reference_delay(100E-9);
-        //cggtts.set_system_delay(150E-9);
-        assert_eq!(cggtts.get_lab_agency(), "TestLab");
-        assert_eq!(cggtts.get_nb_channels(), 10);
-        assert_eq!(cggtts.get_antenna_coordinates(), (1.0,2.0,3.0));
-        //assert_eq!(cggtts.get_cable_delay().is_some(), false); // not provided
-        //assert_eq!(cggtts.get_reference_delay().is_some(), true); // provided
-        //assert_eq!(cggtts.get_system_delay().is_some(), true); // provided
-        //assert_eq!(cggtts.get_total_delay().is_ok(), true); // enough information
-        //assert_eq!(cggtts.get_total_delay().unwrap(), 250E-9); // intermediate usage
-        println!("{:#?}", cggtts)
-    }
-
-    #[test]
-    /// Test advanced usage
-    fn cgggts_advanced_use_case() {
-        let mut cggtts = Cggtts::new();
-        cggtts.set_lab_agency("TestLab");
-        cggtts.set_nb_channels(10);
-        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
-        cggtts.set_cable_delay(300E-9);
-        //cggtts.set_reference_delay(100E-9);
-        //cggtts.set_internal_delay(25E-9);
-        assert_eq!(cggtts.get_lab_agency(), "TestLab");
-        assert_eq!(cggtts.get_nb_channels(), 10);
-        assert_eq!(cggtts.get_antenna_coordinates(), (1.0,2.0,3.0));
-        //assert_eq!(cggtts.get_system_delay().is_some(), false); // not provided: we have granularity
-        //assert_eq!(cggtts.get_cable_delay().is_some(), true); // provided
-        //assert_eq!(cggtts.get_reference_delay().is_some(), true); // provided
-        //assert_eq!(cggtts.get_internal_delay().is_some(), true); // provided
-        //assert_eq!(cggtts.get_reference_delay().is_some(), true); // provided
-        //assert_eq!(cggtts.get_total_delay().is_ok(), true); // enough information
-        /*assert!(
-            approx_eq!(f64,
-                cggtts.get_total_delay().unwrap(),
-                425E-9, // advanced usage
-                epsilon = 1E-9
-            )
-        );*/
-        println!("{:#?}", cggtts)
-    }
-    
-    #[test]
-    /// Tests standard file parsing
-    fn cggtts_test_from_standard_data() {
-        // open test resources
-        let test_resources = std::path::PathBuf::from(
-            env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard");
-        // walk test resources
-        for entry in std::fs::read_dir(test_resources)
-            .unwrap() {
-            let entry = entry
-                .unwrap();
-            let path = entry.path();
-            if !path.is_dir() { // only files..
-                let fp = std::path::Path::new(&path);
-                let cggtts = Cggtts::from_file(&fp);
-                assert_eq!(
-                    cggtts.is_err(),
-                    false,
-                    "Cggtts::from_file() failed for {:#?} with {:#?}",
-                    path,
-                    cggtts);
-                println!("File \"{:?}\" {:#?}", &path, cggtts.unwrap())
-            }
-        }
-    }
-    #[test]
-    /// Tests advanced file parsing
-    fn cggtts_test_from_ionospheric_data() {
-        // open test resources
-        let test_resources = std::path::PathBuf::from(
-            env!("CARGO_MANIFEST_DIR").to_owned() + "/data/ionospheric");
-        // walk test resources
-        for entry in std::fs::read_dir(test_resources)
-            .unwrap() {
-            let entry = entry
-                .unwrap();
-            let path = entry.path();
-            if !path.is_dir() { // only files..
-                let fp = std::path::Path::new(&path);
-                let cggtts = Cggtts::from_file(&fp);
-                assert_eq!(
-                    cggtts.is_err(), 
-                    false,
-                    "Cggtts::from_file() failed for {:#?} with {:#?}",
-                    path, 
-                    cggtts);
-                println!("File \"{:?}\" {:#?}", &path, cggtts.unwrap())
-            }
-        }
-    }
-
-    #[test]
-    /// Tests basci `Cggtts` to file
-    fn default_cggtts_to_file() {
-        let cggtts = Cggtts::default();
-        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD0").is_err(), false)
-    }
-
-    #[test]
-    /// Tests customized `Cggtts` to file
-    fn basic_cggtts_to_file() {
-        let mut cggtts = Cggtts::default();
-
-        // identify receiver hw
-        let rcvr = Rcvr {
-            manufacturer: String::from("SomeManufacturer"),
-            recv_type: String::from("SomeKind"), 
-            serial_number: String::from("XXXXXX"), 
-            year: 2021, 
-            software_number: String::from("v00"),
-        };
-        cggtts.set_rcvr_infos(rcvr);
-
-        // add some more infos
-        cggtts.set_lab_agency("MyLab");
-        cggtts.set_nb_channels(10);
-        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
-        cggtts.set_time_reference("UTC(k)");
-
-        // define a total delay
-        let delay = CalibratedDelay {
-            constellation: track::Constellation::Glonass,
-            values: vec![100E-9_f64],
-            codes: vec![String::from("C1")], 
-            report: String::from("NA"),
-        };
-        cggtts.set_total_delay(delay);
-        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD1").is_err(), false)
-    }
-    
-    #[test]
-    /// Tests customized `Cggtts` to file
-    fn dual_frequency_cggtts_to_file() {
-        let mut cggtts = Cggtts::default();
-
-        // identify receiver hw
-        let rcvr = Rcvr {
-            manufacturer: String::from("SomeManufacturer"),
-            recv_type: String::from("SomeKind"), 
-            serial_number: String::from("XXXXXX"), 
-            year: 2021, 
-            software_number: String::from("v00"),
-        };
-        cggtts.set_rcvr_infos(rcvr);
-
-        // add some more infos
-        cggtts.set_lab_agency("MyLab");
-        cggtts.set_nb_channels(10);
-        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
-        cggtts.set_time_reference("UTC(k)");
-
-        // set a total delay
-        let total_delay = CalibratedDelay {
-            constellation: track::Constellation::Glonass,
-            values: vec![100E-9, 150E-9],
-            codes: vec![String::from("C1"),String::from("C2")], 
-            report: String::from("NA"),
-        };
-        cggtts.set_total_delay(total_delay);
-        println!("{:#?}",cggtts);
-        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD2").is_err(), false)
-    }
-    
-    #[test]
-    /// Tests customized `Cggtts` to file (B)
-    fn cggtts_with_system_delay_to_file() {
-        let mut cggtts = Cggtts::default();
-
-        // identify receiver hw
-        let rcvr = Rcvr {
-            manufacturer: String::from("SomeManufacturer"),
-            recv_type: String::from("SomeKind"), 
-            serial_number: String::from("XXXXXX"), 
-            year: 2021, 
-            software_number: String::from("v00"),
-        };
-        cggtts.set_rcvr_infos(rcvr);
-
-        // add some more infos
-        cggtts.set_lab_agency("MyLab");
-        cggtts.set_nb_channels(10);
-        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
-        cggtts.set_time_reference("UTC(k)");
-
-        // define a total delay
-        let delay = CalibratedDelay {
-            constellation: track::Constellation::Glonass,
-            values: vec![100E-9_f64],
-            codes: vec![String::from("C2")], 
-            report: String::from("NA"),
-        };
-        cggtts.set_system_delay(delay);
-        cggtts.set_cable_delay(50E-9);
-        cggtts.set_ref_delay(100E-9);
-        let total_delay = cggtts.total_delay();
-        assert_eq!(total_delay.values.len(), 1); // single freq
-        assert_eq!(total_delay.values[0], 100E-9+50E-9); // single freq
-        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD3").is_err(), false)
-    }
-    
-    #[test]
-    /// Tests customized `Cggtts` to file (C)
-    fn cggtts_with_internal_delay_to_file() {
-        let mut cggtts = Cggtts::default();
-
-        // identify receiver hw
-        let rcvr = Rcvr {
-            manufacturer: String::from("SomeManufacturer"),
-            recv_type: String::from("SomeKind"), 
-            serial_number: String::from("XXXXXX"), 
-            year: 2021, 
-            software_number: String::from("v00"),
-        };
-        cggtts.set_rcvr_infos(rcvr);
-
-        // add some more infos
-        cggtts.set_lab_agency("MyLab");
-        cggtts.set_nb_channels(10);
-        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
-        cggtts.set_time_reference("UTC(k)");
-
-        // define a total delay
-        let delay = CalibratedDelay {
-            constellation: track::Constellation::GPS,
-            values: vec![25E-9_f64],
-            codes: vec![String::from("C1")], 
-            report: String::from("NA"),
-        };
-        cggtts.set_internal_delay(delay);
-        cggtts.set_cable_delay(100E-9);
-        cggtts.set_ref_delay(50E-9);
-        let total_delay = cggtts.total_delay();
-        assert_eq!(total_delay.values.len(), 1); // single freq
-        assert_eq!(cggtts.total_delay().values[0], 25E-9+25E-9+100E-9); 
-        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD4").is_err(), false)
-    }
-    
-    #[test]
-    /// Another test..
-    fn cggtts_with_ionospheric_parameters () {
-        let mut cggtts = Cggtts::default();
-
-        // identify receiver hw
-        let rcvr = Rcvr {
-            manufacturer: String::from("SomeManuf1"),
-            recv_type: String::from("SomeKind1"), 
-            serial_number: String::from("XXXXXX"), 
-            year: 2021, 
-            software_number: String::from("v01"),
-        };
-        cggtts.set_rcvr_infos(rcvr);
-
-        // IMS infos
-        let ims = Rcvr {
-            manufacturer: String::from("SomeManuf2"),
-            recv_type: String::from("SomeKind2"), 
-            serial_number: String::from("YYYY"), 
-            year: 2022,
-            software_number: String::from("v02"),
-        };
-        cggtts.set_ims_infos(ims);
-
-        // add some more infos
-        cggtts.set_lab_agency("MyLab");
-        cggtts.set_nb_channels(10);
-        cggtts.set_antenna_coordinates((1.0,2.0,3.0));
-        cggtts.set_time_reference("UTC(USNO)");
-
-        // define a delay
-        let delay = CalibratedDelay {
-            constellation: track::Constellation::GPS,
-            values: vec![25E-9_f64],
-            codes: vec![String::from("C1")], 
-            report: String::from("NA"),
-        };
-        cggtts.set_internal_delay(delay);
-        cggtts.set_cable_delay(100E-9);
-        cggtts.set_ref_delay(50E-9);
-
-        // add some measurements
-        let mut track = track::CggttsTrack::default();
-        track.set_satellite_id(0x01);
-        cggtts.tracks.push(track);
-        let mut track = track::CggttsTrack::default();
-        track.set_satellite_id(0x11);
-        cggtts.tracks.push(track);
-
-        let total_delay = cggtts.total_delay();
-        assert_eq!(total_delay.values.len(), 1); // single freq
-        assert_eq!(cggtts.total_delay().values[0], 25E-9+25E-9+100E-9); 
-        assert_eq!(cggtts.to_file("data/output/GZXXXXDD.DD5").is_err(), false)
-    }
-    #[test]
-    /// Tests CRC calculation method
-    fn test_crc_calc() {
-        let content = vec![
-            "R24 FF 57000 000600  780 347 394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P"
-        ];
-        let expected = vec![0x0F];
-        for i in 0..content.len() {
-            let ck = calc_crc(content[i])
-                .unwrap();
-            let expect = expected[i];
-            assert_eq!(ck,expect,"Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",content[i],expect,ck)
-        }
     }
 }

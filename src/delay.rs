@@ -16,8 +16,6 @@ pub enum Delay {
     RFCable(f64),
     /// `Reference` delay
     Reference(f64),
-    /// `Total` delay
-    Total(f64)
 }
 
 impl Default for Delay {
