@@ -4,10 +4,11 @@ use regex::Regex;
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
+use rinex::Constellation;
 
 //use crate::LATEST_REVISION;
 //use crate::LATEST_RELEASE_DATE;
-use crate::{Track, delay::SystemDelay, CalibratedDelay};
+use crate::{Track, Delay, delay::SystemDelay, CalibratedDelay};
 
 /// supported `Cggtts` version,
 /// non matching input files will be rejected
@@ -90,7 +91,7 @@ pub struct Cggtts {
     /// in `ITFR`, `ECEF` or other spatial systems
     pub coordinates: rust_3d::Point3D, 
     /// Comments (if any..)
-    pub comments: Option<String>, 
+    pub comments: Option<Vec<String>>, 
     /// Describes the measurement systems delay.
     /// Refer to [Delay] enum,
     /// to understand their meaning.
@@ -257,12 +258,6 @@ impl Cggtts {
         c
     }
 
-    pub fn with_comments (&self, comments: &str) -> Self {
-        let mut c = self.clone();
-        c.comments = Some(comments.to_string());
-        c
-    }
-
     /// Returns true if Self only contains tracks (measurements)
     /// that have ionospheric parameter estimates
     pub fn has_ionospheric_data (&self) -> bool {
@@ -277,7 +272,7 @@ impl Cggtts {
     /// Builds Self from given `Cggtts` file.
     pub fn from_file (fp: &str) -> Result<Self, Error> {
         // check against file naming convetion
-        let path = std::path::Path::from(fp);
+        let path = std::path::Path::new(fp);
         let file_name = path.file_name()
             .unwrap()
             .to_str()
@@ -312,11 +307,11 @@ impl Cggtts {
         let mut system_delay = SystemDelay::new();
         
         // VERSION must be first
-        let line = lines.next()
+        let mut line = lines.next()
             .unwrap();
         let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
             Some(version) => {
-                if !version.eq(&VERSION) {
+                if !version.eq(&LATEST_RELEASE) {
                     return Err(Error::DeprecatedVersion)
                 }
             },
@@ -329,16 +324,16 @@ impl Cggtts {
         let mut lab: Option<String> = None;
         let mut cksum :u8 = calc_crc(&line)?;
         let mut comments: Vec<String> = Vec::new();
-        let mut coords_ref_system : Vec<String> = None;
-        let mut time_ref: Option<String> = None;
-        let (mut x, mut y, mut z) : (f32,f32,f32) = (0.0, 0.0, 0.0);
+        let mut coords_ref_system : Option<String> = None;
+        let mut time_ref_system: Option<String> = None;
+        let (mut x, mut y, mut z) : (f64,f64,f64) = (0.0, 0.0, 0.0);
 
         loop {
 
-            if line.startswith("REV DATE = ") {
+            if line.starts_with("REV DATE = ") {
                 // skip that one
             
-            } else if line.startswith("RCVR = ") {
+            } else if line.starts_with("RCVR = ") {
                 match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
                     (Some(manufacturer),
                     Some(recv_type),
@@ -356,76 +351,79 @@ impl Cggtts {
                     _ => {}
                 }
 
-            } else if line.startswith("CH = ") {
+            } else if line.starts_with("CH = ") {
                 match scan_fmt!(&line, "CH = {d}", u16) {
                     Some(n) => nb_channels = n,
                     _ => {} 
                 };
 
-            } else if line.startswith("IMS = ") {
+            } else if line.starts_with("IMS = ") {
                 match scan_fmt!(&line, "IMS = {} {} {} {d} {}", String, String, String, String, String) {
                     (Some(manufacturer),
                     Some(recv_type),
                     Some(serial_number),
                     Some(year),
-                    Some(software_number)) => 
-                        Some(Rcvr {
+                    Some(software_number)) => { 
+                        rcvr = Some(Rcvr {
                             manufacturer, 
                             recv_type, 
                             serial_number, 
                             year: u16::from_str_radix(&year, 10)?, 
-                            software_number
-                        }),
+                            software_number,
+                        })
+                    },
                     _ => {}, 
                 }
             
-            } else if line.startswith("LAB = ") {
+            } else if line.starts_with("LAB = ") {
                 match line.strip_prefix("LAB = ") {
                     Some(s) => {
                         lab = Some(String::from(s.trim()))
                     },
                     _ => {},
                 }
-            } else if line.startswith("X = ") {
-                match scan_fmt!(&line, "X = {f}", f32) {
+            } else if line.starts_with("X = ") {
+                match scan_fmt!(&line, "X = {f}", f64) {
                     Some(f) => {
                         x = f
                     },
                     _ => {},
                 }
-            } else if line.startswith("Y = ") {
-                match scan_fmt!(&line, "Y = {f}", f32) {
+            } else if line.starts_with("Y = ") {
+                match scan_fmt!(&line, "Y = {f}", f64) {
                     Some(f) => {
                         y = f
                     },
                     _ => {},
                 }
-            } else if line.startswith("Z = ") {
-                match scan_fmt!(&line, "Z = {f}", f32) {
+            } else if line.starts_with("Z = ") {
+                match scan_fmt!(&line, "Z = {f}", f64) {
                     Some(f) => {
                         z = f
                     },
                     _ => {},
                 }
             
-            } else if line.startswith("FRAME = ") {
+            } else if line.starts_with("FRAME = ") {
                 match scan_fmt!(&line, "FRAME = {}", String) {
                     Some(fr) => {
-                        if fr.neq("?") {
+                        if !fr.trim().eq("?") {
                             coords_ref_system = Some(fr)
                         }
-                    }
+                    },
+                    _ => {},
                 }
 
-            } else if line.startswith("COMMENTS = ") {
+            } else if line.starts_with("COMMENTS = ") {
                 comments.push(line.strip_prefix("COMMENTS = ")
                     .unwrap()
-                    .trim())
+                    .trim()
+                    .to_string())
 
-            } else if line.startswith("REF = ") {
+            } else if line.starts_with("REF = ") {
                 match scan_fmt!(&line, "REF = {}", String) {
                     Some(s) => {
-                        time_ref = Some(s) 
+                        time_ref_system = Some(s) 
                     },
                     _ => {},
                 }
@@ -443,11 +441,11 @@ impl Cggtts {
                 // We grab all delay values, treat them as single carrier,
                 // and possible second carrier for delays like SYS DLY are left out
                 let start_off = line.find("=").unwrap();
-                let end_off   = line.lfind("ns").unwrap();
+                let end_off   = line.find("ns").unwrap();
                 let data = &line[start_off+1..end_off];
                 let value = f64::from_str(data.trim())?;
 
-                let delay : Delay = match label {
+                match label.as_str() {
                     "CAB" => {
                         system_delay.add_delay(
                             CalibratedDelay {
@@ -495,10 +493,11 @@ impl Cggtts {
                                 info: None,
                             }
                         )
-                    }
+                    },
+                    _ => {}, // non recognized delay type
                 };
             
-            } else if line.startswith("CKSUM = ") {
+            } else if line.starts_with("CKSUM = ") {
 
                 let ck :u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
                     Some(s) => {
@@ -539,7 +538,7 @@ impl Cggtts {
         let _ = lines.next().unwrap(); // labels
         let _ = lines.next().unwrap(); // units currently discarded
         // tracks parsing
-        let mut tracks: Vec<track::CggttsTrack> = Vec::new();
+        let mut tracks: Vec<Track> = Vec::new();
         loop {
             let line = match lines.next() {
                 Some(s) => s,
@@ -548,9 +547,9 @@ impl Cggtts {
             if line.len() == 0 { // empty line
                 break // we're done parsing
             }
-            if let Ok(track) = track::CggttsTrack::from_str(&line) {
+            /*if let Ok(track) = Track::from_str(&line) {
                 tracks.push(track)
-            }
+            }*/
         }
 
         Ok(Cggtts {
@@ -559,14 +558,21 @@ impl Cggtts {
             rcvr,
             ims,
             lab,
+            coords_ref_system,
             coordinates: rust_3d::Point3D {
                 x,
                 y,
                 z,
             },
-            coords_ref_system,
-            comments,
-            reference,
+            comments: {
+                if comments.len() == 0 {
+                    None
+                } else {
+                    Some(comments)
+                }
+            },
+            delay: system_delay,
+            time_ref_system,
             tracks
         })
     }

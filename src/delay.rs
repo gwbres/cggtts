@@ -35,6 +35,7 @@ impl Delay {
             Delay::Internal(d) => *d,
             Delay::RfCable(d) => *d,
             Delay::Reference(d) => *d,
+            Delay::System(d) => *d,
         }
     }
 
@@ -49,6 +50,7 @@ impl Delay {
             Delay::Internal(d) => Delay::Internal(*d + v), 
             Delay::RfCable(d) => Delay::RfCable(*d + v), 
             Delay::Reference(d) => Delay::Reference(*d + v), 
+            Delay::System(d) => Delay::System(*d + v), 
         }
     }
 
@@ -300,7 +302,24 @@ impl SystemDelay {
                     } else {
                         continue
                     }
-                }
+                },
+                Delay::System(_) => {
+                    if let Delay::System(v) = new.delay {
+                        // Already exists, but kinds do match
+                        if new.constellation == constell {
+                            self.delays[i]
+                                .add_value(v);
+                        } else if new.constellation == Constellation::Mixed {
+                            self.delays[i]
+                                .add_value(v);
+                            rework = true
+                        }
+                        matched = true;
+                        break
+                    } else {
+                        continue
+                    }
+                },
             }
         }
         if !matched {

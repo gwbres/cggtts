@@ -19,9 +19,9 @@ other revisions.
 
 Several structures exist in this crate:
 
-* [Cggtts](doc/cggtts.md) if the main crate, it comprises measurement system
+* [Cggtts](doc/cggtts.md) is the main crate, it comprises measurement system
 information and measurement data. It is a file parser (reader) and producer
-(generate data).
+(data generator).
 * [Tracks](doc/track.md) are actual `Cggtts` measurements
 * [Delay](doc/delay.md) represent the measurement internal delays
 

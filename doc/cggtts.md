@@ -1,58 +1,57 @@
-# CGGTTS 
-Rust package to manipulate CGGTTS (BIPM) data files
+CGGTTS
+======
 
-[![crates.io](https://img.shields.io/crates/v/cggtts.svg)](https://crates.io/crates/cggtts)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/gwbres/cggtts/blob/main/LICENSE-APACHE)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/gwbres/cggtts/blob/main/LICENSE-MIT) 
-[![crates.io](https://img.shields.io/crates/d/cggtts.svg)](https://crates.io/crates/cggtts)    
-[![Rust](https://github.com/gwbres/cggtts/actions/workflows/rust.yml/badge.svg)](https://github.com/gwbres/cggtts/actions/workflows/rust.yml)
-[![crates.io](https://docs.rs/cggtts/badge.svg)](https://docs.rs/cggtts/badge.svg)
+CGGTTS is the main structure, is can be parsed from a standard CGGTTS file, and can be dumped into a file following standards. 
 
-CGGTTS is a file format to exchange Common View Time transfer data.  
-It is specified by the
-Bureau International des Poids & des Mesures (BIPM, Paris).
+Cggtts parser 
+=============
 
-[CGGTTS Specifications](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
+## Known behavior 
 
-This library specifically supports revision **2E**, and will _reject_
-other revisions.
+* The parser supports current revision **2E** only, it will reject files that have different revision number.
 
-Several structures exist in this crate:
+* Given file must follow file naming conventions otherwise parsing fails with related error
 
-* [Cggtts](doc/cggtts.md) if the main crate, it comprises measurement system
-information and measurement data. It is a file parser (reader) and producer
-(generate data).
-* [Tracks](doc/track.md) are actual `Cggtts` measurements
-* [Delay](doc/delay.md) represent the measurement internal delays
+* Line order in the CGGTTS header section does not matter, except for the first line, which always be a CGGTTS revision number.
 
-## parser
+* We tolerate a missing BLANK between the header section and measurements
 
-* file naming conventions must be respected.
-* We tolerate fields /lines order of apperance (only in header section) to differ
-from BIPM examples, except for first line (header introduction).
-* revision must be 2E or we reject the given file
+* This parser does not care for whitespaces, padding, it is not disturbed by their abscence
 
-### Cggtts file analysis
+* This parser is case sensitive at the moment, as it appears all fields should be written in upper case, except for data units/scalings 
 
-Retrieve data from a local CGGTTS compliant file:
+* We accept several \"COMMENTS =\" lines, although it is not specified in CGGTTS. Several comments are then parsed. 
 
-* File name must follow naming conventions, refer to specifications
+Notes on System delays and this parser
+
+* This parser follows standard specifications, 
+if \"TOT\" = Total delay is specified, we actually discard
+any other possibly provided delay value, and this one superceeds
+and becomes the only known system delay.
+Refer to the System Delay paragraph to understand what they
+mean and how to specify them.
+
+## Getting started
+
+Parse a CGGTTS file:
 
 ```rust
     let cggtts = Cggtts::from_file("data/standard/GZSY8259.506");
-    prinln!("{:#?}", cggtts);
-    prinln!("{:#?}", cggtts.get_track(0));
-    println!("{:?}", cggtts.get_antenna_coordinates());
-    println!("{:#?}", cggtts.get_total_delay()); // refer to 'System Delays' section
-    assert_eq!(cggtts.has_ionospheric_parameters(), false); // basic session
-    
-    let mut cggtts = Cggtts::from_file("data/ionospheric/RZOP0159.572");
-    prinln!("{:#?}", cggtts);
-    prinln!("{:#?}", cggtts.get_track(3));
-    assert_eq!(cggtts.has_ionospheric_parameters(), true); // dual carrier session
-```
+    assert_eq!(cgtts.lab, Some("SY82"));
+    // more info on receiver hardware
+    println!("{:#?}", cggtts.rcvr);
+    // nb channels of this GNSS receiver
+    assert_eq!(cggtts.nb_channels, 12);
+    // IMS missing, see API/doc to understand what IMS is
+    assert_eq!(cggtts.ims, None);
+    // Coordinates reference system, used by X,Y,Z) 3D coordinates
+    assert_eq!(cggtts.coods_ref_system, Some("ITRF"));
+    assert_eq!(cggtts.comments, None); // no comments were identified
+    // basic CGGTTS (single carrier, see advanced usage..)
+    assert_eq!(cggts.has_ionospheric_data(), false);
+``` 
 
-#### Data analysis
+## CGGTT Measurements 
 
 Measurements are stored within the list of _CggttsTracks_
 
@@ -72,6 +71,15 @@ _CggttsTracks_ are easily manipulated
     assert_eq!(cggtts.len(), 0); // consumed
     assert_eq!(t.get_azimuth(), 180.0);
     assert_eq!(t.set_elevation(), 90.0);
+```
+
+## Advanced CGGTTS
+
+```rust
+    let mut cggtts = Cggtts::from_file("data/ionospheric/RZOP0159.572");
+    // Has ionospheric parameter estimates,
+    // this is feasible on dual carrier receivers
+    assert_eq!(cggtts.has_ionospheric_parameters(), true); 
 ```
 
 ### CGGTTS production
