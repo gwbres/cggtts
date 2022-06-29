@@ -9,11 +9,12 @@ use scan_fmt::scan_fmt;
 //use crate::LATEST_RELEASE_DATE;
 use crate::{Track, delay::SystemDelay, CalibratedDelay};
 
-/*
-            version: VERSION.to_string(),
-            rev_date: chrono::NaiveDate::parse_from_str(LATEST_REV_DATE, "%Y-%m-%d")
-                .unwrap(),
-*/
+/// supported `Cggtts` version,
+/// non matching input files will be rejected
+const LATEST_RELEASE: &str = "2E";
+
+/// latest revision date
+const LATEST_RELEASE_DATE: &str = "2014-02-20";
 
 #[derive(Clone, Debug)]
 /// `Rcvr` describes a GNSS receiver
@@ -273,14 +274,14 @@ impl Cggtts {
         true
     }
 
-/*
-    /// Builds self from given `Cggtts` file.
-    pub fn from_file (fp: &std::path::Path) -> Result<Cggtts, Error> {
-        let file_name = fp.file_name()
+    /// Builds Self from given `Cggtts` file.
+    pub fn from_file (fp: &str) -> Result<Self, Error> {
+        // check against file naming convetion
+        let path = std::path::Path::from(fp);
+        let file_name = path.file_name()
             .unwrap()
             .to_str()
                 .unwrap();
-        // check against file naming convetion
         let file_re = Regex::new(r"(G|R|E|C|J)(S|M|Z)....[1-9][0-9]\.[0-9][0-9][0-9]")
             .unwrap();
         if !file_re.is_match(file_name) {
@@ -296,13 +297,21 @@ impl Cggtts {
             _ => return Err(Error::DateMjdFormatError),
         };
         
-        let file_content = std::fs::read_to_string(&fp).unwrap();
+        let file_content = std::fs::read_to_string(fp)
+            .unwrap();
+
         let mut lines = file_content.split("\n")
             .map(|x| x.to_string())
             //.map(|x| x.to_string() +"\n")
             //.map(|x| x.to_string() +"\r"+"\n")
                 .into_iter();
-        // version
+        
+        // init variables
+        let mut line = lines.next()
+            .unwrap();
+        let mut system_delay = SystemDelay::new();
+        
+        // VERSION must be first
         let line = lines.next()
             .unwrap();
         let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
@@ -313,60 +322,47 @@ impl Cggtts {
             },
             _ => return Err(Error::VersionFormatError),
         };
-        // crc 
-        let mut cksum: u8 = calc_crc(&line)?;
-        // rev date 
-        let line = lines.next()
-            .unwrap();
-        let rev_date: chrono::NaiveDate = match scan_fmt!(&line, "REV DATE = {}", String) {
-            Some(string) => {
-                match chrono::NaiveDate::parse_from_str(string.trim(), "%Y-%m-%d") {
-                    Ok(date) => date,
-                    _ => return Err(Error::RevisionDateParsingError),
-                }
-            },
-            _ => return Err(Error::RevisionDateFormatError),
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // rcvr
-        let line = lines.next()
-            .unwrap();
-        let rcvr: Option<Rcvr> = match line.contains("RCVR = RRRRRRRR") {
-            true => None,
-            false => {
+        
+        let mut nb_channels :u16 = 0;
+        let mut rcvr : Option<Rcvr> = None;
+        let mut ims : Option<Rcvr> = None;
+        let mut lab: Option<String> = None;
+        let mut cksum :u8 = calc_crc(&line)?;
+        let mut comments: Vec<String> = Vec::new();
+        let mut coords_ref_system : Vec<String> = None;
+        let mut time_ref: Option<String> = None;
+        let (mut x, mut y, mut z) : (f32,f32,f32) = (0.0, 0.0, 0.0);
+
+        loop {
+
+            if line.startswith("REV DATE = ") {
+                // skip that one
+            
+            } else if line.startswith("RCVR = ") {
                 match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
                     (Some(manufacturer),
                     Some(recv_type),
                     Some(serial_number),
                     Some(year),
-                    Some(software_number)) => Some(Rcvr{
-                        manufacturer, 
-                        recv_type, 
-                        serial_number, 
-                        year: u16::from_str_radix(&year, 10)?, 
-                        software_number
-                    }),
-                    _ => return Err(Error::RcvrFormatError),
+                    Some(software_number)) => {
+                        rcvr = Some(Rcvr {
+                            manufacturer, 
+                            recv_type, 
+                            serial_number, 
+                            year: u16::from_str_radix(&year, 10)?, 
+                            software_number
+                        })
+                    },
+                    _ => {}
                 }
-            },
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // channel
-        let line = lines.next().unwrap();
-        let nb_channels: u16 = match scan_fmt!(&line, "CH = {d}", u16) {
-            Some(channel) => channel,
-            _ => return Err(Error::ChannelFormatError),
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // ims 
-        let line = lines.next()
-            .unwrap();
-        let ims : Option<Rcvr> = match line.contains("IMS = 99999") {
-            true => None,
-            false => { 
+
+            } else if line.startswith("CH = ") {
+                match scan_fmt!(&line, "CH = {d}", u16) {
+                    Some(n) => nb_channels = n,
+                    _ => {} 
+                };
+
+            } else if line.startswith("IMS = ") {
                 match scan_fmt!(&line, "IMS = {} {} {} {d} {}", String, String, String, String, String) {
                     (Some(manufacturer),
                     Some(recv_type),
@@ -380,179 +376,165 @@ impl Cggtts {
                             year: u16::from_str_radix(&year, 10)?, 
                             software_number
                         }),
-                    _ => return Err(Error::ImsFormatError),
+                    _ => {}, 
                 }
-            }
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // lab
-        let line = lines.next()
-            .unwrap();
-        let lab: String = match line.strip_prefix("LAB = ") {
-            Some(s) => String::from(s.trim()),
-            _ => return Err(Error::LabParsingError),
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // X
-        let line = lines.next().unwrap();
-        let x: f32 = match scan_fmt!(&line, "X = {f}", f32) {
-            Some(f) => f,
-            _ => return Err(Error::CoordinatesParsingError(String::from("X")))
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // Y
-        let line = lines.next()
-            .unwrap();
-        let y: f32 = match scan_fmt!(&line, "Y = {f}", f32) {
-            Some(f) => f,
-            _ => return Err(Error::CoordinatesParsingError(String::from("Y")))
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // Z
-        let line = lines.next()
-            .unwrap();
-        let z: f32 = match scan_fmt!(&line, "Z = {f}", f32) {
-            Some(f) => f,
-            _ => return Err(Error::CoordinatesParsingError(String::from("Z")))
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // frame 
-        let line = lines.next()
-            .unwrap();
-        let frame: String = match scan_fmt!(&line, "FRAME = {}", String) {
-            Some(fr) => fr,
-            _ => return Err(Error::FrameFormatError),
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // comments 
-        let line = lines.next()
-            .unwrap();
-        let comments : Option<String> = match line.contains("NO COMMENTS") {
-            true => None,
-            false => {
-                Some(String::from(line.strip_prefix("COMMENTS = ").unwrap().trim()))
-            }
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // next line
-        let mut line = lines.next()
-            .unwrap();
-        // system delays parsing
-        let mut sys_dly : Option<CalibratedDelay> = None; 
-        let mut int_dly : Option<CalibratedDelay> = None; 
-        let mut tot_dly : Option<CalibratedDelay> = None; 
-        let mut ref_dly = 0.0_f64; 
-        let mut cab_dly = 0.0_f64; 
-
-        while line.contains("DLY") {
-            // determine delay denomination
-            let label = match scan_fmt!(&line, "{} DLY =.*", String) {
-                Some(label) => label,
-                _ => return Err(Error::DelayIdentificationError(String::from(line))),
-            };
-
-            if label.eq("CAB") || label.eq("REF") { // carrier independent delay (simple)
-                // parse value
-                let start_off = line.find("=").unwrap();
-                let end_off   = line.rfind("ns").unwrap();
-                let cleanedup = &line[start_off+1..end_off];
-                let value = f64::from_str(cleanedup.trim()).unwrap();
-                if label.eq("CAB") {
-                    cab_dly = value
-                } else if label.eq("REF") {
-                    ref_dly = value
-                }
-            } else { // is carrier dependent delay
-                // 0. remove '{label} {dly} = '
-                let mut cleanedup = line.strip_prefix(&label)
-                    .unwrap();
-                cleanedup = cleanedup.strip_prefix(" DLY = ")
-                    .unwrap().trim();
-                // 1. parse CAL ID 
-                //  => for calibration report info
-                //  => then remove it to ease up last content identification
-                let offset = cleanedup.rfind("=")
-                    .unwrap();
-                let (before, after) = cleanedup.split_at(offset+1); 
-                let report = String::from(after.trim());
-                cleanedup = before.strip_suffix(" CAL_ID =")
-                    .unwrap()
-                    .trim();
-                // final delay identification
-                let (constellation, values, codes) : 
-                    (track::Constellation, Vec<f64>, Vec<String>)
-                    = match cleanedup.contains(",") 
-                {
-                    true => {
-                        // (A) dual frequency: comma separated infos
-                        let offset = cleanedup.find(",")
-                            .unwrap();
-                        let (content1, content2) = cleanedup.split_at(offset);
-                        let content2 = content2.strip_prefix(",")
-                            .unwrap()
-                            .trim();
-                        let (delay1, constellation, code1) = carrier_dependant_delay_parsing(content1)?; 
-                        let (delay2, _, code2) = carrier_dependant_delay_parsing(content2)?; 
-                        (constellation,vec![delay1,delay2],vec![code1,code2]) //codes)
+            
+            } else if line.startswith("LAB = ") {
+                match line.strip_prefix("LAB = ") {
+                    Some(s) => {
+                        lab = Some(String::from(s.trim()))
                     },
-                    false => {
-                        // (B) single frequency: simple 
-                        let (delay, constellation, code) = carrier_dependant_delay_parsing(cleanedup)?;
-                        (constellation,vec![delay],vec![code])
+                    _ => {},
+                }
+            } else if line.startswith("X = ") {
+                match scan_fmt!(&line, "X = {f}", f32) {
+                    Some(f) => {
+                        x = f
+                    },
+                    _ => {},
+                }
+            } else if line.startswith("Y = ") {
+                match scan_fmt!(&line, "Y = {f}", f32) {
+                    Some(f) => {
+                        y = f
+                    },
+                    _ => {},
+                }
+            } else if line.startswith("Z = ") {
+                match scan_fmt!(&line, "Z = {f}", f32) {
+                    Some(f) => {
+                        z = f
+                    },
+                    _ => {},
+                }
+            
+            } else if line.startswith("FRAME = ") {
+                match scan_fmt!(&line, "FRAME = {}", String) {
+                    Some(fr) => {
+                        if fr.neq("?") {
+                            coords_ref_system = Some(fr)
+                        }
+                    }
+                }
+
+            } else if line.startswith("COMMENTS = ") {
+                comments.push(line.strip_prefix("COMMENTS = ")
+                    .unwrap()
+                    .trim())
+
+            } else if line.startswith("REF = ") {
+                match scan_fmt!(&line, "REF = {}", String) {
+                    Some(s) => {
+                        time_ref = Some(s) 
+                    },
+                    _ => {},
+                }
+
+            } else if line.contains("DLY = ") {
+
+                // determine delay denomination
+                let label : String = match scan_fmt!(&line, "{} DLY =.*", String) {
+                    Some(l) => l,
+                    _ => return Err(Error::DelayIdentificationError(String::from(line))),
+                };
+
+                // currently we do not support separate values
+                // for two carrier and different System delay values.
+                // We grab all delay values, treat them as single carrier,
+                // and possible second carrier for delays like SYS DLY are left out
+                let start_off = line.find("=").unwrap();
+                let end_off   = line.lfind("ns").unwrap();
+                let data = &line[start_off+1..end_off];
+                let value = f64::from_str(data.trim())?;
+
+                let delay : Delay = match label {
+                    "CAB" => {
+                        system_delay.add_delay(
+                            CalibratedDelay {
+                                delay: Delay::RfCable(value),
+                                constellation: Constellation::Mixed,
+                                info: None,
+                            }
+                        )
+                    },
+                    "REF" => {
+                        system_delay.add_delay(
+                            CalibratedDelay {
+                                delay: Delay::Internal(value),
+                                constellation: Constellation::Mixed,
+                                info: None,
+                            }
+                        )
+                    },
+                    "SYS" => {
+                        
+                        system_delay.add_delay(
+                            CalibratedDelay {
+                                delay: Delay::Internal(value),
+                                constellation: Constellation::Mixed,
+                                info: None,
+                            }
+                        )
+                    },
+                    "INT" => {
+                        system_delay.add_delay(
+                            CalibratedDelay {
+                                delay: Delay::Internal(value),
+                                constellation: Constellation::Mixed,
+                                info: None,
+                            }
+                        )
+                    },
+                    "TOT" => {
+                        // special case, Total delay is given,
+                        // assumes all other delays are not known
+                        system_delay.add_delay(
+                            CalibratedDelay { // we declare it as RfCable arbitrarily,
+                                delay: Delay::RfCable(value), // which is convenient because it is
+                                constellation: Constellation::Mixed, // not constellation dependent
+                                info: None,
+                            }
+                        )
                     }
                 };
-                // mapp to corresponding structure
-                if label.eq("TOT") {
-                    tot_dly = Some(CalibratedDelay::new(constellation, values, codes, Some(&report)))
-                } else if label.eq("SYS") {
-                    sys_dly = Some(CalibratedDelay::new(constellation, values, codes, Some(&report)))
-                } else if label.eq("INT") {
-                    int_dly = Some(CalibratedDelay::new(constellation, values, codes, Some(&report)))
-                }
+            
+            } else if line.startswith("CKSUM = ") {
+
+                let ck :u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
+                    Some(s) => {
+                        match u8::from_str_radix(&s, 16) {
+                            Ok(hex) => hex,
+                            _ => return Err(Error::ChecksumParsingError),
+                        }
+                    },
+                    _ => return Err(Error::ChecksumFormatError),
+                };
+                
+                // check CRC
+                let end_pos = line.find("= ")
+                    .unwrap();
+                cksum = cksum.wrapping_add(
+                    calc_crc(
+                        &line.split_at(end_pos+2).0)?);
+        
+                //if cksum != ck {
+                //    return Err(Error::ChecksumError(ck, cksum))
+                //}
+                break
             }
 
-            // crc
+            // CRC
             cksum = cksum.wrapping_add(
                 calc_crc(&line)?);
-            // grab next
-            line = lines.next()
-                .unwrap();
+            
+            if let Some(l) = lines.next() {
+                line = l 
+            } else {
+                break
+            }
         }
-        let reference: String = match scan_fmt!(&line, "REF = {}", String) {
-            Some(string) => string,
-            _ => return Err(Error::ReferenceFormatError),
-        };
-        // crc
-        cksum = cksum.wrapping_add(calc_crc(&line)?);
-        // checksum
-        let line = lines.next().unwrap();
-        let ck : u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
-            Some(s) => {
-                match u8::from_str_radix(&s, 16) {
-                    Ok(hex) => hex,
-                    _ => return Err(Error::ChecksumParsingError),
-                }
-            },
-            _ => return Err(Error::ChecksumFormatError),
-        };
-        // final crc
-        let end_pos = line.find("= ")
-            .unwrap(); // already matching
-        cksum = cksum.wrapping_add(
-            calc_crc(
-                &line.split_at(end_pos+2).0)?);
-        // checksum verification
-        //if cksum != ck {
-        //    return Err(Error::ChecksumError(ck, cksum))
-        //}
-        /* blank lines */
+        
+        // BLANKS 
         let _ = lines.next().unwrap(); // Blank
         let _ = lines.next().unwrap(); // labels
         let _ = lines.next().unwrap(); // units currently discarded
@@ -572,25 +554,24 @@ impl Cggtts {
         }
 
         Ok(Cggtts {
-            version: VERSION.to_string(),
-            rev_date,
             date: julianday::JulianDay::new(((mjd * 1000.0) + 2400000.5) as i32).to_date(),
             nb_channels,
             rcvr,
             ims,
             lab,
-            coordinates: (x,y,z), 
-            frame,
+            coordinates: rust_3d::Point3D {
+                x,
+                y,
+                z,
+            },
+            coords_ref_system,
             comments,
-            tot_dly, 
-            int_dly,
-            cab_dly,
-            sys_dly,
-            ref_dly,
             reference,
             tracks
         })
     }
+    
+/*
     /// Writes self into a `Cggtts` file
     pub fn to_file (&self, fp: &str) -> Result<(), Error> {
         let mut content = String::new();

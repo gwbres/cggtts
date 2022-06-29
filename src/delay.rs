@@ -16,6 +16,8 @@ pub enum Delay {
     RfCable(f64),
     /// `Reference` delay
     Reference(f64),
+    /// `System` delay
+    System(f64),
 }
 
 impl Default for Delay {

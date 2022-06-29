@@ -16,3 +16,4 @@ kind of delay is already declared, or overwrite previous value
  - [x] file must comply with advanced delay knowledge 
  - [ ] frame descriptor must be parsed & used 
  - [ ] improve Delay definitions, we must have a SystemDelay for both carrier frequencies
+       Ref and RfCable are carrier independent and should be copied accross all carriers

@@ -25,6 +25,13 @@ information and measurement data. It is a file parser (reader) and producer
 * [Tracks](doc/track.md) are actual `Cggtts` measurements
 * [Delay](doc/delay.md) represent the measurement internal delays
 
+## parser
+
+* file naming conventions must be respected.
+* We tolerate fields /lines order of apperance (only in header section) to differ
+from BIPM examples, except for first line (header introduction).
+* revision must be 2E or we reject the given file
+
 ### Cggtts file analysis
 
 Retrieve data from a local CGGTTS compliant file:
