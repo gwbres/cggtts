@@ -27,11 +27,16 @@ const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
 /// (hardware). Used to describe the
 /// GNSS receiver or hardware used to evaluate IMS parameters
 pub struct Rcvr {
-    manufacturer: String,
-    recv_type: String,
-    serial_number: String,
-    year: u16,
-    software_number: String,
+    /// Manufacturer of this hardware
+    pub manufacturer: String,
+    /// Type of receiver
+    pub recv_type: String,
+    /// Receiver's serial number
+    pub serial_number: String,
+    /// Receiver manufacturing year
+    pub year: u16,
+    /// Receiver software revision number
+    pub release: String,
 }
 
 #[derive(Error, Debug)]
@@ -68,7 +73,7 @@ impl std::fmt::Display for Rcvr {
         fmt.write_str(" ")?;
         fmt.write_str(&self.year.to_string())?;
         fmt.write_str(" ")?;
-        fmt.write_str(&self.software_number)?;
+        fmt.write_str(&self.release)?;
         Ok(())
     }
 }
@@ -88,10 +93,10 @@ pub struct Cggtts {
     /// IMS Ionospheric Measurement System (if any)
     pub ims: Option<Rcvr>, 
     /// Description of Reference time system (if any)
-    pub time_ref_system: Option<String>, 
-    /// Spacial reference used in Coordinates, (if any),
-    /// ITRF is prefered
-    pub coords_ref_system: Option<String>,
+    pub time_reference: Option<String>, 
+    /// Reference frame, coordinates system and conversions,
+    /// used in `coordinates` field
+    pub reference_frame: Option<String>,
     /// Antenna phase center coordinates [m]
     /// in `ITFR`, `ECEF` or other spatial systems
     pub coordinates: rust_3d::Point3D, 
@@ -175,8 +180,8 @@ impl Default for Cggtts {
             rcvr: None,
             tracks: Vec::new(),
             ims: None, 
-            coords_ref_system: None,
-            time_ref_system: None,
+            reference_frame: None,
+            time_reference: None,
             comments: None,
             delay: SystemDelay::new(), 
         }
@@ -250,16 +255,16 @@ impl Cggtts {
     }
     
     /// Returns `Cggtts` with desired reference time system description 
-    pub fn with_time_reference_system (&self, reference: &str) -> Self { 
+    pub fn with_time_reference (&self, reference: &str) -> Self { 
         let mut c = self.clone();
-        c.time_ref_system = Some(reference.to_string());
+        c.time_reference = Some(reference.to_string());
         c
     }
 
-    /// Returns `Cggtts` with desired Coordinates reference system
-    pub fn with_coords_reference_system (&self, reference: &str) -> Self {
+    /// Returns `Cggtts` with desired Reference Frame 
+    pub fn with_reference_frame (&self, reference: &str) -> Self {
         let mut c = self.clone();
-        c.coords_ref_system = Some(reference.to_string());
+        c.reference_frame = Some(reference.to_string());
         c
     }
 
@@ -329,28 +334,26 @@ impl Cggtts {
         let mut lab: Option<String> = None;
         let mut cksum :u8 = calc_crc(&line)?;
         let mut comments: Vec<String> = Vec::new();
-        let mut coords_ref_system : Option<String> = None;
-        let mut time_ref_system: Option<String> = None;
+        let mut reference_frame: Option<String> = None;
+        let mut time_reference : Option<String> = None;
         let (mut x, mut y, mut z) : (f64,f64,f64) = (0.0, 0.0, 0.0);
 
         loop {
-
             if line.starts_with("REV DATE = ") {
-                // skip that one
-            
+                // skip that one            
             } else if line.starts_with("RCVR = ") {
                 match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
                     (Some(manufacturer),
                     Some(recv_type),
                     Some(serial_number),
                     Some(year),
-                    Some(software_number)) => {
+                    Some(release)) => {
                         rcvr = Some(Rcvr {
                             manufacturer, 
                             recv_type, 
                             serial_number, 
                             year: u16::from_str_radix(&year, 10)?, 
-                            software_number
+                            release, 
                         })
                     },
                     _ => {}
@@ -368,13 +371,13 @@ impl Cggtts {
                     Some(recv_type),
                     Some(serial_number),
                     Some(year),
-                    Some(software_number)) => { 
+                    Some(release)) => { 
                         rcvr = Some(Rcvr {
                             manufacturer, 
                             recv_type, 
                             serial_number, 
                             year: u16::from_str_radix(&year, 10)?, 
-                            software_number,
+                            release,
                         })
                     },
                     _ => {}, 
@@ -413,7 +416,7 @@ impl Cggtts {
                 match scan_fmt!(&line, "FRAME = {}", String) {
                     Some(fr) => {
                         if !fr.trim().eq("?") {
-                            coords_ref_system = Some(fr)
+                            reference_frame = Some(fr)
                         }
                     },
                     _ => {},
@@ -428,7 +431,7 @@ impl Cggtts {
             } else if line.starts_with("REF = ") {
                 match scan_fmt!(&line, "REF = {}", String) {
                     Some(s) => {
-                        time_ref_system = Some(s) 
+                        time_reference = Some(s) 
                     },
                     _ => {},
                 }
@@ -463,17 +466,16 @@ impl Cggtts {
                     "REF" => {
                         system_delay.add_delay(
                             CalibratedDelay {
-                                delay: Delay::Internal(value),
+                                delay: Delay::Reference(value),
                                 constellation: Constellation::Mixed,
                                 info: None,
                             }
                         )
                     },
                     "SYS" => {
-                        
                         system_delay.add_delay(
                             CalibratedDelay {
-                                delay: Delay::Internal(value),
+                                delay: Delay::System(value),
                                 constellation: Constellation::Mixed,
                                 info: None,
                             }
@@ -563,7 +565,7 @@ impl Cggtts {
             rcvr,
             ims,
             lab,
-            coords_ref_system,
+            reference_frame,
             coordinates: rust_3d::Point3D {
                 x,
                 y,
@@ -577,7 +579,7 @@ impl Cggtts {
                 }
             },
             delay: system_delay,
-            time_ref_system,
+            time_reference,
             tracks
         })
     }
