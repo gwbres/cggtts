@@ -1,12 +1,12 @@
-Delay: measurement system's delay 
+Delay: measurement systems delay 
 =================================
 
-`delay.rs` exposes two structures
+`delay.rs` exposes several structures
 
 * `Delay` : a generic delay value, always specified in nanoseconds
 * `CalibratedDelay`:  basically a `Delay` that was evaluated for a specific
 GNSS constellation.
-
+* `SystemDelay` : used by Cggtts to describe the measurement systems delay.
 
 ### System delays
 
