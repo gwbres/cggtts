@@ -15,14 +15,15 @@ use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
 
-//mod cggtts;
 pub mod delay;
 pub mod track;
+pub mod cggtts;
 
 pub use crate::{
     delay::Delay,
     delay::CalibratedDelay,
     track::Track,
+    cggtts::Cggtts,
 };
 
 /// supported `Cggtts` version,
