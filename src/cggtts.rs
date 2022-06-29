@@ -6,8 +6,6 @@ use std::str::FromStr;
 use scan_fmt::scan_fmt;
 use rinex::Constellation;
 
-//use crate::LATEST_REVISION;
-//use crate::LATEST_RELEASE_DATE;
 use crate::{Track, Delay, delay::SystemDelay, CalibratedDelay};
 
 /// supported `Cggtts` version,
@@ -16,6 +14,13 @@ const LATEST_RELEASE: &str = "2E";
 
 /// latest revision date
 const LATEST_RELEASE_DATE: &str = "2014-02-20";
+
+/// labels in case we provide Ionospheric parameters estimates
+const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
+"SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
+
+const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
+"SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
 
 #[derive(Clone, Debug)]
 /// `Rcvr` describes a GNSS receiver
@@ -36,7 +41,7 @@ pub enum CrcError {
 }
 
 /// computes crc for given str content
-fn calc_crc (content: &str) -> Result<u8, CrcError> {
+pub fn calc_crc (content: &str) -> Result<u8, CrcError> {
     match content.is_ascii() {
         true => {
             let mut ck: u8 = 0;
