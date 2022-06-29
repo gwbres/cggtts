@@ -27,7 +27,7 @@ pub use crate::{
 
 /// supported `Cggtts` version,
 /// non matching input files will be rejected
-const VERSION: &str = "2E";
+const LATEST_RELEASE: &str = "2E";
 
 /// latest revision date
-const LATEST_REV_DATE: &str = "2014-02-20";
+const LATEST_RELEASE_DATE: &str = "2014-02-20";
