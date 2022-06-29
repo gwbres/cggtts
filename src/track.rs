@@ -2,19 +2,12 @@ use regex::Regex;
 use chrono::Timelike;
 use thiserror::Error;
 use rinex::{Constellation, Sv};
-//use crate::{CrcError, calc_crc};
+use crate::cggtts::{CrcError, calc_crc};
 
 /// `BIPM` tracking duration specifications.
 /// `Cggtts` tracks must respect that duration
 /// to be BIPM compliant, which is not mandatory 
 const BIPM_SPECIFIED_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
-
-/// labels in case we provide Ionospheric parameters estimates
-const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
-"SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
-
-const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
-"SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 /// Describes whether this common view is based on a unique 
@@ -28,98 +21,26 @@ pub enum CommonViewClass {
 }
 
 /// Describes Glonass Frequency channel,
-/// Constellation codes, refer to
-/// `RINEX` denominations
-#[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum ConstellationRinexCode {
-    GPS_GLO_QZ_SBA_L1C,
-    GPS_GLO_L1P,
-    GAL_E1,
-    QZSS_L1C,
-    BEIDOU_B1i,
-    GPS_C1_P1C2_P2,
-    GAL_E1E5a,
-    BEIDOU_BliB2i,
-    GLO_C1_P1C2_P2,
-    GZSS_C1C5,
-    NonSupportedCode,
-}
-
-impl std::fmt::Display for ConstellationRinexCode {
-    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let s = match self {
-            ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C => String::from("L1C"),
-            ConstellationRinexCode::GPS_GLO_L1P => String::from("L1P"),
-            ConstellationRinexCode::GAL_E1 => String::from("E1C"),
-            ConstellationRinexCode::GAL_E1E5a => String::from("E5C"),
-            ConstellationRinexCode::QZSS_L1C => String::from("Q1C"),
-            ConstellationRinexCode::BEIDOU_B1i => String::from("B1C"),
-            ConstellationRinexCode::BEIDOU_BliB2i => String::from("B1C"),
-            ConstellationRinexCode::GPS_C1_P1C2_P2 => String::from("P1C"),
-            ConstellationRinexCode::GLO_C1_P1C2_P2 => String::from("Q5C"),
-            ConstellationRinexCode::GZSS_C1C5 => String::from("Q5C"),
-            ConstellationRinexCode::NonSupportedCode => String::from("???"),
-        };
-        fmt.write_str(&s)
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum ConstellationRinexCodeError {
-    #[error("unknown constellation code '{0}'")]
-    UnknownCode(String),
-}
-
-impl std::str::FromStr for ConstellationRinexCode {
-    type Err = ConstellationRinexCodeError;   
-    fn from_str (s: &str) -> Result<Self, Self::Err> {
-        if s.eq("L1C") {
-            Ok(ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C)
-        } else if s.eq("L1P") {
-            Ok(ConstellationRinexCode::GPS_GLO_L1P)
-        } else if s.eq("E1") {
-            Ok(ConstellationRinexCode::GAL_E1)
-        } else if s.eq("L1C") {
-            Ok(ConstellationRinexCode::QZSS_L1C)
-        } else if s.eq("B1i") {
-            Ok(ConstellationRinexCode::BEIDOU_B1i)
-        } else if s.eq("L3P") {
-            Ok(ConstellationRinexCode::GPS_C1_P1C2_P2)
-        } else if s.eq("L3E") {
-            Ok(ConstellationRinexCode::GPS_C1_P1C2_P2)
-        } else if s.eq("L3B") {
-            Ok(ConstellationRinexCode::GAL_E1E5a)
-        } else if s.eq("L3P") {
-            Ok(ConstellationRinexCode::BEIDOU_BliB2i)
-        } else if s.eq("L3Q") {
-            Ok(ConstellationRinexCode::GZSS_C1C5)
-        } else {
-            Err(ConstellationRinexCodeError::UnknownCode(s.to_string()))
-        }
-    }
-}
-
 /// in case this `Track` was esimated using Glonass
 #[derive(Debug, Copy, Clone)]
 pub enum GlonassChannel {
-    /// Other, default value when not using Glonass constellation
-    Other,
+    /// Default value when not using Glonass constellation
+    Unknown,
     /// Glonass Frequency channel number
     Channel(u8),
 }
 
 impl PartialEq for GlonassChannel {
-    fn eq (&self, other: &Self) -> bool {
+    fn eq (&self, rhs: &Self) -> bool {
         match self {
-            GlonassChannel::Other => {
-                match other {
-                    GlonassChannel::Other => true,
+            GlonassChannel::Unknown => {
+                match rhs {
+                    GlonassChannel::Unknown => true,
                     _ => false
                 }
             },
             GlonassChannel::Channel(c0) => {
-                match other {
+                match rhs {
                     GlonassChannel::Channel(c1) => {
                         c0 == c1
                     },
@@ -131,19 +52,16 @@ impl PartialEq for GlonassChannel {
 }
 
 impl Default for GlonassChannel {
-    /// Default Glonass Channel Other/Unused
+    /// Default Glonass Channel is `Unknown`
     fn default() -> Self {
-        Self::Other
+        Self::Unknown
     }
 }
 
-#[repr(usize)]
-enum StandardTrackLength {
-    WithoutIonospheric = 21,
-    PaddedWithoutIonospheric = 22,
-    WithIonospheric = 24,
-    PaddedWithIonospheric = 25,
-}
+const TRACK_WITH_IONOSPHERIC :usize = 24;
+const TRACK_WITHOUT_IONOSPHERIC :usize = 21;
+const PADDED_TRACK_WITHOUT_IONOSPHERIC :usize = 22;
+const PADDED_TRACK_WITH_IONOSPHERIC :usize = 25;
 
 #[derive(Debug, PartialEq, Clone)]
 /// A `Track` is a `Cggtts` measurement
@@ -196,8 +114,9 @@ pub struct Track {
     pub fr: GlonassChannel, 
     /// Receiver Hardware Channel [0:99], 0 if Unknown
     pub hc: u8, 
-    /// Constellation Carrier RINEX code
-    pub frc: ConstellationRinexCode, 
+    /// Carrier frequency standard 3 letter code,
+    /// refer to RINEX specifications for meaning
+    pub frc: String, 
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -225,20 +144,18 @@ impl Default for IonosphericData {
 pub enum Error {
     #[error("track data format mismatch")]
     InvalidDataFormatError(String),
+    #[error("failed to parse space vehicule")]
+    SvError(#[from] rinex::sv::Error),
     #[error("failed to parse int number")]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("failed to parse float number")]
     ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("failed to parse track time")]
     ChronoParseError(#[from] chrono::ParseError),
-   // #[error("unknown gnss constellation")]
-   // ConstellationError(#[from] ConstellationError),
-    #[error("unknown constellation rinex code \"{0}\"")]
-    ConstellationRinexCodeError(#[from] ConstellationRinexCodeError),
     #[error("failed to parse common view class")]
     CommonViewClassError(#[from] std::str::Utf8Error),
-    //#[error("crc calc() failed over non utf8 data: \"{0}\"")]
-    //NonAsciiData(#[from] CrcError),
+    #[error("crc calc() failed over non utf8 data: \"{0}\"")]
+    NonAsciiData(#[from] CrcError),
     #[error("checksum error - expecting \"{0}\" - got \"{1}\"")]
     ChecksumError(u8, u8),
 }
@@ -253,7 +170,7 @@ impl Track {
                 elevation: f64, azimuth: f64, refsv: f64, srsv: f64,
                     refsys: f64, srsys:f64, dsg: f64, ioe: u16, mdtr: f64,
                         smdt: f64, mdio: f64, smdi: f64, fr: GlonassChannel,
-                            hc: u8, frc: ConstellationRinexCode) -> Self {
+                            hc: u8, frc: &str) -> Self {
         Self {
             class,
             space_vehicule,
@@ -274,7 +191,7 @@ impl Track {
             ionospheric: None,
             fr,
             hc,
-            frc,
+            frc: frc.to_string(),
         }
     }
 
@@ -357,10 +274,10 @@ impl Track {
         t
     }
 
-    /// Returns a `Track` with desired Constellation RINEX code
-    pub fn with_rinex_code (&self, code: ConstellationRinexCode) -> Self {
+    /// Returns a `Track` with desired Frequency carrier code
+    pub fn with_carrier_code (&self, code: &str) -> Self {
         let mut t = self.clone();
-        t.frc = code;
+        t.frc = code.to_string();
         t
     }
     
@@ -402,7 +319,7 @@ impl Default for Track {
             smdi: 0.0_f64,
             fr: GlonassChannel::default(),
             hc: 0,
-            frc: ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C,
+            frc: String::from("XXX"), 
         }
     }
 }
@@ -454,97 +371,75 @@ impl std::fmt::Display for Track {
         fmt.write_str(&string)
     }
 }
+*/
 
-impl std::str::FromStr for CggttsTrack {
+impl std::str::FromStr for Track {
     type Err = Error; 
-    /// Builds `CggttsTrack` from given str content
+    /// Builds a `Track` from given str content
     fn from_str (line: &str) -> Result<Self, Self::Err> {
         let cleanedup = String::from(line.trim());
         let items: Vec<&str> = cleanedup.split_ascii_whitespace().collect();
-        // checking content validity
-        let content_is_valid = Regex::new(r"^(G|R|E|J|C) \d")
-            .unwrap();
-        let content_is_valid2 = Regex::new(r"^(G|R|E|J|C)\d\d")
-            .unwrap();
-        match content_is_valid.is_match(&cleanedup) {
-            false => {
-                match content_is_valid2.is_match(&cleanedup) {
-                    false => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
-                    _ => {},
-                }
-            },
-            _ => {},
-        };
-
-        // sat # prn is right padded
-        let is_single_digit_prn = Regex::new(r"^. \d")
-            .unwrap();
-        let offset : usize = match is_single_digit_prn.is_match(&cleanedup) { 
-            true => 1,
-            false => 0,
-        };
-        if items.len() != TRACK_WITH_IONOSPHERIC_LENGTH+offset {
-            if items.len() != TRACK_WITHOUT_IONOSPHERIC_LENGTH+offset {
+        if items.len() != TRACK_WITH_IONOSPHERIC {
+            if items.len() != TRACK_WITHOUT_IONOSPHERIC {
                 return Err(Error::InvalidDataFormatError(String::from(cleanedup)))
             }
         }
 
-        let constellation = Constellation::from_str(items.get(0)
-            .unwrap())?;
-        let (_, sat_id) = items.get(0).unwrap_or(&"").split_at(1);
-        let class = CommonViewClassType::from_str(items.get(1+offset).unwrap_or(&""))?;
-        let trktime = chrono::NaiveTime::parse_from_str(items.get(3+offset).unwrap_or(&""), "%H%M%S")?;
-        let duration_secs = u64::from_str_radix(items.get(4+offset).unwrap_or(&""), 10)?;
-        let elevation = f64::from_str(items.get(5+offset).unwrap_or(&""))? * 0.1;
-        let azimuth = f64::from_str(items.get(6+offset).unwrap_or(&""))? * 0.1;
-        let refsv = f64::from_str(items.get(7+offset).unwrap_or(&""))? * 0.1E-9;
-        let srsv = f64::from_str(items.get(8+offset).unwrap_or(&""))? * 0.1E-12;
-        let refsys = f64::from_str(items.get(9+offset).unwrap_or(&""))? * 0.1E-9;
-        let srsys = f64::from_str(items.get(10+offset).unwrap_or(&""))? * 0.1E-12;
-        let dsg = f64::from_str(items.get(11+offset).unwrap_or(&""))? * 0.1E-9;
-        let ioe = u16::from_str_radix(items.get(12+offset).unwrap_or(&""), 10)?;
-        let mdtr = f64::from_str(items.get(13+offset).unwrap_or(&""))? * 0.1E-9;
-        let smdt = f64::from_str(items.get(14+offset).unwrap_or(&""))? * 0.1E-12;
-        let mdio = f64::from_str(items.get(15+offset).unwrap_or(&""))? * 0.1E-9;
-        let smdi = f64::from_str(items.get(16+offset).unwrap_or(&""))? * 0.1E-12;
+        let sv = Sv::from_str(items[0])?;
+        let class = items[1];
+        let trktime = chrono::NaiveTime::parse_from_str(items[3], "%H%M%S")?;
+        let duration_secs = u64::from_str_radix(items[4], 10)?;
+        let elevation = f64::from_str(items[5])? * 0.1;
+        let azimuth = f64::from_str(items[6])? * 0.1;
+        let refsv = f64::from_str(items[7])? * 0.1E-9;
+        let srsv = f64::from_str(items[8])? * 0.1E-12;
+        let refsys = f64::from_str(items[9])? * 0.1E-9;
+        let srsys = f64::from_str(items[10])? * 0.1E-12;
+        let dsg = f64::from_str(items[11])? * 0.1E-9;
+        let ioe = u16::from_str_radix(items[12], 10)?;
+        let mdtr = f64::from_str(items[13])? * 0.1E-9;
+        let smdt = f64::from_str(items[14])? * 0.1E-12;
+        let mdio = f64::from_str(items[15])? * 0.1E-9;
+        let smdi = f64::from_str(items[16])? * 0.1E-12;
 
         let (msio, smsi, isg, fr, hc, frc, ck) : 
-            (Option<f64>,Option<f64>,Option<f64>,u8,u8,ConstellationRinexCode,u8) 
+            (Option<f64>,Option<f64>,Option<f64>,u8,u8,String,u8) 
             = match items.len() {
-                TRACK_WITHOUT_IONOSPHERIC_LENGTH => {
+                TRACK_WITHOUT_IONOSPHERIC => {
                     (None,None,None,
-                    u8::from_str_radix(items.get(17).unwrap_or(&""), 16)?, 
-                    u8::from_str(items.get(18).unwrap_or(&""))?,
-                    ConstellationRinexCode::from_str(items.get(19).unwrap_or(&""))?,
-                    u8::from_str_radix(items.get(20).unwrap_or(&""), 16)?)
+                    u8::from_str_radix(items[17], 16)?, 
+                    u8::from_str_radix(items[18], 10)?,
+                    items[19].to_string(),
+                    u8::from_str_radix(items[20], 16)?)
                 },
-                TRACK_WITH_IONOSPHERIC_LENGTH => {
-                    (Some(f64::from_str(items.get(17).unwrap_or(&""))? * 0.1E-9), 
-                    Some(f64::from_str(items.get(18).unwrap_or(&""))? * 0.1E-12), 
-                    Some(f64::from_str(items.get(19).unwrap_or(&""))? * 0.1E-9),
-                    u8::from_str_radix(items.get(20).unwrap_or(&""), 16)?, 
-                    u8::from_str_radix(items.get(21).unwrap_or(&""), 16)?,
-                    ConstellationRinexCode::from_str(items.get(22).unwrap_or(&""))?,
-                    u8::from_str_radix(items.get(23).unwrap_or(&""), 16)?)
+                TRACK_WITH_IONOSPHERIC => {
+                    (Some(f64::from_str(items[17])? * 0.1E-9), 
+                    Some(f64::from_str(items[18])? * 0.1E-12), 
+                    Some(f64::from_str(items[19])? * 0.1E-9),
+                    u8::from_str_radix(items[20], 16)?, 
+                    u8::from_str_radix(items[21], 16)?,
+                    items[22].to_string(),
+                    u8::from_str_radix(items[23], 16)?)
                 },
                 PADDED_TRACK_WITHOUT_IONOSPHERIC_LENGTH => {
                     (None,None,None,
-                    u8::from_str_radix(items.get(17+1).unwrap_or(&""), 16)?, 
-                    u8::from_str(items.get(18+1).unwrap_or(&""))?,
-                    ConstellationRinexCode::from_str(items.get(19+1).unwrap_or(&""))?,
-                    u8::from_str_radix(items.get(20+1).unwrap_or(&""), 16)?)
+                    u8::from_str_radix(items[17+1], 16)?, 
+                    u8::from_str(items[18+1])?,
+                    items[19+1].to_string(),
+                    u8::from_str_radix(items[20+1], 16)?)
                 },
                 PADDED_TRACK_WITH_IONOSPHERIC_LENGTH => {
-                    (Some(f64::from_str(items.get(17+1).unwrap_or(&""))? * 0.1E-9), 
-                    Some(f64::from_str(items.get(18+1).unwrap_or(&""))? * 0.1E-12), 
-                    Some(f64::from_str(items.get(19+1).unwrap_or(&""))? * 0.1E-9),
-                    u8::from_str_radix(items.get(20+1).unwrap_or(&""), 16)?, 
-                    u8::from_str_radix(items.get(21+1).unwrap_or(&""), 16)?,
-                    ConstellationRinexCode::from_str(items.get(22+1).unwrap_or(&""))?,
-                    u8::from_str_radix(items.get(23+1).unwrap_or(&""), 16)?)
+                    (Some(f64::from_str(items[17+1])? * 0.1E-9), 
+                    Some(f64::from_str(items[18+1])? * 0.1E-12), 
+                    Some(f64::from_str(items[19+1])? * 0.1E-9),
+                    u8::from_str_radix(items[20+1], 16)?, 
+                    u8::from_str_radix(items[21+1], 16)?,
+                    items[22+1].to_string(),
+                    u8::from_str_radix(items[23+1], 16)?)
                 },
                 _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
         };
+
         // checksum field
         let mut cksum: u8 = 0;
         let end_pos = line.rfind(&format!("{:2X}",ck))
@@ -557,10 +452,21 @@ impl std::str::FromStr for CggttsTrack {
             return Err(Error::ChecksumError(cksum, ck))
         }
 
-        Ok(CggttsTrack {
-            constellation,
-            sat_id: u8::from_str_radix(sat_id, 10).unwrap_or(0),
-            class,
+        Ok(Track {
+            class: {
+                if class.eq("99") || class.eq("FF") {
+                    CommonViewClass::Combination(sv.constellation)
+                } else {
+                    CommonViewClass::Single(sv.clone())
+                }
+            },
+            space_vehicule: {
+                if class.eq("99") {
+                    None
+                } else {
+                    Some(sv.clone())
+                }
+            },
             trktime,
             duration: std::time::Duration::from_secs(duration_secs),
             elevation,
@@ -575,12 +481,26 @@ impl std::str::FromStr for CggttsTrack {
             smdt,
             mdio,
             smdi,
-            msio,
-            smsi,
-            isg,
-            fr,
+            ionospheric: {
+                if let (Some(msio), Some(smsi), Some(isg)) = (msio, smsi, isg) {
+                    Some(IonosphericData {
+                        msio,
+                        smsi,
+                        isg,
+                    })
+                } else {
+                    None
+                }
+            },
+            fr: {
+                if fr == 0 {
+                    GlonassChannel::Unknown
+                } else {
+                    GlonassChannel::Channel(fr)
+                }
+            },
             hc,
-            frc
+            frc,
         })
     }
-}*/
+}
