@@ -1,78 +1,33 @@
 use regex::Regex;
-use thiserror::Error;
 use chrono::Timelike;
-
-use crate::{CrcError, calc_crc};
+use thiserror::Error;
+use rinex::{Constellation, Sv};
+//use crate::{CrcError, calc_crc};
 
 /// `BIPM` tracking duration specifications.
 /// `Cggtts` tracks must respect that duration
 /// to be BIPM compliant, which is not mandatory 
-pub const BIPM_SPECIFIED_TRACKING_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
+const BIPM_SPECIFIED_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
 
 /// labels in case we provide Ionospheric parameters estimates
-pub const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
+const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
 "SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
 
-pub const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
+const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
 "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
 
-/// Describes all known GNSS constellations
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Constellation {
-    GPS,
-    Glonass,
-    Beidou,
-    QZSS,
-    Galileo,
-    Mixed,
+#[derive(PartialEq, Clone, Copy, Debug)]
+/// Describes whether this common view is based on a unique 
+/// Space Vehicule or a combination of several vehicules
+pub enum CommonViewClass {
+    /// Single Space Vehicule used in measurement
+    Single(Sv),
+    /// Multiple Space Vehicules from the same constellation
+    /// used in measurement
+    Combination(Constellation),
 }
 
-impl Default for Constellation {
-    fn default() -> Constellation {
-        Constellation::GPS
-    }
-}
-
-impl std::fmt::Display for Constellation {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Constellation::GPS => fmt.write_str("GPS"),
-            Constellation::Glonass => fmt.write_str("GLO"),
-            Constellation::Beidou => fmt.write_str("BDS"),
-            Constellation::QZSS => fmt.write_str("QZS"),
-            Constellation::Galileo => fmt.write_str("GAL"),
-            _ => fmt.write_str("M"),
-        }
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum ConstellationError {
-    #[error("unknown constellation '{0}'")]
-    UnknownConstellation(String),
-}
-
-impl std::str::FromStr for Constellation {
-    type Err = ConstellationError;
-    fn from_str (s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("G") {
-            Ok(Constellation::GPS)
-        } else if s.starts_with("E") {
-            Ok(Constellation::Galileo)
-        } else if s.starts_with("R") {
-            Ok(Constellation::Glonass)
-        } else if s.starts_with("J") {
-            Ok(Constellation::QZSS)
-        } else if s.starts_with("C") {
-            Ok(Constellation::Beidou)
-        } else if s.starts_with("M") {
-            Ok(Constellation::Mixed)
-        } else {
-            Err(ConstellationError::UnknownConstellation(s.to_string()))
-        }
-    }
-}
-
+/// Describes Glonass Frequency channel,
 /// Constellation codes, refer to
 /// `RINEX` denominations
 #[allow(non_camel_case_types)]
@@ -145,65 +100,123 @@ impl std::str::FromStr for ConstellationRinexCode {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-/// `CommonViewClassType` describes
-/// whether this common view is based on a unique 
-/// Satellite Vehicule, or a combination of SVs
-enum CommonViewClassType {
-    SingleFile,
-    MultiFiles,
+/// in case this `Track` was esimated using Glonass
+#[derive(Debug, Copy, Clone)]
+pub enum GlonassChannel {
+    /// Other, default value when not using Glonass constellation
+    Other,
+    /// Glonass Frequency channel number
+    Channel(u8),
 }
 
-impl std::str::FromStr for CommonViewClassType {
-    type Err = std::str::Utf8Error;
-    fn from_str (s: &str) -> Result<Self, Self::Err> {
-        if s.eq("FF") {
-            Ok(CommonViewClassType::MultiFiles)
-        } else {
-            Ok(CommonViewClassType::SingleFile)
+impl PartialEq for GlonassChannel {
+    fn eq (&self, other: &Self) -> bool {
+        match self {
+            GlonassChannel::Other => {
+                match other {
+                    GlonassChannel::Other => true,
+                    _ => false
+                }
+            },
+            GlonassChannel::Channel(c0) => {
+                match other {
+                    GlonassChannel::Channel(c1) => {
+                        c0 == c1
+                    },
+                    _ => false,
+                }
+            }
         }
     }
 }
 
-const TRACK_WITH_IONOSPHERIC_LENGTH           : usize = 24;
-const PADDED_TRACK_WITH_IONOSPHERIC_LENGTH    : usize = 25;
-const TRACK_WITHOUT_IONOSPHERIC_LENGTH        : usize = 21;
-const PADDED_TRACK_WITHOUT_IONOSPHERIC_LENGTH : usize = 22;
+impl Default for GlonassChannel {
+    /// Default Glonass Channel Other/Unused
+    fn default() -> Self {
+        Self::Other
+    }
+}
 
-#[derive(Debug, Clone)]
-/// `CggttsTrack` describes a `Cggtts` measurement
-pub struct CggttsTrack {
-    constellation: Constellation,
-    sat_id: u8,
-    class: CommonViewClassType,
-    trktime: chrono::NaiveTime, // Tracking start date (hh:mm:ss)
-    duration: std::time::Duration, // Tracking duration
-    elevation: f64, // Elevation (angle) at Tracking midpoint [in degrees]
-    azimuth: f64, // Azimuth (angle) at Tracking midpoint [in degrees]
-    refsv: f64,
-    srsv: f64,
-    refsys: f64,
-    srsys: f64,
-    // DSG [Data Sigma]
-    // Root-mean-square of the residuals to linear fit from solution B in section 2.3.3
-    dsg: f64,
-    // IOE [Issue of Ephemeris]
-    // Three-digit decimal code indicating the ephemeris used for the computation.
-    // As no IOE is associated with the GLONASS navigation messages, the values 1-96 have to be
-    // used to indicate the date of the ephemeris used, given by the number of the quarter of an hour in
-    // the day, starting at 1=00h00m00s. For BeiDou, IOE will report the integer hour in the date of the
-    // ephemeris (Time of Clock).
-    ioe: u16,
-    mdtr: f64, // Modeled tropospheric delay corresponding to the solution C in section 2.3.3
-    smdt: f64, // Slope of the modeled tropospheric delay corresponding to the solution C in section 2.3.3
-    mdio: f64, // Modelled ionospheric delay corresponding to the solution D in section 2.3.3.
-    smdi: f64, // Slope of the modelled ionospheric delay corresponding to the solution D in section 2.3.3.
-    msio: Option<f64>, // Measured ionospheric delay corresponding to the solution E in section 2.3.3.
-    smsi: Option<f64>, // Slope of the measured ionospheric delay corresponding to the solution E in section 2.3.3.
-    isg: Option<f64>, // [Ionospheric Sigma] Root-mean-square of the residuals corresponding to the solution E in section2.3.3
-    fr: u8, // Glonass Channel Frequency [1:24], O for other GNSS
-    hc: u8, // Receiver Hardware Channel [0:99], 0 if Unknown
-    frc: ConstellationRinexCode 
+#[repr(usize)]
+enum StandardTrackLength {
+    WithoutIonospheric = 21,
+    PaddedWithoutIonospheric = 22,
+    WithIonospheric = 24,
+    PaddedWithIonospheric = 25,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+/// A `Track` is a `Cggtts` measurement
+pub struct Track {
+    /// Common view class.
+    /// Most of the time, `Tracks` are estimated
+    /// using a combination of Spave Vehicules
+    pub class: CommonViewClass,
+    /// Tracking start date (hh:mm:ss)
+    pub trktime: chrono::NaiveTime, 
+    /// Tracking duration
+    pub duration: std::time::Duration, 
+    /// Space vehicule against which this 
+    /// measurement / track was realized.
+    /// Is only relevant, as a whole, 
+    /// if `class` is set to CommonViewClass::Single.
+    /// Refer to [class]
+    pub space_vehicule: Option<rinex::Sv>,
+    /// Elevation (angle) at Tracking midpoint [in degrees]
+    pub elevation: f64, 
+    /// Azimuth (angle) at Tracking midpoint in [degrees]
+    pub azimuth: f64, 
+    pub refsv: f64,
+    pub srsv: f64,
+    pub refsys: f64,
+    pub srsys: f64,
+    /// Data signma (`DSG`)
+    /// Root-mean-square of the residuals to linear fit from solution B in section 2.3.3
+    pub dsg: f64,
+    /// Issue of Ephemeris (`IOE`),
+    /// Three-digit decimal code indicating the ephemeris used for the computation.
+    /// As no IOE is associated with the GLONASS navigation messages, the values 1-96 have to be
+    /// used to indicate the date of the ephemeris used, given by the number of the quarter of an hour in
+    /// the day, starting at 1=00h00m00s. For BeiDou, IOE will report the integer hour in the date of the
+    /// ephemeris (Time of Clock).
+    pub ioe: u16,
+    /// Modeled tropospheric delay corresponding to the solution C in section 2.3.3
+    pub mdtr: f64, 
+    /// Slope of the modeled tropospheric delay corresponding to the solution C in section 2.3.3
+    pub smdt: f64, 
+    /// Modelled ionospheric delay corresponding to the solution D in section 2.3.3.
+    pub mdio: f64, 
+    /// Slope of the modelled ionospheric delay corresponding to the solution D in section 2.3.3.
+    pub smdi: f64, 
+    /// Optionnal Ionospheric Data
+    pub ionospheric: Option<IonosphericData>,
+    /// Glonass Channel Frequency [1:24], O for other GNSS
+    pub fr: GlonassChannel, 
+    /// Receiver Hardware Channel [0:99], 0 if Unknown
+    pub hc: u8, 
+    /// Constellation Carrier RINEX code
+    pub frc: ConstellationRinexCode, 
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct IonosphericData {
+    /// Measured ionospheric delay corresponding to the solution E in section 2.3.3.
+    pub msio: f64, 
+    /// Slope of the measured ionospheric delay corresponding to the solution E in section 2.3.3.
+    pub smsi: f64, 
+    /// [Ionospheric Sigma] Root-mean-square of the residuals corresponding to the solution E in section2.3.3
+    pub isg: f64, 
+}
+
+impl Default for IonosphericData {
+    /// Builds Null Ionospheric Parameter estimates
+    fn default() -> Self {
+        Self {
+            msio: 0.0,
+            smsi: 0.0,
+            isg: 0.0,
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -216,106 +229,163 @@ pub enum Error {
     ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("failed to parse track time")]
     ChronoParseError(#[from] chrono::ParseError),
-    #[error("unknown gnss constellation")]
-    ConstellationError(#[from] ConstellationError),
+   // #[error("unknown gnss constellation")]
+   // ConstellationError(#[from] ConstellationError),
     #[error("unknown constellation rinex code \"{0}\"")]
     ConstellationRinexCodeError(#[from] ConstellationRinexCodeError),
     #[error("failed to parse common view class")]
     CommonViewClassError(#[from] std::str::Utf8Error),
-    #[error("crc calc() failed over non utf8 data: \"{0}\"")]
-    NonAsciiData(#[from] CrcError),
+    //#[error("crc calc() failed over non utf8 data: \"{0}\"")]
+    //NonAsciiData(#[from] CrcError),
     #[error("checksum error - expecting \"{0}\" - got \"{1}\"")]
     ChecksumError(u8, u8),
 }
 
-impl CggttsTrack {
-    /// Builds `CggttsTrack` object with
-    /// default attributes
-    pub fn new() -> CggttsTrack { Default::default() }
-
-    /// Returns track start time
-    pub fn get_start_time (&self) -> chrono::NaiveTime { self.trktime }
-    /// Returns track duration
-    pub fn get_duration (&self) -> std::time::Duration { self.duration }
-    /// Assigns track duration
-    pub fn set_duration (&mut self, duration: std::time::Duration) { self.duration = duration }
-
-    /// Returns satellite vehicule ID (PRN#),
-    /// returns 0xFF in case we're using a combination of SVs
-    pub fn get_satellite_id (&self) -> u8 { self.sat_id }
-    /// Assigns satellite vehicule ID (PRN#),
-    /// set 0xFF when using a combination of SVs
-    pub fn set_satellite_id (&mut self, id: u8) { self.sat_id = id }
-    
-    /// Returns elevation at tracking midpoint [degrees] 
-    pub fn get_elevation (&self) -> f64 { self.elevation }
-    /// Sets elevation at tracking midpoint [degrees] 
-    pub fn set_elevation (&mut self, elevation: f64) { self.elevation = elevation }
-
-    /// Returns azimuth angle [degrees] at tracking midpoint 
-    pub fn get_azimuth (&self) -> f64 { self.azimuth }
-    /// Sets azimuth angle [degrees] at tracking midpoint 
-    pub fn set_azimuth (&mut self, azimuth: f64) { self.azimuth = azimuth }
-
-    /// Returns constellation RINEX code
-    pub fn get_constellation_rinex_code (&self) -> ConstellationRinexCode { self.frc }
-    /// Assigns constellation RINEX code
-    pub fn set_constellation_rinex_code (&mut self, code: ConstellationRinexCode) { self.frc = code }
-    
-    /// Returns track (refsv, srsv) duplet
-    pub fn get_refsv_srsv (&self) -> (f64, f64) { (self.refsv, self.srsv) }
-    /// Assigns track (refsv, srsv) duplet
-    pub fn set_refsv_srsv (&mut self, data: (f64, f64)) { 
-        self.refsv = data.0;
-        self.srsv = data.1
-    }
-
-    /// Returns track (refsys, srsys) duplet 
-    pub fn get_refsys_srsys (&self) -> (f64, f64) { (self.refsys, self.srsys) }
-    /// Assigns track (refsys, srsys) duplet
-    pub fn set_refsys_srsys (&mut self, data: (f64, f64)) { 
-        self.refsys = data.0;
-        self.srsys = data.1
-    }
-
-    /// Returns true if track comes with ionospheric parameters estimates
-    pub fn has_ionospheric_parameters (&self) -> bool { self.msio.is_some() && self.smsi.is_some() && self.isg.is_some() }
-    
-    /// Returns ionospheric parameters estimates (if any)
-    pub fn get_ionospheric_parameters (&self) -> Option<(f64, f64, f64)> {
-        if self.has_ionospheric_parameters() {
-            Some((self.msio.unwrap(),self.smsi.unwrap(),self.isg.unwrap()))
-        } else {
-            None
+impl Track {
+    /// Builds a new CGGTTS measurement, referred to as `Track`,
+    /// without known Ionospheric parameters. 
+    /// To add Ionospheric data, use `with_ionospheric_data()` later on
+    pub fn new (class: CommonViewClass,
+            trktime: chrono::NaiveTime, duration: std::time::Duration,
+                space_vehicule: Option<rinex::Sv>,
+                elevation: f64, azimuth: f64, refsv: f64, srsv: f64,
+                    refsys: f64, srsys:f64, dsg: f64, ioe: u16, mdtr: f64,
+                        smdt: f64, mdio: f64, smdi: f64, fr: GlonassChannel,
+                            hc: u8, frc: ConstellationRinexCode) -> Self {
+        Self {
+            class,
+            space_vehicule,
+            trktime,
+            duration,
+            elevation,
+            azimuth,
+            refsv,
+            srsv,
+            refsys,
+            srsys,
+            dsg,
+            ioe,
+            mdtr,
+            smdt,
+            mdio,
+            smdi,
+            ionospheric: None,
+            fr,
+            hc,
+            frc,
         }
     }
+
+    /// Returns a new `Track` with given Ionospheric parameters,
+    /// if parameters were previously assigned, they get overwritten)
+    pub fn with_ionospheric_data (&self, data: IonosphericData) -> Self {
+        let mut t = self.clone();
+        t.ionospheric = Some(data);
+        t
+    }
+
+    /// Returns a `Track` with desired duration
+    pub fn with_duration (&self, duration: std::time::Duration) -> Self {
+        let mut t = self.clone();
+        t.duration = duration;
+        t
+    }
+
+    /// Returns true if Self was estimated using a combination
+    /// of Space Vehicules
+    pub fn space_vehicule_combination (&self) -> bool {
+        !self.unique_space_vehicule()
+    }
+
+    /// Returns true if Self was measured against a unique
+    /// Space Vehicule
+    pub fn unique_space_vehicule (&self) -> bool {
+        match self.class {
+            CommonViewClass::Single(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if Self was measured against given `GNSS` Constellation 
+    pub fn uses_constellation (&self, c: Constellation) -> bool {
+        match self.class {
+            CommonViewClass::Single(s) => {
+                s.constellation == c
+            },
+            CommonViewClass::Combination(constell) => {
+                constell == c
+            },
+        }
+    }
+
+    /// Returns true if Self was measured against specific Space Vehicule uniquely
+    pub fn uses_unique_space_vehicule (&self, sv: Sv) -> bool {
+        match self.class {
+            CommonViewClass::Single(s) => {
+                s == sv
+            },
+            _ => false,
+        }
+    }
+
+    /// Returns True if Self follows BIPM specifications / requirements,
+    /// * track pursuit duration was at least 13 * 60 sec long
+    pub fn follows_bipm_specs (&self) -> bool {
+        self.duration.as_secs() >= BIPM_SPECIFIED_DURATION.as_secs()
+    }
     
-    /// Assigns ionospheric parameters
-    /// params (MSIO, SMSI, ISG)
-    pub fn set_ionospheric_parameters (&mut self, params: (f64,f64,f64)) {
-        self.msio = Some(params.0);
-        self.smsi = Some(params.1);
-        self.isg = Some(params.2)
+    /// Returns a `Track` with desired unique space vehicule
+    pub fn with_space_vehicule (&self, sv: Sv) -> Self {
+        let mut t = self.clone();
+        t.space_vehicule = Some(sv);
+        t
+    }
+
+    /// Returns a track with desired elevation angle in Degrees
+    pub fn with_elevation (&self, elevation: f64) -> Self {
+        let mut t = self.clone();
+        t.elevation = elevation;
+        t
+    }
+
+    /// Returns a `Track` with given azimuth angle in Degrees, at tracking midpoint 
+    pub fn with_azimuth (&self, azimuth: f64) -> Self { 
+        let mut t = self.clone();
+        t.azimuth = azimuth;
+        t
+    }
+
+    /// Returns a `Track` with desired Constellation RINEX code
+    pub fn with_rinex_code (&self, code: ConstellationRinexCode) -> Self {
+        let mut t = self.clone();
+        t.frc = code;
+        t
+    }
+    
+    /// Returns true if Self comes with Ionospheric parameter estimates
+    pub fn has_ionospheric_data (&self) -> bool { 
+        self.ionospheric.is_some()
     }
 }
 
-impl Default for CggttsTrack {
-    /// Builds default `CggttsTrack` structure
-    fn default() -> CggttsTrack {
+impl Default for Track {
+    /// Builds a default `Track` (measurement) structure,
+    /// where `trktime` set to `now()` as `UTC` time,
+    /// common view is set to a combination of GPS space vehicules,
+    /// and other parameters set to defaults,
+    /// and missing Ionospheric parameter estimates.
+    fn default() -> Track {
         let now = chrono::Utc::now();
-        let msio: Option<f64> = None;
-        let smsi: Option<f64> = None;
-        let isg: Option<f64> = None;
-        CggttsTrack {
-            constellation: Constellation::GPS,
-            sat_id: 0,
-            class: CommonViewClassType::SingleFile,
+        Track {
+            space_vehicule: None,
+            class: CommonViewClass::Combination(Constellation::default()),
+            ionospheric: None,
             trktime: chrono::NaiveTime::from_hms(
                 now.time().hour(),
                 now.time().minute(),
                 now.time().second()
             ),
-            duration: std::time::Duration::from_secs(0),
+            duration: BIPM_SPECIFIED_DURATION, 
             elevation: 0.0_f64,
             azimuth: 0.0_f64,
             refsv: 0.0_f64,
@@ -328,17 +398,15 @@ impl Default for CggttsTrack {
             smdt: 0.0_f64,
             mdio: 0.0_f64,
             smdi: 0.0_f64,
-            msio,
-            smsi,
-            isg,
-            fr: 0,
+            fr: GlonassChannel::default(),
             hc: 0,
             frc: ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C,
         }
     }
 }
 
-impl std::fmt::Display for CggttsTrack {
+/*
+impl std::fmt::Display for Track {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
         match self.constellation {
@@ -513,51 +581,4 @@ impl std::str::FromStr for CggttsTrack {
             frc
         })
     }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use float_cmp::approx_eq;
-    
-    #[test]
-    /// Tests `CggttsTrack` default constructor
-    fn cggtts_track_default() {
-        let track = CggttsTrack::new();
-        assert_eq!(track.get_duration().as_secs(), 0);
-        assert_eq!(track.get_elevation(), 0.0);
-        assert_eq!(track.get_azimuth(), 0.0);
-        assert_eq!(track.get_refsv_srsv(), (0.0,0.0));
-        assert_eq!(track.get_refsys_srsys(), (0.0,0.0));
-        assert_eq!(track.has_ionospheric_parameters(), false);
-        assert_eq!(track.get_ionospheric_parameters().is_none(), true); // missing params
-        assert_eq!(track.get_constellation_rinex_code(), ConstellationRinexCode::GPS_GLO_QZ_SBA_L1C); // missing params
-    }
-
-    #[test]
-    /// Tests `CggttsTrack` basic usage
-    fn cggtts_track_basic_use() {
-        let mut track = CggttsTrack::new();
-        track.set_duration(BIPM_SPECIFIED_TRACKING_DURATION);
-        track.set_elevation(90.0);
-        track.set_azimuth(180.0);
-        track.set_refsys_srsys((1E-9,1E-12));
-        assert_eq!(track.get_duration().as_secs(), BIPM_SPECIFIED_TRACKING_DURATION.as_secs());
-        assert_eq!(track.get_elevation(), 90.0);
-        assert_eq!(track.get_azimuth(), 180.0);
-        assert!(
-            approx_eq!(f64,
-                track.get_refsv_srsv().0, 
-                1E-9,
-                epsilon = 1E-9
-            )
-        );
-        assert!(
-            approx_eq!(f64,
-                track.get_refsv_srsv().1, 
-                1E-12,
-                epsilon = 1E-12
-            )
-        )
-    }
-}
+}*/
