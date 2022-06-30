@@ -12,7 +12,7 @@ Cggtts parser
 
 * Given file must follow file naming conventions otherwise parsing fails with related error
 
-* Line order in the CGGTTS header section does not matter, except for the first line, which always be a CGGTTS revision number.
+* While it is clearly specified in the standards, that header lines order matter, this parser is tolerant against line/data order, except for the first CGGTT REVISION header line which should always come first.
 
 * We tolerate a missing BLANK between the header section and measurements
 

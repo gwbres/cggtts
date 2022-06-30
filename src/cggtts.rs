@@ -10,10 +10,10 @@ use crate::{Track, Delay, delay::SystemDelay, CalibratedDelay};
 
 /// supported `Cggtts` version,
 /// non matching input files will be rejected
-const LATEST_RELEASE: &str = "2E";
+const CURRENT_RELEASE: &str = "2E";
 
-/// latest revision date
-const LATEST_RELEASE_DATE: &str = "2014-02-20";
+/// Latest revision date
+const LATEST_REVISION_DATE : &str = "2014-02-20";
 
 /// labels in case we provide Ionospheric parameters estimates
 const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
@@ -83,7 +83,10 @@ impl std::fmt::Display for Rcvr {
 /// and its Common View realizations (`tracks`)
 #[derive(Debug, Clone)]
 pub struct Cggtts {
-    pub date: chrono::NaiveDate, 
+    /// date of file revision 
+    pub rev_date: chrono::NaiveDate, 
+    /// date of production
+    pub date: chrono::NaiveDate,
     /// laboratory / agency where measurements were performed (if unknown)
     pub lab: Option<String>, 
     /// possible GNSS receiver infos
@@ -124,8 +127,8 @@ pub enum Error {
     DateMjdFormatError,
     #[error("failed to parse mjd date")]
     ParseFloatError(#[from] std::num::ParseFloatError),
-    #[error("deprecated versions are not supported")]
-    DeprecatedVersion,
+    #[error("only revision 2E is supported")]
+    VersionMismatch,
     #[error("version format mismatch")]
     VersionFormatError,
     #[error("revision date format mismatch")]
@@ -166,9 +169,11 @@ pub enum Error {
 
 impl Default for Cggtts {
     /// Buils default `Cggtts` structure,
-    /// with production date set to now().
     fn default() -> Cggtts {
         Cggtts {
+            rev_date: chrono::NaiveDate::parse_from_str(
+                LATEST_REVISION_DATE,
+                "%Y-%m-%d").unwrap(),
             date: chrono::Utc::today().naive_utc(),
             lab: None,
             nb_channels: 0,
@@ -321,13 +326,15 @@ impl Cggtts {
             .unwrap();
         let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
             Some(version) => {
-                if !version.eq(&LATEST_RELEASE) {
-                    return Err(Error::DeprecatedVersion)
+                if !version.eq(&CURRENT_RELEASE) {
+                    return Err(Error::VersionMismatch)
                 }
             },
             _ => return Err(Error::VersionFormatError),
         };
         
+        let mut rev_date = chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d")
+            .unwrap();
         let mut nb_channels :u16 = 0;
         let mut rcvr : Option<Rcvr> = None;
         let mut ims : Option<Rcvr> = None;
@@ -340,7 +347,14 @@ impl Cggtts {
 
         loop {
             if line.starts_with("REV DATE = ") {
-                // skip that one            
+                match scan_fmt! (&line, "REV DATE = {d} {d} {d}", i32, u32, u32) {
+                    (Some(year),
+                    Some(month),
+                    Some(day)) => {
+                        rev_date = chrono::NaiveDate::from_ymd(year, month, day);
+                    },
+                    _ => {}
+                }
             } else if line.starts_with("RCVR = ") {
                 match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
                     (Some(manufacturer),
@@ -560,6 +574,7 @@ impl Cggtts {
         }
 
         Ok(Cggtts {
+            rev_date,
             date: julianday::JulianDay::new(((mjd * 1000.0) + 2400000.5) as i32).to_date(),
             nb_channels,
             rcvr,
