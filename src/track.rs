@@ -87,6 +87,8 @@ pub struct Track {
     /// Most of the time, `Tracks` are estimated
     /// using a combination of Spave Vehicules
     pub class: CommonViewClass,
+    /// Date Y/M/d this track was produced on
+    pub date: chrono::NaiveDate,
     /// Tracking start date (hh:mm:ss)
     pub trktime: chrono::NaiveTime, 
     /// Tracking duration
@@ -177,8 +179,10 @@ pub enum Error {
 
 impl Track {
     /// Builds a new CGGTTS measurement, referred to as `Track`,
-    /// without known Ionospheric parameters. 
-    /// To add Ionospheric data, use `with_ionospheric_data()` later on
+    /// without known Ionospheric parameters, and
+    /// production date set to `Today()`.
+    /// To customize, use `with_` methods later on,
+    /// for example to provide ionospheric parameters or use a different date
     pub fn new (class: CommonViewClass,
             trktime: chrono::NaiveTime, duration: std::time::Duration,
                 space_vehicule: rinex::Sv,
@@ -187,6 +191,7 @@ impl Track {
                         smdt: f64, mdio: f64, smdi: f64, fr: GlonassChannel,
                             hc: u8, frc: &str) -> Self {
         Self {
+            date: chrono::Utc::today().naive_utc(),
             class,
             space_vehicule,
             trktime,
@@ -284,8 +289,8 @@ impl Track {
 
 impl Default for Track {
     /// Builds a default `Track` (measurement) structure,
-    /// where `trktime` set to `now()` as `UTC` time,
-    /// common view is set to single,
+    /// where `trktime` set to `now()` and producion date set to `today()`,
+    /// common view class set to single,
     /// and other parameters set to defaults,
     /// and missing Ionospheric parameter estimates.
     fn default() -> Track {
@@ -299,6 +304,7 @@ impl Default for Track {
             },
             class: CommonViewClass::Single,
             ionospheric: None,
+            date: chrono::Utc::today().naive_utc(),
             trktime: chrono::NaiveTime::from_hms(
                 now.time().hour(),
                 now.time().minute(),
@@ -327,10 +333,11 @@ impl Default for Track {
 impl std::fmt::Display for Track {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
-        string.push_str(&format!("{} {} 57000 {} {:0>4} {:0>3} {:0>4} {:0>11} {:0>6} {:0>11}   {:0>4}   {:0>2} {} {} {:0>4} ", 
+        let mjd = (julianday::JulianDay::from(self.date).inner() as f32 - 2400000.5).round() as u32;
+        string.push_str(&format!("{} {} {} {} {:0>4} {:0>3} {:0>4} {:0>11} {:0>6} {:0>11}   {:0>4}   {:0>2} {} {} {:0>4} ", 
             self.space_vehicule,
             self.class,
-            //mjd //TODO,
+            mjd,
             self.trktime.format("%H%M%S"),
             self.duration.as_secs(),
             (self.elevation * 10.0) as u16,
@@ -379,6 +386,7 @@ impl std::str::FromStr for Track {
 
         let sv = Sv::from_str(items[0])?;
         let class = items[1];
+        let mjd = i32::from_str_radix(items[2], 10)?;
         let trktime = chrono::NaiveTime::parse_from_str(items[3], "%H%M%S")?;
         let duration_secs = u64::from_str_radix(items[4], 10)?;
         let elevation = f64::from_str(items[5])? * 0.1;
@@ -453,6 +461,7 @@ impl std::str::FromStr for Track {
                 }
             },
             space_vehicule: sv,
+            date: julianday::JulianDay::new((mjd as f32 + 2400000.5) as i32).to_date(),
             trktime,
             duration: std::time::Duration::from_secs(duration_secs),
             elevation,

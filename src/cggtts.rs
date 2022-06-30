@@ -83,10 +83,8 @@ impl std::fmt::Display for Rcvr {
 /// and its Common View realizations (`tracks`)
 #[derive(Debug, Clone)]
 pub struct Cggtts {
-    /// date of file revision 
+    /// file revision release date 
     pub rev_date: chrono::NaiveDate, 
-    /// day (y/m/d) of production of this file
-    pub date: chrono::NaiveDate,
     /// laboratory / agency where measurements were performed (if unknown)
     pub lab: Option<String>, 
     /// possible GNSS receiver infos
@@ -121,11 +119,7 @@ pub enum Error {
     IoError(#[from] std::io::Error),
     #[error("failed to parse integer number")]
     ParseIntError(#[from] std::num::ParseIntError),
-    #[error("file naming convention")]
-    FileNamingConvention,
-    #[error("failed to identify date of creation")]
-    DateMjdFormatError,
-    #[error("failed to parse mjd date")]
+    #[error("failed to parse float number")]
     ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("only revision 2E is supported")]
     VersionMismatch,
@@ -135,20 +129,6 @@ pub enum Error {
     RevisionDateFormatError,
     #[error("failed to parse revision date")]
     RevisionDateParsingError,
-    #[error("\"rcvr\" format mismatch")]
-    RcvrFormatError,
-    #[error("\"reference\" format mismatch")]
-    ReferenceFormatError,
-    #[error("failed to parse \"lab\" field")]
-    LabParsingError,
-    #[error("comments format mismatch")]
-    CommentsFormatError,
-    #[error("\"ims\" format mismatch")]
-    ImsFormatError,
-    #[error("frame format mismatch")]
-    FrameFormatError,
-    #[error("channel format mismatch")]
-    ChannelFormatError,
     #[error("failed to parse \"{0}\" coordinates")]
     CoordinatesParsingError(String),
     #[error("failed to identify delay value in line \"{0}\"")]
@@ -163,8 +143,6 @@ pub enum Error {
     NonAsciiData(#[from] CrcError),
     #[error("checksum error, got \"{0}\" but \"{1}\" locally computed")]
     ChecksumError(u8, u8),
-    //#[error("CggttsTrack error")]
-    //CggttsTrackError(#[from] track::Error),
 }
 
 impl Default for Cggtts {
@@ -174,7 +152,6 @@ impl Default for Cggtts {
             rev_date: chrono::NaiveDate::parse_from_str(
                 LATEST_REVISION_DATE,
                 "%Y-%m-%d").unwrap(),
-            date: chrono::Utc::today().naive_utc(),
             lab: None,
             nb_channels: 0,
             coordinates: rust_3d::Point3D {
@@ -284,32 +261,20 @@ impl Cggtts {
         true
     }
 
+    /// Returns production date (y/m/d) of this file
+    /// using MJD field of first track produced
+    pub fn date (&self) -> Option<chrono::NaiveDate> {
+        if let Some(t) = self.tracks.first() {
+            Some(t.date)
+        } else {
+            None
+        }
+    }
+
     /// Builds Self from given `Cggtts` file.
     pub fn from_file (fp: &str) -> Result<Self, Error> {
-        // check against file naming convetion
-        let path = std::path::Path::new(fp);
-        let file_name = path.file_name()
-            .unwrap()
-            .to_str()
-                .unwrap();
-        let file_re = Regex::new(r"(G|R|E|C|J)(S|M|Z)....[1-9][0-9]\.[0-9][0-9][0-9]")
-            .unwrap();
-        if !file_re.is_match(file_name) {
-            return Err(Error::FileNamingConvention)
-        }
-
-        // identify date of creation 
-        // using file naming convention 
-        let mjd: f64 = match file_name.find(".") {
-            Some(location) => {
-                f64::from_str(file_name.split_at(location-2).1)?
-            },
-            _ => return Err(Error::DateMjdFormatError),
-        };
-        
         let file_content = std::fs::read_to_string(fp)
             .unwrap();
-
         let mut lines = file_content.split("\n")
             .map(|x| x.to_string())
             //.map(|x| x.to_string() +"\n")
@@ -575,7 +540,6 @@ impl Cggtts {
 
         Ok(Cggtts {
             rev_date,
-            date: julianday::JulianDay::new(((mjd * 1000.0) + 2400000.5) as i32).to_date(),
             nb_channels,
             rcvr,
             ims,
