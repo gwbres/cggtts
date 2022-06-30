@@ -327,7 +327,7 @@ impl Default for Track {
 impl std::fmt::Display for Track {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
-        string.push_str(&format!("{} {} 57000 {} {:0>3} {:0>3} {:0>3} {} {} {} {} {} {} {} {} ", 
+        string.push_str(&format!("{} {} 57000 {} {:0>4} {:0>3} {:0>4} {:0>11} {:0>6} {:0>11}   {:0>4}   {:0>2} {} {} {:0>4} ", 
             self.space_vehicule,
             self.class,
             //mjd //TODO,
