@@ -9,8 +9,7 @@ Cggtts parser
 ## Known behavior 
 
 * The parser supports current revision **2E** only, it will reject files that have different revision number.
-
-* Given file must follow file naming conventions otherwise parsing fails with related error
+* This parser does not care for file naming conventions
 
 * While it is clearly specified in the standards, that header lines order matter, this parser is tolerant against line/data order, except for the first CGGTT REVISION header line which should always come first.
 
