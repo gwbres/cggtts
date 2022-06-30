@@ -85,7 +85,7 @@ impl std::fmt::Display for Rcvr {
 pub struct Cggtts {
     /// date of file revision 
     pub rev_date: chrono::NaiveDate, 
-    /// date of production
+    /// day (y/m/d) of production of this file
     pub date: chrono::NaiveDate,
     /// laboratory / agency where measurements were performed (if unknown)
     pub lab: Option<String>, 
