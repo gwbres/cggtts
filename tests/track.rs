@@ -44,6 +44,9 @@ mod track {
         assert!((track.srsys - 2.83E-11).abs() < 1E-6);
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
+
+        let dumped = track.to_string();
+        assert_eq!(content.to_owned() + " 6F", dumped); 
         
         let content =
 "G99 99 59563 001400 0780 099 0099 +9999999999 +99999       +1588  +1027   27 999 9999 +999 9999 +999 00 00 L1C EA";
