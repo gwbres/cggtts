@@ -17,7 +17,7 @@ thiserror = "1"
 chrono = "0.4"
 julianday = "0.2.0"
 scan_fmt = "0.1"
-rinex = { path = "../rinex/rinex" }
+rinex = { git = "https://github.com/gwbres/rinex", branch = "main" }
 rust-3d = "0.34.0"
 
 [dev-dependencies]
