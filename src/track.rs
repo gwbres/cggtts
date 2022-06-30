@@ -13,11 +13,19 @@ const BIPM_SPECIFIED_DURATION: std::time::Duration = std::time::Duration::from_s
 /// Describes whether this common view is based on a unique 
 /// Space Vehicule or a combination of several vehicules
 pub enum CommonViewClass {
-    /// Single Space Vehicule used in measurement
-    Single(Sv),
-    /// Multiple Space Vehicules from the same constellation
-    /// used in measurement
-    Combination(Constellation),
+    /// Single 
+    Single,
+    /// Multiple
+    Multiple,
+}
+
+impl std::fmt::Display for CommonViewClass {
+    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            CommonViewClass::Single => write!(fmt, "99"),
+            CommonViewClass::Multiple => write!(fmt, "FF"),
+        }
+    }
 }
 
 /// Describes Glonass Frequency channel,
@@ -28,6 +36,15 @@ pub enum GlonassChannel {
     Unknown,
     /// Glonass Frequency channel number
     Channel(u8),
+}
+
+impl std::fmt::Display for GlonassChannel {
+    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            GlonassChannel::Unknown => write!(fmt, "00"),
+            GlonassChannel::Channel(c) => write!(fmt, "{:02X}", c),
+        }
+    }
 }
 
 impl PartialEq for GlonassChannel {
@@ -79,7 +96,7 @@ pub struct Track {
     /// Is only relevant, as a whole, 
     /// if `class` is set to CommonViewClass::Single.
     /// Refer to [class]
-    pub space_vehicule: Option<rinex::Sv>,
+    pub space_vehicule: rinex::Sv,
     /// Elevation (angle) at Tracking midpoint [in degrees]
     pub elevation: f64, 
     /// Azimuth (angle) at Tracking midpoint in [degrees]
@@ -152,8 +169,6 @@ pub enum Error {
     ParseFloatError(#[from] std::num::ParseFloatError),
     #[error("failed to parse track time")]
     ChronoParseError(#[from] chrono::ParseError),
-    #[error("failed to parse common view class")]
-    CommonViewClassError(#[from] std::str::Utf8Error),
     #[error("crc calc() failed over non utf8 data: \"{0}\"")]
     NonAsciiData(#[from] CrcError),
     #[error("checksum error - expecting \"{0}\" - got \"{1}\"")]
@@ -166,7 +181,7 @@ impl Track {
     /// To add Ionospheric data, use `with_ionospheric_data()` later on
     pub fn new (class: CommonViewClass,
             trktime: chrono::NaiveTime, duration: std::time::Duration,
-                space_vehicule: Option<rinex::Sv>,
+                space_vehicule: rinex::Sv,
                 elevation: f64, azimuth: f64, refsv: f64, srsv: f64,
                     refsys: f64, srsys:f64, dsg: f64, ioe: u16, mdtr: f64,
                         smdt: f64, mdio: f64, smdi: f64, fr: GlonassChannel,
@@ -211,7 +226,7 @@ impl Track {
     }
 
     /// Returns true if Self was estimated using a combination
-    /// of Space Vehicules
+    /// of Space Vehicules from the same constellation
     pub fn space_vehicule_combination (&self) -> bool {
         !self.unique_space_vehicule()
     }
@@ -219,44 +234,24 @@ impl Track {
     /// Returns true if Self was measured against a unique
     /// Space Vehicule
     pub fn unique_space_vehicule (&self) -> bool {
-        match self.class {
-            CommonViewClass::Single(_) => true,
-            _ => false,
-        }
+        self.space_vehicule.prn != 99
     }
 
     /// Returns true if Self was measured against given `GNSS` Constellation 
     pub fn uses_constellation (&self, c: Constellation) -> bool {
-        match self.class {
-            CommonViewClass::Single(s) => {
-                s.constellation == c
-            },
-            CommonViewClass::Combination(constell) => {
-                constell == c
-            },
-        }
-    }
-
-    /// Returns true if Self was measured against specific Space Vehicule uniquely
-    pub fn uses_unique_space_vehicule (&self, sv: Sv) -> bool {
-        match self.class {
-            CommonViewClass::Single(s) => {
-                s == sv
-            },
-            _ => false,
-        }
+        self.space_vehicule.constellation == c
     }
 
     /// Returns True if Self follows BIPM specifications / requirements,
-    /// * track pursuit duration was at least 13 * 60 sec long
+    /// in terms of tracking pursuit
     pub fn follows_bipm_specs (&self) -> bool {
-        self.duration.as_secs() >= BIPM_SPECIFIED_DURATION.as_secs()
+        self.duration.as_secs() == BIPM_SPECIFIED_DURATION.as_secs()
     }
     
     /// Returns a `Track` with desired unique space vehicule
     pub fn with_space_vehicule (&self, sv: Sv) -> Self {
         let mut t = self.clone();
-        t.space_vehicule = Some(sv);
+        t.space_vehicule = sv.clone();
         t
     }
 
@@ -290,14 +285,19 @@ impl Track {
 impl Default for Track {
     /// Builds a default `Track` (measurement) structure,
     /// where `trktime` set to `now()` as `UTC` time,
-    /// common view is set to a combination of GPS space vehicules,
+    /// common view is set to single,
     /// and other parameters set to defaults,
     /// and missing Ionospheric parameter estimates.
     fn default() -> Track {
         let now = chrono::Utc::now();
         Track {
-            space_vehicule: None,
-            class: CommonViewClass::Combination(Constellation::default()),
+            space_vehicule: {
+                Sv {
+                    constellation: Constellation::default(),
+                    prn: 99,
+                }
+            },
+            class: CommonViewClass::Single,
             ionospheric: None,
             trktime: chrono::NaiveTime::from_hms(
                 now.time().hour(),
@@ -324,54 +324,46 @@ impl Default for Track {
     }
 }
 
-/*
 impl std::fmt::Display for Track {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
-        match self.constellation {
-            Constellation::GPS => string.push_str("G"),
-            Constellation::Glonass => string.push_str("R"),
-            Constellation::Beidou => string.push_str("B"),
-            Constellation::QZSS => string.push_str("Q"),
-            Constellation::Galileo => string.push_str("E"),
-            _ => string.push_str("M"),
-        }
-        string.push_str(&format!("{: >2}", self.sat_id));
-        string.push_str(&format!(" {:02X}", self.class as u8));
-        string.push_str(" 57000");
-
-        // self.trktime.format("%H%M%S");
-        // let fmt = StrftimeItems::new("%dH%M%S")
-        //string.push_str(self.trktime.strptime());
-        string.push_str(&format!(" {:0>3}", self.duration.as_secs()));
-        string.push_str(&format!(" {:0>3}", (self.elevation * 10.0) as u16));
-        string.push_str(&format!(" {:0>3}", (self.azimuth * 10.0) as u16));
-        string.push_str(&format!(" {}", (self.refsv  * 1.0E10) as i32));
-        string.push_str(&format!(" {}", (self.srsv   * 1.0E13) as i32));
-        string.push_str(&format!(" {}", (self.refsys * 1.0E10) as i32));
-        string.push_str(&format!(" {}", (self.srsys  * 1.0E13) as i32));
-        string.push_str(&format!(" {}", (self.dsg    * 1.0E10) as i32));
-        string.push_str(&format!(" {}", self.ioe));
-        string.push_str(&format!(" {}", (self.mdtr   * 1.0E10) as i32));
-        string.push_str(&format!(" {}", (self.smdt   * 1.0E13) as i32));
-        string.push_str(&format!(" {}", (self.mdio   * 1.0E10) as i32));
-        string.push_str(&format!(" {}", (self.smdi   * 1.0E13) as i32));
+        string.push_str(&format!("{} {} 57000 {} {:0>3} {:0>3} {:0>3} {} {} {} {} {} {} {} {} ", 
+            self.space_vehicule,
+            self.class,
+            //mjd //TODO,
+            self.trktime.format("%H%M%S"),
+            self.duration.as_secs(),
+            (self.elevation * 10.0) as u16,
+            (self.azimuth* 10.0) as u16,
+            (self.refsv * 1.0E10) as i32,
+            (self.srsv * 1.0E13) as i32,
+            (self.refsys * 1.0E10) as i32,
+            (self.srsys * 1.0E13) as i32,
+            (self.dsg * 1.0E10) as i32,
+            self.ioe,
+            (self.mdtr * 1.0E10) as i32,
+            (self.smdt * 1.0E13) as i32,
+        ));
         
-        if let Some((msio, smsi, isg)) = self.get_ionospheric_parameters() {
-            string.push_str(&format!(" {}", (msio * 1.0E10) as i32));
-            string.push_str(&format!(" {}", (smsi * 1.0E13) as i32));
-            string.push_str(&format!(" {}", (isg *  1.0E10) as i32))       
+        if let Some(iono) = self.ionospheric {
+            string.push_str(&format!("{} {} {} ", 
+                (iono.msio * 1.0E10) as i32, 
+                (iono.smsi * 1.0E13) as i32, 
+                (iono.isg * 1.0E10) as i32, 
+            ))
         }
-        string.push_str(&format!(" {:2X}", self.fr));
-        string.push_str(&format!(" {:2X}", self.hc));
-        string.push_str(&format!(" {}", self.frc));
+
+        string.push_str(&format!("{} {:2X} {} ",
+            self.fr,
+            self.hc,
+            self.frc));
+
         if let Ok(crc) = calc_crc(&string) {
-            string.push_str(&format!(" {:2X}", crc))
+            string.push_str(&format!("{:2X}", crc))
         } 
         fmt.write_str(&string)
     }
 }
-*/
 
 impl std::str::FromStr for Track {
     type Err = Error; 
@@ -454,19 +446,13 @@ impl std::str::FromStr for Track {
 
         Ok(Track {
             class: {
-                if class.eq("99") || class.eq("FF") {
-                    CommonViewClass::Combination(sv.constellation)
+                if class.eq("FF") {
+                    CommonViewClass::Multiple
                 } else {
-                    CommonViewClass::Single(sv.clone())
+                    CommonViewClass::Single
                 }
             },
-            space_vehicule: {
-                if class.eq("99") {
-                    None
-                } else {
-                    Some(sv.clone())
-                }
-            },
+            space_vehicule: sv,
             trktime,
             duration: std::time::Duration::from_secs(duration_secs),
             elevation,

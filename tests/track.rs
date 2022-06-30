@@ -16,7 +16,6 @@ mod track {
         assert_eq!(track.refsys, 0.0);
         assert_eq!(track.srsys, 0.0);
         assert_eq!(track.ionospheric, None);
-        assert_eq!(track.space_vehicule, None);
         assert_eq!(track.follows_bipm_specs(), true);
         assert_eq!(track.has_ionospheric_data(), false);
         assert_eq!(track.space_vehicule_combination(), true);
@@ -29,8 +28,11 @@ mod track {
         let track = Track::from_str(content);
         assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
-        assert_eq!(track.space_vehicule, None);
-        assert_eq!(track.class, CommonViewClass::Combination(Constellation::GPS));
+        assert_eq!(track.space_vehicule, Sv {
+            constellation: Constellation::GPS,
+            prn: 99
+        });
+        assert_eq!(track.class, CommonViewClass::Single);
         //assert_eq!(track.trktime 043400)
         assert_eq!(track.follows_bipm_specs(), true);
         assert_eq!(track.duration, std::time::Duration::from_secs(780));
@@ -49,8 +51,11 @@ mod track {
         let track = Track::from_str(content);
         assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
-        assert_eq!(track.space_vehicule, None);
-        assert_eq!(track.class, CommonViewClass::Combination(Constellation::GPS));
+        assert_eq!(track.space_vehicule, Sv {
+            constellation: Constellation::GPS,
+            prn: 99
+        });
+        assert_eq!(track.class, CommonViewClass::Single);
         //assert_eq!(track.trktime 043400)
         assert_eq!(track.follows_bipm_specs(), true);
         assert_eq!(track.duration, std::time::Duration::from_secs(780));
@@ -66,8 +71,7 @@ mod track {
         let track = Track::from_str(content);
         assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
-        assert_eq!(track.space_vehicule, None);
-        assert_eq!(track.class, CommonViewClass::Combination(Constellation::GPS));
+        assert_eq!(track.class, CommonViewClass::Single);
         //assert_eq!(track.trktime 043400)
         assert_eq!(track.follows_bipm_specs(), true);
         assert_eq!(track.duration, std::time::Duration::from_secs(780));
@@ -83,8 +87,11 @@ mod track {
         let track = Track::from_str(content);
         assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
-        assert_eq!(track.space_vehicule, None);
-        assert_eq!(track.class, CommonViewClass::Combination(Constellation::GPS));
+        assert_eq!(track.space_vehicule, Sv {
+            constellation: Constellation::GPS,
+            prn: 99
+        });
+        assert_eq!(track.class, CommonViewClass::Single);
         //assert_eq!(track.trktime 043400)
         assert_eq!(track.follows_bipm_specs(), true);
         assert_eq!(track.duration, std::time::Duration::from_secs(780));
