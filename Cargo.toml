@@ -15,7 +15,7 @@ exclude = ["/data",]
 regex = "1"
 thiserror = "1"
 chrono = "0.4"
-julianday = "0.2.0"
+julianday = { git = "https://github.com/gwbres/julianday", branch = "mjd" }
 scan_fmt = "0.1"
 rinex = { git = "https://github.com/gwbres/rinex", branch = "main" }
 rust-3d = "0.34.0"

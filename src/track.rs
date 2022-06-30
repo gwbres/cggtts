@@ -333,11 +333,11 @@ impl Default for Track {
 impl std::fmt::Display for Track {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
-        let mjd = (julianday::JulianDay::from(self.date).inner() as f32 - 2400000.5).round() as u32;
+        let mjd = julianday::ModifiedJulianDay::from(self.date);
         string.push_str(&format!("{} {} {} {} {:0>4} {:0>3} {:0>4} {:0>11} {:0>6} {:0>11}   {:0>4}   {:0>2} {} {} {:0>4} ", 
             self.space_vehicule,
             self.class,
-            mjd,
+            mjd.to_date().format("%Y%m%d"),
             self.trktime.format("%H%M%S"),
             self.duration.as_secs(),
             (self.elevation * 10.0) as u16,
@@ -461,7 +461,7 @@ impl std::str::FromStr for Track {
                 }
             },
             space_vehicule: sv,
-            date: julianday::JulianDay::new((mjd as f32 + 2400000.5) as i32).to_date(),
+            date: julianday::ModifiedJulianDay::new(mjd).to_date(),
             trktime,
             duration: std::time::Duration::from_secs(duration_secs),
             elevation,
