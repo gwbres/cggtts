@@ -30,6 +30,7 @@ mod test {
         assert_eq!(cggtts.comments, None);
         assert_eq!(cggtts.tracks.len(), 32);
         let first = cggtts.tracks.first();
+        assert_eq!(cggtts.delay.value(), 0.0);
         assert_eq!(first.is_some(), true);
         let first = first.unwrap();
         assert_eq!(first.space_vehicule, Sv {
