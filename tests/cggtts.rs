@@ -1,5 +1,6 @@
 use cggtts::Rcvr;
 use cggtts::Cggtts;
+use cggtts::track::GlonassChannel;
 use rinex::sv::Sv;
 use rinex::constellation::Constellation;
 
@@ -42,7 +43,6 @@ mod test {
         let dumped = cggtts.to_string();
         let compare = std::fs::read_to_string(
             &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard/GZSY8259.568")).unwrap();
-        println!("{:#?}", dumped);
     }
     #[test]
     fn parse_standard_data() {
@@ -87,5 +87,41 @@ mod test {
                 assert_eq!(cggtts.has_ionospheric_data(), true);
             }
         }
+    }
+    #[test]
+    fn test_advanced_cggtts() {
+        let cggtts = Cggtts::from_file(
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/advanced/RZSY8257.000"));
+        assert_eq!(cggtts.is_ok(), true);
+        let cggtts = cggtts.unwrap();
+        assert_eq!(cggtts.rev_date.format("%Y-%m-%d").to_string(), String::from("2014-02-20"));
+        assert_eq!(cggtts.rcvr, None);
+        assert_eq!(cggtts.lab, Some(String::from("ABC")));
+        assert_eq!(cggtts.nb_channels, 12);
+        assert_eq!(cggtts.ims, None);
+        assert_eq!(cggtts.time_reference, Some(String::from("UTC(ABC)")));
+        assert_eq!(cggtts.reference_frame, 
+            Some(String::from(
+                "ITRF, PZ-90->ITRF Dx = 0.0 m, Dy = 0.0 m, Dz = 0.0 m, ds = 0.0, Rx = 0.0, Ry = 0.0, Rz = 0.000000"
+            )));
+        assert!((cggtts.coordinates.x - 4027881.79).abs() < 1E-6);
+        assert!((cggtts.coordinates.y - 306998.67).abs() < 1E-6);
+        assert!((cggtts.coordinates.z - 4919499.36).abs() < 1E-6);
+        assert_eq!(cggtts.comments, None);
+        assert_eq!(cggtts.delay.value(), 53.9 + 237.0 + 149.6);
+        
+        assert_eq!(cggtts.tracks.len(), 4);
+        let first = cggtts.tracks.first();
+        assert_eq!(first.is_some(), true);
+        let first = first.unwrap();
+        assert_eq!(first.space_vehicule, Sv {
+            constellation: Constellation::Glonass,
+            prn: 24,
+        });
+        assert_eq!(first.fr, GlonassChannel::Channel(2));
+
+        let dumped = cggtts.to_string();
+        let compare = std::fs::read_to_string(
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/advanced/RZSY8257.000")).unwrap();
     }
 }
