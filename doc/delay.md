@@ -8,15 +8,7 @@ Delay: measurement systems delay
 GNSS constellation.
 * `SystemDelay` : used by Cggtts to describe the measurement systems delay.
 
-### System delays
-
-When we refer to system delays we refer to propagation induced delays.
-
-In _Cggtts_ files, delays are always specified in **[ns]**.  
-Ths library manipulates delays in seconds, but converts them
-back to **[ns]** in file operations.
-
-#### Definitions
+## `SystemDelay` object
 
 ```
 +--------+               +---------- system ---------+ +++++++++++
@@ -29,32 +21,68 @@ back to **[ns]** in file operations.
  +++++++                                               +++++++++++
 ```
 
-* "total" delay is defined as ANT + cable + A + B
-* (A+B) is defined as internal delay, propagation delay inside
-the receiver & the antenna
-* in case we do not have the (A+B) granularity, we then refer to (A+B)=system delay
+SystemDelay represents the summation of all delays:
 
-* cable delay refers to the RF cable delay
+* RF/cable delay
+* Reference delay
+* System / internal delay
 
-* ref delay is the time offset between the time reference (whose name is "Reference" field),
-and the receiver internal clock
+System delay is defined as trusted as long as carrier dependent
+delays are calibrated against a specific GNSS constellation (not Mixed constellation: avoid that scenario).
 
-* internal (A+B) or system delay are mutually exclusive.
-User is expected to use either one of them.  
-In case user specifies both, this lib will not crash but prefer (A+B) (advaced system definition)
+```rust
+// build descriptor
+let mut delay = SystemDelay {
+    rf_cable_delay: 5.0, // always in [ns]
+    ref_cable: 10.0, // always in [ns]
+    calib_delay: CalibratedDelay { // carrier dependant delay
+        info: None, // extra calibration info
+        constellation: Constellation::GPS,
+        delay: Delay::System(15.0), // always in [ns]
+    },
+};
+assert_eq!(delay.value(), 5.0 + 10.0 + 15.0);
+assert_eq!(delay.trusted(), true);
+```
 
-* when internal (A+B) delay or system delay is provided,
-the standard expects a Ref delay too. 
-In case the user did not specify a Ref delay, we set it to 0 ns
-to still have a valid Cggtts generated.
+`CalibratedDelay` supports (+):
+* non feasible (value remains the same, (+) never fails), if we're trying to add a value calibrated against a different constellation
 
-#### Case of Dual Frequency CGGTTS
-In dual frequency context (two carriers), 
-_total_, _system_, _internal_ should be specified
-for each carrier frequency.
+```rust
+let new = CalibratedDelay {
+    info: None,
+    constellation: Constellation::Glonass, // not feasible 
+    delay: Delay::System(10.0), // same kind
+}
 
-_cable_ and _ref_ delays are not tied to a carrier frequency.
+delay = delay + new;
+assert_eq!(delay.value(), 5.0 + 10.0 + 15.0); // nothing changed
+assert_eq!(delay.trusted(), true); // nothing changed
+```
 
-#### Delays and CGGTTS production interface
+* natural, if new value is specified against same constellation
+```rust
+let new = CalibratedDelay {
+    info: None,
+    constellation: Constellation::GPS, // same kind
+    delay: Delay::System(1.0), // same kind
+}
 
-This library provdes an easy to use interface to specify your system
+delay = delay + new;
+assert_eq!(delay.value(), 5.0 + 10.0 + 15.0 +1.0); // increment 
+assert_eq!(delay.trusted(), true); // nothing changed
+```
+
+* becomes _untrusted_ if we're adding a value calibrated against Mixed constellation
+
+```rust
+let new = CalibratedDelay {
+    info: String::from("Calibrated by myself"),
+    constellation:: Constellation::Mixed, // taints previous declaration
+    delay: Delay::System(2.0), // same kind
+}
+
+delay = delay + new;
+assert_eq!(delay.value(), 5.0 + 10.0 + 15.0 +1.0 +2.0); // increment
+assert_eq!(delay.trusted(), false);
+```

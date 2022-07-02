@@ -284,3 +284,14 @@ impl SystemDelay {
             + self.ref_delay
     }
 }
+
+impl std::ops::Add<CalibratedDelay> for SystemDelay {
+    type Output = SystemDelay;
+    fn add (self, rhs: CalibratedDelay) -> Self {
+        Self {
+            rf_cable_delay: self.rf_cable_delay,
+            ref_delay: self.ref_delay,
+            calib_delay: self.calib_delay + rhs,
+        }
+    }
+}
