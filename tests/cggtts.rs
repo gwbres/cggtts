@@ -38,6 +38,11 @@ mod test {
             constellation: Constellation::GPS,
             prn: 99,
         });
+
+        let dumped = cggtts.to_string();
+        let compare = std::fs::read_to_string(
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard/GZSY8259.568")).unwrap();
+        println!("{:#?}", dumped);
     }
     #[test]
     fn parse_standard_data() {

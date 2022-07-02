@@ -561,20 +561,19 @@ impl Cggtts {
             tracks
         })
     }
-    
-/*
-    /// Writes self into a `Cggtts` file
-    pub fn to_file (&self, fp: &str) -> Result<(), Error> {
-        let mut content = String::new();
+}
 
-        let line = format!("CGGTTS GENERIC DATA FORMAT VERSION = {}\n", VERSION);
+impl std::fmt::Display for Cggtts {
+    /// Writes self into a `Cggtts` file
+    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut content = String::new();
+        let line = format!("CGGTTS GENERIC DATA FORMAT VERSION = {}\n", CURRENT_RELEASE);
         content.push_str(&line);
-        let line = format!("REV DATE = {}\n", LATEST_REV_DATE);
+        let line = format!("REV DATE = {}\n", LATEST_REVISION_DATE);
         content.push_str(&line);
 
         if let Some(rcvr) = &self.rcvr {
-            let line = format!("RCVR = {}\n", &rcvr.to_string());
-            content.push_str(&line);
+            content.push_str(&format!("RCVR = {}\n", rcvr));
         } else {
             content.push_str("RCVR = RRRRRRRR\n")
         }
@@ -583,32 +582,29 @@ impl Cggtts {
         content.push_str(&line);
 
         if let Some(ims) = &self.ims {
-            let line = format!("IMS = {}\n", &ims.to_string());
-            content.push_str(&line)
+            content.push_str(&format!("RCVR = {}\n", ims));
         } else {
             content.push_str("IMS = 99999\n")
         }
         
-        let line = format!("LAB = {}\n", self.nb_channels); 
-        content.push_str(&line);
-        let line = format!("X = {}\n", self.coordinates.0); 
-        content.push_str(&line);
-        let line = format!("Y = {}\n", self.coordinates.1); 
-        content.push_str(&line);
-        let line = format!("Z = {}\n", self.coordinates.2); 
-        content.push_str(&line);
-        let line = format!("FRAME = {}\n", self.frame); 
-        content.push_str(&line);
+        content.push_str(&format!("LAB = {}\n", self.nb_channels)); 
+        content.push_str(&format!("X = {}\n", self.coordinates.x)); 
+        content.push_str(&format!("Y = {}\n", self.coordinates.y)); 
+        content.push_str(&format!("Z = {}\n", self.coordinates.z)); 
+
+        if let Some(r) = &self.reference_frame {
+            content.push_str(&format!("FRAME = {}\n", r)); 
+        } else {
+            content.push_str(&format!("FRAME = ITRF\n"));
+        }
 
         if let Some(comments) = &self.comments {
-            let line = format!("COMMENTS = {}\n", comments.to_string());
-            content.push_str(&line);
-        
+            content.push_str(&format!("COMMENTS = {}\n", comments[0].to_string()));
         } else {
             content.push_str("COMMENTS = NO COMMENTS\n")
         }
 
-        // system delays
+        /*// system delays
         if let Some(delay) = &self.tot_dly {
             // total delay defined
             content.push_str(&format!("TOT DLY = {}\n", delay.to_string()))
@@ -637,18 +633,26 @@ impl Cggtts {
             // other delays always there
             content.push_str(&format!("CAB DLY = {:.1}\n", self.cab_dly * 1E9));
             content.push_str(&format!("REF DLY = {:.1}\n", self.ref_dly * 1E9))
+        }*/
+
+        if let Some(r) = &self.time_reference {
+            content.push_str(&format!("REF = {}\n", r))
+        } else {
+            content.push_str(&format!("REF = ?\n"))
         }
-        content.push_str(&format!("REF = {}\n", self.reference.to_string()));
-        content.push_str(&format!("CKSUM = {:2X}\n", calc_crc(&content)?));
+
+        let crc = calc_crc(&content)
+            .unwrap();
+        content.push_str(&format!("CKSUM = {:2X}\n", crc));
         content.push_str("\n"); // blank
 
-        if self.has_ionospheric_parameters() {
-            content.push_str(track::TRACK_LABELS_WITH_IONOSPHERIC_DATA);
+        if self.has_ionospheric_data() {
+            content.push_str(TRACK_LABELS_WITH_IONOSPHERIC_DATA);
             content.push_str("\n");
             content.push_str(
 "              hhmmss s .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns\n")
         } else {
-            content.push_str(track::TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA);
+            content.push_str(TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA);
             content.push_str("\n");
             content.push_str(
 "             hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s\n")
@@ -658,9 +662,8 @@ impl Cggtts {
             content.push_str(&self.tracks[i].to_string());
             content.push_str("\n")
         }
-        Ok(std::fs::write(fp, content)?) 
+        fmt.write_str(&content)
     }
-*/
 }
 
 #[cfg(test)]
