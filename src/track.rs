@@ -105,7 +105,7 @@ pub struct Track {
     /// Is only relevant, as a whole, 
     /// if `class` is set to CommonViewClass::Single.
     /// Refer to [class]
-    pub space_vehicule: rinex::Sv,
+    pub space_vehicule: Sv,
     /// Elevation (angle) at Tracking midpoint [in degrees]
     pub elevation: f64, 
     /// Azimuth (angle) at Tracking midpoint in [degrees]
@@ -192,7 +192,7 @@ impl Track {
     /// for example to provide ionospheric parameters or use a different date
     pub fn new (class: CommonViewClass,
             trktime: chrono::NaiveTime, duration: std::time::Duration,
-                space_vehicule: rinex::Sv,
+                space_vehicule: Sv,
                 elevation: f64, azimuth: f64, refsv: f64, srsv: f64,
                     refsys: f64, srsys:f64, dsg: f64, ioe: u16, mdtr: f64,
                         smdt: f64, mdio: f64, smdi: f64, fr: GlonassChannel,
