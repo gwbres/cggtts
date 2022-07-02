@@ -1,5 +1,5 @@
-# CGGTTS
-CGGTTS Rust package todo list 
+CGGTTS package
+===============
 
 ## `Cggtts`
 - [ ] forbid to add calibrated delay if this
