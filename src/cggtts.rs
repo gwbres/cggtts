@@ -22,7 +22,7 @@ const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
 const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
 "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 /// `Rcvr` describes a GNSS receiver
 /// (hardware). Used to describe the
 /// GNSS receiver or hardware used to evaluate IMS parameters
@@ -287,8 +287,6 @@ impl Cggtts {
         let mut system_delay = SystemDelay::new();
         
         // VERSION must be first
-        let mut line = lines.next()
-            .unwrap();
         let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
             Some(version) => {
                 if !version.eq(&CURRENT_RELEASE) {
@@ -402,10 +400,12 @@ impl Cggtts {
                 }
 
             } else if line.starts_with("COMMENTS = ") {
-                comments.push(line.strip_prefix("COMMENTS = ")
+                let c = line.strip_prefix("COMMENTS =")
                     .unwrap()
-                    .trim()
-                    .to_string())
+                    .trim();
+                if !c.eq("NO COMMENTS") {
+                    comments.push(c.to_string())
+                }
 
             } else if line.starts_with("REF = ") {
                 match scan_fmt!(&line, "REF = {}", String) {
