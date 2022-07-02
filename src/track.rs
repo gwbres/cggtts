@@ -342,7 +342,6 @@ impl std::fmt::Display for Track {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
         let num = NumberFormat::new();
-        let mjd = 
         string.push_str(&format!("{} {} {} {} ",
             self.space_vehicule,
             self.class,
