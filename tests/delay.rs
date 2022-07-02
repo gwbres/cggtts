@@ -1,6 +1,6 @@
-use rinex::Constellation;
 use cggtts::delay::SystemDelay;
 use cggtts::{Delay, CalibratedDelay};
+use rinex::constellation::Constellation;
 
 #[cfg(test)]
 mod delay {

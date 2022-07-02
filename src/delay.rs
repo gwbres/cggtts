@@ -6,7 +6,7 @@
 /// represent. <!> Delays are always specified in nanoseconds <!> 
 /// Use these value to increase system definition
 /// and overall accuracy and take automate compensations
-use rinex::Constellation;
+use rinex::constellation::Constellation;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Delay {
