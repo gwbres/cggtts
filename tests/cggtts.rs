@@ -12,7 +12,7 @@ mod test {
             &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard/GZSY8259.568"));
         assert_eq!(cggtts.is_ok(), true);
         let cggtts = cggtts.unwrap();
-        //assert_eq!(cggtts.rev_date.
+        assert_eq!(cggtts.rev_date.format("%Y-%m-%d").to_string(), String::from("2014-02-20"));
         assert_eq!(cggtts.rcvr, Some(Rcvr{
             manufacturer: String::from("GORGYTIMING"),
             recv_type: String::from("SYREF25"),
