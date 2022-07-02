@@ -1,6 +1,7 @@
 use regex::Regex;
 use chrono::Timelike;
 use thiserror::Error;
+use format_num::NumberFormat;
 use rinex::{constellation::Constellation, sv::Sv};
 use crate::cggtts::{CrcError, calc_crc};
 
@@ -18,6 +19,15 @@ pub enum CommonViewClass {
     /// Multiple
     Multiple,
 }
+
+/*fn fmtfloat (float: f64, padding: u8) -> String {
+    let mut res = String::new();
+    if float > 0.0 {
+        &format!("+{0:>$width}", float, width = padding -1)
+    } else {
+        &format!("+{0:>$width}", float, width = padding)
+    }
+}*/
 
 impl std::fmt::Display for CommonViewClass {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -333,41 +343,44 @@ impl Default for Track {
 impl std::fmt::Display for Track {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
-        let mjd = julianday::ModifiedJulianDay::from(self.date);
-        string.push_str(&format!("{} {} {} {} {:0>4} {:0>3} {:0>4} {:0>11} {:0>6} {:0>11}   {:0>4}   {:0>2} {} {} {:0>4} ", 
+        let num = NumberFormat::new();
+        let mjd = 
+        string.push_str(&format!("{} {} {} {} ",
             self.space_vehicule,
             self.class,
-            mjd.to_date().format("%Y%m%d"),
-            self.trktime.format("%H%M%S"),
-            self.duration.as_secs(),
-            (self.elevation * 10.0) as u16,
-            (self.azimuth* 10.0) as u16,
-            (self.refsv * 1.0E10) as i32,
-            (self.srsv * 1.0E13) as i32,
-            (self.refsys * 1.0E10) as i32,
-            (self.srsys * 1.0E13) as i32,
-            (self.dsg * 1.0E10) as i32,
-            self.ioe,
-            (self.mdtr * 1.0E10) as i32,
-            (self.smdt * 1.0E13) as i32,
-        ));
-        
+            julianday::ModifiedJulianDay::from(self.date).inner()-1,
+            self.trktime.format("%H%M%S")));
+        string.push_str(&format!("{} {} {} {} {} {} {} {} {} {} {} {} {} ",
+            num.format("04d", self.duration.as_secs() as f64),
+            num.format("03d", self.elevation * 10.0),
+            num.format("04d", self.azimuth * 10.0),
+            num.format("+11d", self.refsv * 1E10),
+            num.format("+4d", self.srsv * 1E13),
+            num.format("+11d", self.refsys * 1E10),
+            num.format("+6d", self.srsys * 1E13),
+            num.format("4d", self.dsg * 1E10),
+            num.format("03d", self.ioe),
+            num.format("04d", self.mdtr * 1E10),
+            num.format("+04d", self.smdt * 1E13),
+            num.format("04d", self.mdio * 1E10),
+            num.format("+04d", self.smdi * 1E13),
+            ));
         if let Some(iono) = self.ionospheric {
-            string.push_str(&format!("{} {} {} ", 
-                (iono.msio * 1.0E10) as i32, 
-                (iono.smsi * 1.0E13) as i32, 
-                (iono.isg * 1.0E10) as i32, 
-            ))
+            string.push_str(&format!("{} {} {} ",
+                num.format("11d", iono.msio * 1E10),
+                num.format("+6d", iono.smsi * 1E13),
+                num.format("04d", iono.isg * 1E10),
+            ));
         }
 
-        string.push_str(&format!("{} {:2X} {} ",
+        string.push_str(&format!("{:02} {:02X} {} ",
             self.fr,
             self.hc,
             self.frc));
 
         if let Ok(crc) = calc_crc(&string) {
             string.push_str(&format!("{:2X}", crc))
-        } 
+        }
         fmt.write_str(&string)
     }
 }
