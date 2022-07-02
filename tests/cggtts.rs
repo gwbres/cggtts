@@ -1,4 +1,6 @@
 use cggtts::Cggtts;
+use rinex::sv::Sv;
+use rinex::constellation::Constellation;
 
 #[cfg(test)]
 mod test {
@@ -27,6 +29,13 @@ mod test {
         assert!((cggtts.coordinates.z - 4660711.385).abs() < 1E-6);
         assert_eq!(cggtts.comments, None);
         assert_eq!(cggtts.tracks.len(), 32);
+        let first = cggtts.tracks.first();
+        assert_eq!(first.is_some(), true);
+        let first = first.unwrap();
+        assert_eq!(first.space_vehicule, Sv {
+            constellation: Constellation::GPS,
+            prn: 99,
+        });
     }
     #[test]
     fn parse_standard_data() {
