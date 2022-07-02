@@ -1,3 +1,4 @@
+use cggtts::Rcvr;
 use cggtts::Cggtts;
 use rinex::sv::Sv;
 use rinex::constellation::Constellation;
@@ -12,13 +13,13 @@ mod test {
         assert_eq!(cggtts.is_ok(), true);
         let cggtts = cggtts.unwrap();
         //assert_eq!(cggtts.rev_date.
-        /*assert_eq!(cggtts.rcvr = Some(Rcvr{
+        assert_eq!(cggtts.rcvr, Some(Rcvr{
             manufacturer: String::from("GORGYTIMING"),
             recv_type: String::from("SYREF25"),
             serial_number: String::from("18259999"),
             year: 2018,
             release: String::from("v00"),
-        }));*/
+        }));
         assert_eq!(cggtts.lab, Some(String::from("SY82")));
         assert_eq!(cggtts.nb_channels, 12);
         assert_eq!(cggtts.ims, None);
