@@ -62,7 +62,7 @@ Measurements are stored within the list of _CggttsTracks_
     let track = cggtts.first()
         .unwrap();
     let duration = track.duration;
-    let (refsys, srsys) = (trak.refsys, syrsys);
+    let (refsys, srsys) = (track.refsys, track.syrsys);
     assert_eq!(track.has_ionospheric_data(), false);
     assert_eq!(track.follows_bipm_specs(), true);
 ```
