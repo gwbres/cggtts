@@ -1,0 +1,24 @@
+[package]
+name = "cggtts"
+version = "2.0.0"
+license = "MIT OR Apache-2.0"
+authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
+description = "Package to analyze and create CGGTTS data"
+homepage = "https://github.com/gwbres/cggtts"
+keywords = ["positionning","bipm","gnss","timing","satellites"]
+categories = ["science","parsing"]
+edition = "2018"
+readme = "README.md"
+exclude = ["/data",]
+
+[dependencies]
+thiserror = "1"
+chrono = "0.4"
+julianday = "1.0.1"
+scan_fmt = "0.1"
+rinex = "0.3.3"
+rust-3d = "0.34.0"
+format_num = "0.1.0"
+
+[dev-dependencies]
+float-cmp = "0.9.0"
