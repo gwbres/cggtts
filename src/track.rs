@@ -85,10 +85,8 @@ impl Default for GlonassChannel {
     }
 }
 
-const TRACK_WITH_IONOSPHERIC :usize = 24;
 const TRACK_WITHOUT_IONOSPHERIC :usize = 21;
-const PADDED_TRACK_WITHOUT_IONOSPHERIC :usize = 22;
-const PADDED_TRACK_WITH_IONOSPHERIC :usize = 25;
+const TRACK_WITH_IONOSPHERIC :usize = 24;
 
 #[derive(Debug, PartialEq, Clone)]
 /// A `Track` is a `Cggtts` measurement
@@ -433,22 +431,6 @@ impl std::str::FromStr for Track {
                     u8::from_str_radix(items[21], 16)?,
                     items[22].to_string(),
                     u8::from_str_radix(items[23], 16)?)
-                },
-                PADDED_TRACK_WITHOUT_IONOSPHERIC_LENGTH => {
-                    (None,None,None,
-                    u8::from_str_radix(items[17+1], 16)?, 
-                    u8::from_str(items[18+1])?,
-                    items[19+1].to_string(),
-                    u8::from_str_radix(items[20+1], 16)?)
-                },
-                PADDED_TRACK_WITH_IONOSPHERIC_LENGTH => {
-                    (Some(f64::from_str(items[17+1])? * 0.1E-9), 
-                    Some(f64::from_str(items[18+1])? * 0.1E-12), 
-                    Some(f64::from_str(items[19+1])? * 0.1E-9),
-                    u8::from_str_radix(items[20+1], 16)?, 
-                    u8::from_str_radix(items[21+1], 16)?,
-                    items[22+1].to_string(),
-                    u8::from_str_radix(items[23+1], 16)?)
                 },
                 _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
         };
