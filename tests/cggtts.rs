@@ -26,7 +26,7 @@ mod test {
         assert!((cggtts.coordinates.y - 452633.241).abs() < 1E-6);
         assert!((cggtts.coordinates.z - 4660711.385).abs() < 1E-6);
         assert_eq!(cggtts.comments, None);
-        //assert_eq!(cggtts.delay, );
+        assert_eq!(cggtts.tracks.len(), 32);
     }
     #[test]
     fn parse_standard_data() {
