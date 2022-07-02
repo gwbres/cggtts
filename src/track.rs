@@ -1,4 +1,3 @@
-use regex::Regex;
 use chrono::Timelike;
 use thiserror::Error;
 use format_num::NumberFormat;

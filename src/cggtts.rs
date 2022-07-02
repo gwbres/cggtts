@@ -348,7 +348,7 @@ impl Cggtts {
                     Some(serial_number),
                     Some(year),
                     Some(release)) => { 
-                        rcvr = Some(Rcvr {
+                        ims = Some(Rcvr {
                             manufacturer, 
                             recv_type, 
                             serial_number, 
