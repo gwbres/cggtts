@@ -1,6 +1,5 @@
 //! CGGTTS is the core structure, it comprises a list of Track.
 //! Homepage: <https://github.com/gwbres/cggtts>
-use regex::Regex;
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;

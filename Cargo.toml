@@ -12,7 +12,6 @@ readme = "README.md"
 exclude = ["/data",]
 
 [dependencies]
-regex = "1"
 thiserror = "1"
 chrono = "0.4"
 julianday = "1.0.1"
