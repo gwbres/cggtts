@@ -146,6 +146,22 @@ pub struct IonosphericData {
     pub isg: f64, 
 }
 
+impl Into<(f64,f64,f64)> for IonosphericData {
+    fn into (self) -> (f64,f64,f64) {
+        (self.msio, self.smsi, self.isg)
+    }
+}
+
+impl From<(f64,f64,f64)> for IonosphericData {
+    fn from (data: (f64,f64,f64)) -> Self {
+        Self {
+            msio: data.0,
+            smsi: data.1,
+            isg: data.2,
+        }
+    }
+}
+
 impl Default for IonosphericData {
     /// Builds Null Ionospheric Parameter estimates
     fn default() -> Self {

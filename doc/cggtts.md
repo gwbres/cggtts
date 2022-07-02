@@ -27,8 +27,8 @@ Notes on System delays and this parser
 if \"TOT\" = Total delay is specified, we actually discard
 any other possibly provided delay value, and this one superceeds
 and becomes the only known system delay.
-Refer to the System Delay paragraph to understand what they
-mean and how to specify them.
+Refer to the System Delay documentation to understand what they
+mean and how to specify/use them.
 
 ## Getting started
 
@@ -48,6 +48,9 @@ Parse a CGGTTS file:
     assert_eq!(cggtts.comments, None); // no comments were identified
     // basic CGGTTS (single carrier, see advanced usage..)
     assert_eq!(cggts.has_ionospheric_data(), false);
+    // True if all measurements contained in this file
+    // follow BIPM recommendations for tracking duration
+    assert_eq!(track.follows_bipm_specs(), true);
 ``` 
 
 ## CGGTT Measurements 
@@ -56,20 +59,12 @@ Measurements are stored within the list of _CggttsTracks_
 
 ```rust
     let cggtts = Cggtts::from_file("data/standard/GZSY8259.506");
-    let track = cggtts.get_track(0);
-    prinln!("{:#?}", track);
-    println!("{}", track.get_start_time());
-    println!("{}", track.get_duration());
-    prinln!("{:#?}", track.get_refsys_srsys());
-```
-
-_CggttsTracks_ are easily manipulated
-
-```rust
-    let t = cggtts.pop(); // grab 1
-    assert_eq!(cggtts.len(), 0); // consumed
-    assert_eq!(t.get_azimuth(), 180.0);
-    assert_eq!(t.set_elevation(), 90.0);
+    let track = cggtts.first()
+        .unwrap();
+    let duration = track.duration;
+    let (refsys, srsys) = (trak.refsys, syrsys);
+    assert_eq!(track.has_ionospheric_data(), false);
+    assert_eq!(track.follows_bipm_specs(), true);
 ```
 
 ## Advanced CGGTTS
@@ -79,54 +74,103 @@ _CggttsTracks_ are easily manipulated
     // Has ionospheric parameter estimates,
     // this is feasible on dual carrier receivers
     assert_eq!(cggtts.has_ionospheric_parameters(), true); 
+    let Some(iono) = cggtts.ionospheric_data {
+        let msio = iono.msio;
+        let smsi = iono.smsi;
+        let isg = iono.isg;
+    }
+
+    // IonosphericData supports unwrapping and wrapping
+    let data : IonosphericData = (1E-9, 1E-13, 1E-10).into();
+    // refer to [IonosphericData] to understand their meaning 
+    let (msio, smsi, isg) : (f64, f64, f64) = data.into();
 ```
 
-### CGGTTS production
+## CGGTTS production
 
-Using the basic constructor gets you started quickly
+Use `to_string` methods to produce CGGTTS data
 
 ```rust
-    let mut cggtts = Cggtts::new();
-    cggtts.set_lab_agency("MyLab");
-    cggtts.set_nb_channels(10);
+    let lab = String::from("MyAgency");
+    let nb_channels = 16;
+    let hardware = Rcvr {
+        manufacturer: String::from("GoodManufacturer"),
+        recv_type: String::from("Unknown"),
+        serial_number: String::from("1234"),
+        year: 2022,
+        release: String::from("V1"),
+    };
+    let mut cggtts = Cggtts::new(
+        Some(lab), 
+        nb_channels, 
+        Some(harware));
+
+    write!(fd, "{}", cggtts).unwrap();
+```
+
+Add some measurements:
+
+```rust
+    // standard CGGTTS (single carrier)
+    let class = CommonViewClass::Single;
+    // CGGTTS says, if we use many space vehicules
+    // to extrapolate data, we should set "99" as PRN
+    // to emphasize
+    let sv = rinex::sv::Sv {
+        constellation: rinex::constellation::Constellation::GPS,
+        prn: 99,
+    };
     
-    // Antenna phase center coordinates [m] 
-    // is specified in IRTF spatial referencing
-    cggtts.set_antenna_coordinates((+4027881.79.0,+306998.67,+4919499.36));
-    println!("{:#?}", cggtts);
-    assert_eq!(cggtts.get_total_delay(), 0.0); // system delays is not specified
-    assert_eq!(cggtts.support_dual_frequency(), false); // not enough information
-    cggtts.to_file("XXXX0159.572").unwrap(); // produce a CGGTTS
+    let mut track = Track::new(
+        class,
+        trktime,
+        Track::BIPM_SPECIFIED_DURATION, // follow standards 
+        space_vehicule: sv,
+        elevation: 10.0,
+        ...
+    );
+    cggtts.tracks.push(track);
+    write!(fd, "{}", cggtts).unwrap();
 ```
 
-Add some measurements to a _Cggtts_
+Use `to_string` methods to produce dump CGGTTS measurement
 
 ```rust
-    let mut track = track::Cggttrack::new(); // basic track
-    // customize a little
-    track.set_azimuth(90.0);
-    track.set_elevation(180.0);   
-    track.set_duration(Cggtts::track::BIPM_SPECIFIED_TRACKING_DURATION); // standard
-    cggtts.add_track(track);
+    write!(fd, "{}", cggtts.tracks[0]).unwrap();
 ```
 
-Add ionospheric parameters estimates
+## Advanced CGGTTS
+
+To produce advanced CGGTTS data correctly, one should specify / provide
+
+* provide secondary hardware info (IMS)
+* ionospheric parameters estimate
+* specificy carrier dependent delay [see doc/delay.md]
 
 ```rust
-    // read some data
-    let cggtts = Cggtts::from_file("data/ionospheric/RZOP0159.572");
-    assert_eq!(cggtts.has_ionospheric_parameters(), true); // yes
-    // add some data
-    let mut track = track::Cggttrack::new(); // basic track
-    // customize
-    track.set_duration(Cggtts::track::BIPM_SPECIFIED_TRACKING_DURATION); // respect standard
-    track.set_refsys_srsys((1E-9,1E-12)); // got some data
-    cggtts.push_track(track); // ionospheric_parameters not provided
-          // will get blanked out on this line
+    let secondary_hw = Rcvr {
+        manufacturer: String::from("ExtraGoodHardware"),
+        recv_type: String::from("Unknown"),
+        serial_number: String::from("1234"),
+        year: 2022,
+        release: String::from("V1"),
+    };
+    let cggtts = cggtts
+        .with_ims_infos(secondary_hw);
     
-    let params = (5.0E-9, 0.1E-12, 1E-9); // see (msio, smsi, isg) specifications
-    track.set_ionospheric_parameters(params));
-    cggtts.push_track(track);
-    cggtts.to_file("RZOP0159.573"); // fully populated
+    cggtts.delay = SystemDelay {
+        rf_cable_delay: 10.0,
+        ref_delay: 5.0,
+        calib_delay: CalibratedDelay {
+            info: String::from("I did this calibration"),
+            constellation: Constellation::GPS,
+            delay: Delay::Internal(125.0),
+        },
+    };
+
+    let track = Track::new();
+    /// see [IonosphericData in API]
+    track = track
+        .with_ionospheric_data((1E-9,1E-13,1e-10));
 ```
 

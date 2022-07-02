@@ -1,6 +1,11 @@
 use std::str::FromStr;
 use rinex::{constellation::Constellation, sv::Sv};
-use cggtts::{Track, track::CommonViewClass, track::GlonassChannel};
+use cggtts::{
+    Track, 
+    track::CommonViewClass, 
+    track::GlonassChannel,
+    track::IonosphericData,
+};
 
 #[cfg(test)]
 mod track {
@@ -126,5 +131,16 @@ mod track {
         assert_eq!(track.fr, GlonassChannel::Channel(2));
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L3P");
+    }
+    #[test]
+    fn test_ionospheric_data() {
+        let data : IonosphericData = (1E-9,1E-13,1E-10).into();
+        assert_eq!(data.msio, 1E-9);
+        assert_eq!(data.smsi, 1E-13);
+        assert_eq!(data.isg, 1E-10);
+        let (msio, smsi, isg): (f64,f64,f64) = data.into();
+        assert_eq!(msio, data.msio);
+        assert_eq!(smsi, data.smsi);
+        assert_eq!(isg, data.isg);
     }
 }

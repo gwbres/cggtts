@@ -10,16 +10,14 @@ Two classes of measurement exist:
 A track comprises several data fields, refer to the crate official documentation 
 for their definition.
 
-## Track manipulation
-
-Access one measurement through `Cggtts.tracks` array:
-
 ```rust
-let cggtts = Cggtts::from("");
-assert_eq!(cggtts.tracks.len(), 10);
-let first = cggtts.tracks.first();
-assert_eq!(first.class,
+let first = cggtts.tracks.first()
+    .unwrap();
+assert_eq!(first.elevation, 1E-9);
+assert_eq!(first.azimuth, 1E-10);
 ```
+
+Follows BIPM tracking duration specifications: 
 
 ```rust
 assert_eq!(first.follows_bipm_specs(), true);
