@@ -305,7 +305,7 @@ impl Cggtts {
             _ => return Err(Error::VersionFormatError),
         };
         
-        let mut cksum :u8 = calc_crc(&line)?;
+        let mut _cksum :u8 = calc_crc(&line)?;
         
         let mut rev_date = chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d")
             .unwrap();
@@ -473,7 +473,7 @@ impl Cggtts {
             
             } else if line.starts_with("CKSUM = ") {
 
-                let ck :u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
+                let _ck :u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
                     Some(s) => {
                         match u8::from_str_radix(&s, 16) {
                             Ok(hex) => hex,
@@ -486,7 +486,7 @@ impl Cggtts {
                 // check CRC
                 let end_pos = line.find("= ")
                     .unwrap();
-                cksum = cksum.wrapping_add(
+                _cksum = _cksum.wrapping_add(
                     calc_crc(
                         &line.split_at(end_pos+2).0)?);
         
@@ -497,7 +497,7 @@ impl Cggtts {
             }
 
             // CRC
-            cksum = cksum.wrapping_add(
+            _cksum = _cksum.wrapping_add(
                 calc_crc(&line)?);
             
             if let Some(l) = lines.next() {

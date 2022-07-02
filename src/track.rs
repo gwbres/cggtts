@@ -427,7 +427,7 @@ impl std::str::FromStr for Track {
         // checksum 
         let end_pos = line.rfind(&format!("{:2X}",ck))
             .unwrap(); // already matching
-        let cksum = calc_crc(&line.split_at(end_pos-1).0)?;
+        let _cksum = calc_crc(&line.split_at(end_pos-1).0)?;
         // verification
         /*if cksum != ck {
             println!("GOT {} EXPECT {}", ck, cksum);

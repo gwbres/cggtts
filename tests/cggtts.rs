@@ -40,8 +40,8 @@ mod test {
             prn: 99,
         });
 
-        let dumped = cggtts.to_string();
-        let compare = std::fs::read_to_string(
+        let _dumped = cggtts.to_string();
+        let _compare = std::fs::read_to_string(
             &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard/GZSY8259.568")).unwrap();
     }
     #[test]
@@ -120,8 +120,8 @@ mod test {
         });
         assert_eq!(first.fr, GlonassChannel::Channel(2));
 
-        let dumped = cggtts.to_string();
-        let compare = std::fs::read_to_string(
+        let _dumped = cggtts.to_string();
+        let _compare = std::fs::read_to_string(
             &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/advanced/RZSY8257.000")).unwrap();
     }
 }
