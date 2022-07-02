@@ -433,51 +433,30 @@ impl Cggtts {
 
                 match label.as_str() {
                     "CAB" => {
-                        system_delay.add_delay(
-                            CalibratedDelay {
-                                delay: Delay::RfCable(value),
-                                constellation: Constellation::Mixed,
-                                info: None,
-                            }
-                        )
+                        system_delay.rf_cable_delay = value
                     },
                     "REF" => {
-                        system_delay.add_delay(
-                            CalibratedDelay {
-                                delay: Delay::Reference(value),
-                                constellation: Constellation::Mixed,
-                                info: None,
-                            }
-                        )
+                        system_delay.ref_delay = value
                     },
                     "SYS" => {
-                        system_delay.add_delay(
-                            CalibratedDelay {
-                                delay: Delay::System(value),
-                                constellation: Constellation::Mixed,
-                                info: None,
-                            }
-                        )
+                        system_delay.calib_delay = CalibratedDelay {
+                            info: None, // TODO
+                            constellation: Constellation::default(), // TODO
+                            delay: Delay::System(value),
+                        }
                     },
                     "INT" => {
-                        system_delay.add_delay(
-                            CalibratedDelay {
-                                delay: Delay::Internal(value),
-                                constellation: Constellation::Mixed,
-                                info: None,
-                            }
-                        )
+                        system_delay.calib_delay = CalibratedDelay {
+                            info: None, // TODO
+                            constellation: Constellation::default(), // TODO
+                            delay: Delay::Internal(value),
+                        }
                     },
                     "TOT" => {
                         // special case, Total delay is given,
                         // assumes all other delays are not known
-                        system_delay.add_delay(
-                            CalibratedDelay { // we declare it as RfCable arbitrarily,
-                                delay: Delay::RfCable(value), // which is convenient because it is
-                                constellation: Constellation::Mixed, // not constellation dependent
-                                info: None,
-                            }
-                        )
+                        system_delay.rf_cable_delay = value;
+                        break
                     },
                     _ => {}, // non recognized delay type
                 };

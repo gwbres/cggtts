@@ -12,19 +12,13 @@ use rinex::constellation::Constellation;
 pub enum Delay {
     /// Delay defined as `internal`
     Internal(f64),
-    /// Cable / RF delay
-    RfCable(f64),
-    /// `Reference` delay
-    Reference(f64),
     /// `System` delay
     System(f64),
 }
 
 impl Default for Delay {
-    /// Default Delay is a total delay of 0 nanoseconds,
-    /// ie., completly unknown delay
     fn default() -> Delay {
-        Delay::RfCable(0.0_f64)
+        Delay::System(0.0_f64)
     }
 }
 
@@ -33,35 +27,18 @@ impl Delay {
     pub fn value (&self) -> f64 {
         match self {
             Delay::Internal(d) => *d,
-            Delay::RfCable(d) => *d,
-            Delay::Reference(d) => *d,
             Delay::System(d) => *d,
         }
     }
-
     /// Returns (`unwraps`) itself in seconds
     pub fn value_seconds (&self) -> f64 {
         self.value() * 1.0E-9
     }
-
-    /// Adds given value in nanoseconds, to Self, regardless of delay type
-    pub fn add_value (&self, v: f64) -> Self {
+    /// Adds value to self
+    pub fn add_value (&self, rhs: f64) -> Self {
         match self {
-            Delay::Internal(d) => Delay::Internal(*d + v), 
-            Delay::RfCable(d) => Delay::RfCable(*d + v), 
-            Delay::Reference(d) => Delay::Reference(*d + v), 
-            Delay::System(d) => Delay::System(*d + v), 
-        }
-    }
-
-    /// Converts self to calibrated delay,
-    /// by associating a constellation and possible
-    /// calibration process information
-    pub fn calibrate (&self, constellation: Constellation, info: Option<String>) -> CalibratedDelay {
-        CalibratedDelay {
-            delay: self.clone(),
-            constellation,
-            info,
+            Delay::System(d) => Delay::System(*d + rhs),
+            Delay::Internal(d) => Delay::Internal(*d + rhs),
         }
     }
 }
@@ -80,6 +57,80 @@ pub struct CalibratedDelay {
     /// Calibration process information,
     /// usually laboraty code, ie., who performed that calibration
     pub info: Option<String>,
+}
+
+impl Into<f64> for CalibratedDelay {
+    fn into(self) -> f64 {
+        self.delay.value()
+    }
+}
+
+impl std::ops::Add<f64> for CalibratedDelay {
+    type Output = CalibratedDelay;
+    fn add (self, rhs: f64) -> Self {
+        Self {
+            constellation: self.constellation.clone(),
+            delay: self.delay.add_value(rhs),
+            info: self.info.clone(),
+        }
+    }
+}
+
+impl std::ops::Add<CalibratedDelay> for CalibratedDelay {
+    type Output = CalibratedDelay;
+    fn add (self, rhs: Self) -> Self {
+        let mut allowed = self.constellation == rhs.constellation;
+        allowed |= self.constellation == Constellation::Mixed;
+        allowed |= rhs.constellation == Constellation::Mixed;
+        let delay : Delay = match allowed {
+            true => {
+                match self.delay {
+                    Delay::Internal(delay) => {
+                        match rhs.delay {
+                            Delay::Internal(d) => {
+                                Delay::Internal(delay+d)
+                            },
+                            _ => Delay::Internal(delay), // unchanged: mismatch
+                        }
+                    },
+                    Delay::System(delay) => {
+                        match rhs.delay {
+                            Delay::System(d) => {
+                                Delay::System(delay+d)
+                            },
+                            _ => Delay::System(delay), // unchanged: mismatch
+                        }
+                    },
+                }
+            },
+            false => self.delay.clone(),
+        };
+        Self {
+            constellation: {
+                if self.constellation == Constellation::Mixed {
+                    Constellation::Mixed
+                } else {
+                    if rhs.constellation == Constellation::Mixed {
+                        Constellation::Mixed
+                    } else {
+                        self.constellation.clone()
+                    }
+                }
+            },
+            delay,
+            info: {
+                if let Some(info) = self.info {
+                    Some(info)
+                } else {
+                    if let Some(info) = rhs.info {
+                        Some(info)
+                    } else {
+                        None
+                    }
+                }
+            },
+        }
+    }
 }
 
 impl Default for CalibratedDelay {
@@ -131,7 +182,19 @@ impl CalibratedDelay {
         }
     }
 
-    /// Adds constellation against which this delay was calibrated
+    /// Returns delay value in nanoseconds 
+    pub fn value (&self) -> f64 {
+        self.delay.value()
+    }
+
+    /// Returns delay value in seconds 
+    pub fn value_seconds (&self) -> f64 {
+        self.delay.value_seconds()
+    }
+
+    /// Adds constellation against which this delay was calibrated.
+    /// If constellation is not `rinex::Constellation::Mixed`,
+    /// then Self becomes a trusted delay value
     pub fn with_constellation (&self, c: Constellation) -> Self {
         Self {
             delay: self.delay,
@@ -150,22 +213,6 @@ impl CalibratedDelay {
     /// against a specific GNSS constellation
     pub fn non_trusted (&self) -> bool {
         !self.trusted()
-    }
-
-    /// Adds given delay value, in nanoseconds, to self
-    pub fn add_value (&mut self, value: f64) {
-        self.delay = self.delay
-            .add_value(value)
-    }
-
-    /// Returns delay value in nanoseconds
-    pub fn value (&self) -> f64 {
-        self.delay.value()
-    }
-
-    /// Returns delay value in seconds
-    pub fn value_seconds (&self) -> f64 {
-        self.delay.value_seconds()
     }
 }
 
@@ -199,8 +246,12 @@ fn carrier_dependant_delay_parsing (string: &str)
 /// to be used in `Cggtts`
 #[derive(Clone, PartialEq, Debug)]
 pub struct SystemDelay {
-    /// Internal group of delays
-    pub delays: Vec<CalibratedDelay>,
+    /// RF/cable delay
+    pub rf_cable_delay: f64,
+    /// reference delay 
+    pub ref_delay: f64,
+    /// carrier dependend delay 
+    pub calib_delay: CalibratedDelay,
 }
 
 impl SystemDelay {
@@ -208,141 +259,28 @@ impl SystemDelay {
     /// with empty fields. Use `add_delay()` to customize.
     pub fn new () -> Self {
         Self {
-            delays: Vec::with_capacity(3),
+            rf_cable_delay: 0.0_f64,
+            ref_delay: 0.0_f64,
+            calib_delay: CalibratedDelay::default(),
         }
     }
 
-    /// Returns true if System delay can be trusted,
-    /// meaning, all specified values are specified
-    /// against a unique `GNSS` constellation
+    /// Returns true if Self was calibrated against
+    /// a specific GNSS constellation
     pub fn trusted (&self) -> bool {
-        for i in 0..self.delays.len() {
-            if !self.delays[i].trusted() {
-                return false
-            }
-        }
-        true
+        self.calib_delay.trusted()
     }
 
-    /// Adds new calibrated delay to Self.
-    /// User should avoid declaring Calibrated Delay against unspecified constellation
-    /// (= `Constellation::Mixed`).
-    /// * (1) If user already specified same kind of delay, it is accumulated to existing value.
-    /// It is possible to add negative delay value. In case of (1), 
-    /// it will decrease the contribution of this kind of delay
-    /// * (2) If other kinds of delay were previously specified,
-    /// GNSS system used in calibration must match already declared systems,
-    /// except in the two following scenarios
-    /// * (2a) if we're introducing a Delay value calibrated against `Constellation::Mixed` 
-    /// and previous values were specified against a specific GNSS system,
-    /// we redefine all calibration values to `Constellation::Mixed`, calibration is
-    /// `untrusted()`: avoid this scenario.
-    /// * (2b) if we're introducing a Delay value calibrated against a specific 
-    /// Constellation while other values were declared as `Constellation::Mixed`,
-    /// we introduce the given delay as `Constellation::Mixed`.
-    pub fn add_delay (&mut self, new: CalibratedDelay) {
-        if self.delays.len() == 0 {
-            self.delays.push(new);
-            return;
-        }
-        let mut rework = false;
-        let mut matched = false;
-        for i in 0..self.delays.len() {
-            let delay = self.delays[i].delay;
-            let constell = self.delays[i].constellation;
-            match delay { 
-                Delay::Internal(_) => {
-                    if let Delay::Internal(v) = new.delay {
-                        // Already exists, but kinds do match
-                        if new.constellation == constell {
-                            // perfect constellation match
-                            self.delays[i] 
-                                .add_value(v);
-                        } else if new.constellation == Constellation::Mixed {
-                            self.delays[i] 
-                                .add_value(v);
-                            rework = true
-                        }
-                        matched = true;
-                        break;
-                    } else {
-                        continue
-                    }
-                },
-                Delay::RfCable(_) => {
-                    if let Delay::RfCable(v) = new.delay {
-                        // Already exists, but kinds do match
-                        if new.constellation == constell {
-                            self.delays[i] 
-                                .add_value(v);
-                        } else if new.constellation == Constellation::Mixed {
-                            self.delays[i] 
-                                .add_value(v);
-                            rework = true
-                        }
-                        matched = true;
-                        break
-                    } else {
-                        continue
-                    }
-                },
-                Delay::Reference(_) => {
-                    if let Delay::Reference(v) = new.delay {
-                        // Already exists, but kinds do match
-                        if new.constellation == constell {
-                            self.delays[i] 
-                                .add_value(v);
-                        } else if new.constellation == Constellation::Mixed {
-                            self.delays[i] 
-                                .add_value(v);
-                            rework = true
-                        }
-                        matched = true;
-                        break
-                    } else {
-                        continue
-                    }
-                },
-                Delay::System(_) => {
-                    if let Delay::System(v) = new.delay {
-                        // Already exists, but kinds do match
-                        if new.constellation == constell {
-                            self.delays[i]
-                                .add_value(v);
-                        } else if new.constellation == Constellation::Mixed {
-                            self.delays[i]
-                                .add_value(v);
-                            rework = true
-                        }
-                        matched = true;
-                        break
-                    } else {
-                        continue
-                    }
-                },
-            }
-        }
-        if !matched {
-            self.delays.push(new);
-        }
-        if rework {
-            for i in 0..self.delays.len() {
-                self.delays[i].constellation = Constellation::Mixed 
-            }
-        }
+    /// Returns true if Self was not calibrated against
+    /// a specific GNSS constellation
+    pub fn non_trusted (&self) -> bool {
+        self.calib_delay.non_trusted()
     }
 
     /// Returns measurement systems total delay in nanoseconds
     pub fn value (&self) -> f64 {
-        let mut dly: f64 = 0.0;
-        for i in 0..self.delays.len() {
-            dly += self.delays[i].value()
-        }
-        dly
-    }
-
-    /// Returns measurement systems total delay in seconds
-    pub fn value_seconds (&self) -> f64 {
-        self.value() * 1E-9
+        self.calib_delay.value() 
+            + self.rf_cable_delay
+            + self.ref_delay
     }
 }
