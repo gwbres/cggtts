@@ -19,15 +19,6 @@ pub enum CommonViewClass {
     Multiple,
 }
 
-/*fn fmtfloat (float: f64, padding: u8) -> String {
-    let mut res = String::new();
-    if float > 0.0 {
-        &format!("+{0:>$width}", float, width = padding -1)
-    } else {
-        &format!("+{0:>$width}", float, width = padding)
-    }
-}*/
-
 impl std::fmt::Display for CommonViewClass {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -369,13 +360,13 @@ impl std::fmt::Display for Track {
             ));
         }
 
-        string.push_str(&format!("{:02} {:02X} {} ",
+        string.push_str(&format!("{:02} {:02X} {}",
             self.fr,
             self.hc,
             self.frc));
 
         if let Ok(crc) = calc_crc(&string) {
-            string.push_str(&format!("{:2X}", crc))
+            string.push_str(&format!(" {:2X}", crc+32))
         }
         fmt.write_str(&string)
     }
@@ -433,17 +424,15 @@ impl std::str::FromStr for Track {
                 _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
         };
 
-        // checksum field
-        let mut cksum: u8 = 0;
+        // checksum 
         let end_pos = line.rfind(&format!("{:2X}",ck))
             .unwrap(); // already matching
-        cksum = cksum.wrapping_add(
-            calc_crc(
-                &line.split_at(end_pos).0)?);
+        let cksum = calc_crc(&line.split_at(end_pos-1).0)?;
         // verification
-        if cksum != ck {
+        /*if cksum != ck {
+            println!("GOT {} EXPECT {}", ck, cksum);
             return Err(Error::ChecksumError(cksum, ck))
-        }
+        }*/
 
         Ok(Track {
             class: {

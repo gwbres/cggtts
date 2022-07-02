@@ -195,7 +195,7 @@ impl Cggtts {
         }
         true
     }
-
+    
     /// Returns `Cggtts` with same attributes
     /// but desired `Lab` agency
     pub fn with_lab_agency (&self, lab: &str) -> Self { 
@@ -270,6 +270,16 @@ impl Cggtts {
         }
     }
 
+    /// Returns total set duration,
+    /// by cummulating all measurements duration
+    pub fn total_duration (&self) -> std::time::Duration {
+        let mut s = 0;
+        for t in self.tracks.iter() {
+            s += t.duration.as_secs()
+        }
+        std::time::Duration::from_secs(s)
+    }
+
     /// Builds Self from given `Cggtts` file.
     pub fn from_file (fp: &str) -> Result<Self, Error> {
         let file_content = std::fs::read_to_string(fp)
@@ -295,17 +305,21 @@ impl Cggtts {
             _ => return Err(Error::VersionFormatError),
         };
         
+        let mut cksum :u8 = calc_crc(&line)?;
+        
         let mut rev_date = chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d")
             .unwrap();
         let mut nb_channels :u16 = 0;
         let mut rcvr : Option<Rcvr> = None;
         let mut ims : Option<Rcvr> = None;
         let mut lab: Option<String> = None;
-        let mut cksum :u8 = calc_crc(&line)?;
         let mut comments: Vec<String> = Vec::new();
         let mut reference_frame: Option<String> = None;
         let mut time_reference : Option<String> = None;
         let (mut x, mut y, mut z) : (f64,f64,f64) = (0.0, 0.0, 0.0);
+
+        line = lines.next()
+            .unwrap();
 
         loop {
             if line.starts_with("REV DATE = ") {
@@ -389,13 +403,9 @@ impl Cggtts {
                 }
             
             } else if line.starts_with("FRAME = ") {
-                match scan_fmt!(&line, "FRAME = {}", String) {
-                    Some(fr) => {
-                        if !fr.trim().eq("?") {
-                            reference_frame = Some(fr)
-                        }
-                    },
-                    _ => {},
+                let frame = line.split_at(7).1.trim();
+                if !frame.eq("?") {
+                    reference_frame = Some(frame.to_string())
                 }
 
             } else if line.starts_with("COMMENTS = ") {
@@ -662,7 +672,11 @@ mod tests {
             let ck = calc_crc(content[i])
                 .unwrap();
             let expect = expected[i];
-            assert_eq!(ck,expect,"Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",content[i],expect,ck)
+            assert_eq!(ck,
+                expect,
+                "Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",
+                content[i],expect,
+                ck)
         }
     }
 }
