@@ -1,7 +1,7 @@
 use regex::Regex;
 use chrono::Timelike;
 use thiserror::Error;
-use rinex::{Constellation, Sv};
+use rinex::{constellation::Constellation, sv::Sv};
 use crate::cggtts::{CrcError, calc_crc};
 
 /// `BIPM` tracking duration specifications.

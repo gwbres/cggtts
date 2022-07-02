@@ -4,7 +4,7 @@ use regex::Regex;
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
-use rinex::Constellation;
+use rinex::constellation::Constellation;
 
 use crate::{Track, Delay, delay::SystemDelay, CalibratedDelay};
 
