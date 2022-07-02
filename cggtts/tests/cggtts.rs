@@ -1,9 +1,10 @@
-use cggtts::Rcvr;
-use cggtts::Cggtts;
-use cggtts::{CalibratedDelay, Delay};
-use cggtts::track::GlonassChannel;
 use rinex::sv::Sv;
 use rinex::constellation::Constellation;
+
+use cggtts::Rcvr;
+use cggtts::Cggtts;
+use cggtts::track::GlonassChannel;
+use cggtts::{CalibratedDelay, Delay, TimeSystem};
 
 #[cfg(test)]
 mod test {
@@ -11,7 +12,7 @@ mod test {
     #[test]
     fn test_standard_cggtts() {
         let cggtts = Cggtts::from_file(
-            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard/GZSY8259.568"));
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/standard/GZSY8259.568"));
         assert_eq!(cggtts.is_ok(), true);
         let cggtts = cggtts.unwrap();
         assert_eq!(cggtts.rev_date.format("%Y-%m-%d").to_string(), String::from("2014-02-20"));
@@ -25,7 +26,8 @@ mod test {
         assert_eq!(cggtts.lab, Some(String::from("SY82")));
         assert_eq!(cggtts.nb_channels, 12);
         assert_eq!(cggtts.ims, None);
-        assert_eq!(cggtts.time_reference, Some(String::from("REF(SY82)")));
+        assert_eq!(cggtts.time_reference, 
+            TimeSystem::Unknown(String::from("REF(SY82)")));
         assert_eq!(cggtts.reference_frame, Some(String::from("ITRF")));
         assert!((cggtts.coordinates.x - 4314143.824).abs() < 1E-6);
         assert!((cggtts.coordinates.y - 452633.241).abs() < 1E-6);
@@ -43,12 +45,12 @@ mod test {
 
         let _dumped = cggtts.to_string();
         let _compare = std::fs::read_to_string(
-            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard/GZSY8259.568")).unwrap();
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/standard/GZSY8259.568")).unwrap();
     }
     #[test]
     fn parse_standard_data() {
         let test_resources = std::path::PathBuf::from(
-            env!("CARGO_MANIFEST_DIR").to_owned() + "/data/standard");
+            env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/standard");
         for entry in std::fs::read_dir(test_resources)
             .unwrap() {
             let entry = entry
@@ -70,7 +72,7 @@ mod test {
     #[test]
     fn parse_advanced_data() {
         let test_resources = std::path::PathBuf::from(
-            env!("CARGO_MANIFEST_DIR").to_owned() + "/data/advanced");
+            env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/advanced");
         for entry in std::fs::read_dir(test_resources)
             .unwrap() {
             let entry = entry
@@ -92,7 +94,7 @@ mod test {
     #[test]
     fn test_advanced_cggtts() {
         let cggtts = Cggtts::from_file(
-            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/advanced/RZSY8257.000"));
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/advanced/RZSY8257.000"));
         assert_eq!(cggtts.is_ok(), true);
         let cggtts = cggtts.unwrap();
         assert_eq!(cggtts.rev_date.format("%Y-%m-%d").to_string(), String::from("2014-02-20"));
@@ -100,7 +102,8 @@ mod test {
         assert_eq!(cggtts.lab, Some(String::from("ABC")));
         assert_eq!(cggtts.nb_channels, 12);
         assert_eq!(cggtts.ims, None);
-        assert_eq!(cggtts.time_reference, Some(String::from("UTC(ABC)")));
+        assert_eq!(cggtts.time_reference,
+            TimeSystem::UTCk(String::from("ABC"), None));
         assert_eq!(cggtts.reference_frame, 
             Some(String::from(
                 "ITRF, PZ-90->ITRF Dx = 0.0 m, Dy = 0.0 m, Dz = 0.0 m, ds = 0.0, Rx = 0.0, Ry = 0.0, Rz = 0.000000"
@@ -128,6 +131,6 @@ mod test {
 
         let _dumped = cggtts.to_string();
         let _compare = std::fs::read_to_string(
-            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/data/advanced/RZSY8257.000")).unwrap();
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/advanced/RZSY8257.000")).unwrap();
     }
 }

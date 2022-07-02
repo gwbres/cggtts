@@ -38,6 +38,60 @@ pub struct Rcvr {
     pub release: String,
 }
 
+#[derive(Clone, PartialEq, Debug)]
+/// Known Reference Time Systems
+pub enum TimeSystem {
+    /// TAI: International Atomic Time
+    TAI,
+    /// UTC: Universal Coordinate Time
+    UTC,
+    /// UTC(k): Laboratory local official
+    /// UTC image, agency name
+    /// and optionnal |offset| to universal UTC
+    /// in nanoseconds
+    UTCk(String, Option<f64>),
+    /// Unknown Time system
+    Unknown(String),
+}
+
+impl Default for TimeSystem {
+    fn default() -> TimeSystem {
+        TimeSystem::UTC
+    }
+}
+
+impl TimeSystem {
+    pub fn from_str(s: &str) -> TimeSystem {
+        if s.eq("TAI") {
+            TimeSystem::TAI
+        } else if s.contains("UTC") {
+            // UTCk with lab + offset
+            if let (Some(lab), Some(offset)) = scan_fmt!(s, "UTC({},{})", String, f64) {
+                TimeSystem::UTCk(lab, Some(offset))
+            } 
+            // UTCk with only agency name
+            else if let Some(lab) = scan_fmt!(s, "UTC({})", String) {
+                TimeSystem::UTCk(lab, None)
+            } else {
+                TimeSystem::UTC
+            }
+        } else {
+            TimeSystem::Unknown(s.to_string()) 
+        }
+    }
+}
+
+impl std::fmt::Display for TimeSystem {
+    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TimeSystem::TAI => fmt.write_str("TAI"),
+            TimeSystem::UTC => fmt.write_str("UTC"),
+            TimeSystem::UTCk(lab, _) => write!(fmt, "UTC({})", lab),
+            TimeSystem::Unknown(s) => fmt.write_str(s),
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum CrcError {
     #[error("failed to compute CRC over non utf8 data")] 
@@ -93,7 +147,7 @@ pub struct Cggtts {
     /// IMS Ionospheric Measurement System (if any)
     pub ims: Option<Rcvr>, 
     /// Description of Reference time system (if any)
-    pub time_reference: Option<String>, 
+    pub time_reference: TimeSystem, 
     /// Reference frame, coordinates system and conversions,
     /// used in `coordinates` field
     pub reference_frame: Option<String>,
@@ -162,7 +216,7 @@ impl Default for Cggtts {
             tracks: Vec::new(),
             ims: None, 
             reference_frame: None,
-            time_reference: None,
+            time_reference: TimeSystem::default(),
             comments: None,
             delay: SystemDelay::new(), 
         }
@@ -236,9 +290,9 @@ impl Cggtts {
     }
     
     /// Returns `Cggtts` with desired reference time system description 
-    pub fn with_time_reference (&self, reference: &str) -> Self { 
+    pub fn with_time_reference (&self, reference: TimeSystem) -> Self { 
         let mut c = self.clone();
-        c.time_reference = Some(reference.to_string());
+        c.time_reference = reference;
         c
     }
 
@@ -315,7 +369,7 @@ impl Cggtts {
         let mut lab: Option<String> = None;
         let mut comments: Vec<String> = Vec::new();
         let mut reference_frame: Option<String> = None;
-        let mut time_reference : Option<String> = None;
+        let mut time_reference = TimeSystem::default(); 
         let (mut x, mut y, mut z) : (f64,f64,f64) = (0.0, 0.0, 0.0);
 
         line = lines.next()
@@ -417,11 +471,8 @@ impl Cggtts {
                 }
 
             } else if line.starts_with("REF = ") {
-                match scan_fmt!(&line, "REF = {}", String) {
-                    Some(s) => {
-                        time_reference = Some(s) 
-                    },
-                    _ => {},
+                if let Some(s) = scan_fmt!(&line, "REF = {}", String) {
+                    time_reference = TimeSystem::from_str(&s)
                 }
 
             } else if line.contains("DLY = ") {
@@ -624,12 +675,7 @@ impl std::fmt::Display for Cggtts {
             content.push_str(&format!("REF DLY = {:.1}\n", self.ref_dly * 1E9))
         }*/
 
-        if let Some(r) = &self.time_reference {
-            content.push_str(&format!("REF = {}\n", r))
-        } else {
-            content.push_str(&format!("REF = ?\n"))
-        }
-
+        content.push_str(&format!("REF = {}\n", self.time_reference));
         let crc = calc_crc(&content)
             .unwrap();
         content.push_str(&format!("CKSUM = {:2X}\n", crc));
