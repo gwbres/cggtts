@@ -10,11 +10,6 @@
 //! Only "2E" Version (latest to date) supported
 //!
 //! Homepage: <https://github.com/gwbres/cggtts>
-use regex::Regex;
-use thiserror::Error;
-use std::str::FromStr;
-use scan_fmt::scan_fmt;
-
 pub mod delay;
 pub mod track;
 pub mod cggtts;
