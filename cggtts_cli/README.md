@@ -1,7 +1,7 @@
 CGGTTS cli 
 ==========
 
-Rust binary to analyze and parse CGGTTS data
+Command line tool to analyze and parse CGGTTS data
 
 [![crates.io](https://img.shields.io/crates/v/cggtts-cli.svg)](https://crates.io/crates/cggtts-cli)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/gwbres/cggtts/blob/main/LICENSE-APACHE)
