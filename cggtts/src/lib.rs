@@ -16,7 +16,6 @@ pub mod cggtts;
 
 pub use crate::{
     delay::Delay,
-    delay::CalibratedDelay,
     track::Track,
     cggtts::Cggtts,
     cggtts::Rcvr,

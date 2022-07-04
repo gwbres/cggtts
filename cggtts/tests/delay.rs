@@ -1,3 +1,4 @@
+use cggtts::delay::Code;
 use cggtts::delay::SystemDelay;
 use cggtts::{Delay, CalibratedDelay};
 use rinex::constellation::Constellation;
@@ -42,17 +43,4 @@ mod delay {
         assert_eq!(delay.trusted(), false);
         assert_eq!(delay.value(), 17.0);
     }
-
-    #[test]
-    fn test_system_delay() {
-        let mut system_delay = SystemDelay::new();
-        system_delay.rf_cable_delay = 10.0;
-        system_delay.calib_delay = CalibratedDelay {
-            info: None,
-            constellation: Constellation::Glonass,
-            delay: Delay::Internal(5.0),
-        };
-        assert_eq!(system_delay.trusted(), true);
-        assert_eq!(system_delay.value(), 15.0);
-    }        
 }

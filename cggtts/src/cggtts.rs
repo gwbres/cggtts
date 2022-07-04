@@ -3,9 +3,10 @@
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
+use rinex::carrier;
 use rinex::constellation::Constellation;
 
-use crate::{Track, Delay, delay::SystemDelay, CalibratedDelay};
+use crate::{Track, Delay, delay::SystemDelay};
 
 /// supported `Cggtts` version,
 /// non matching input files will be rejected
@@ -487,36 +488,31 @@ impl Cggtts {
                 // for two carrier and different System delay values.
                 // We grab all delay values, treat them as single carrier,
                 // and possible second carrier for delays like SYS DLY are left out
-                let start_off = line.find("=").unwrap();
-                let end_off   = line.find("ns").unwrap();
-                let data = &line[start_off+1..end_off];
-                let value = f64::from_str(data.trim())?;
-
                 match label.as_str() {
                     "CAB" => {
+                        let start_off = line.find("=").unwrap();
+                        let end_off   = line.find("ns").unwrap();
+                        let data = &line[start_off+1..end_off];
+                        let value = f64::from_str(data.trim())?;
                         system_delay.rf_cable_delay = value
                     },
                     "REF" => {
+                        let start_off = line.find("=").unwrap();
+                        let end_off   = line.find("ns").unwrap();
+                        let data = &line[start_off+1..end_off];
+                        let value = f64::from_str(data.trim())?;
+                        system_delay.rf_cable_delay = value
                         system_delay.ref_delay = value
                     },
                     "SYS" => {
-                        system_delay.calib_delay = CalibratedDelay {
-                            info: None, // TODO
-                            constellation: Constellation::default(), // TODO
-                            delay: Delay::System(value),
-                        }
+                        let items : Vec<&str> = line.split_ascii_whitespace().collect();
+"SYS DLY = 000.0 ns (GPS C1)     CAL_ID = NA"
                     },
                     "INT" => {
-                        system_delay.calib_delay = CalibratedDelay {
-                            info: None, // TODO
-                            constellation: Constellation::default(), // TODO
-                            delay: Delay::Internal(value),
-                        }
                     },
                     "TOT" => {
-                        // special case, Total delay is given,
-                        // assumes all other delays are not known
-                        system_delay.rf_cable_delay = value;
+                        // special case
+                        // Build a calibrated delay for all encountered carriers
                         break
                     },
                     _ => {}, // non recognized delay type
