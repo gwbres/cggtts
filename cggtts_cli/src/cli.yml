@@ -1,0 +1,19 @@
+name: rinex-cli
+version: "0.0.1"
+author: Guillaume W. Bres <guillaume.bressaix@gmail.com>
+args:
+    - filepath:
+        short: fp
+        long: filepath
+        required: true
+        takes_value: true
+        help: Comma separated RINEX files
+    - header:
+        short: h
+        long: header
+        takes_value: false
+        help: Display (print) header fields (as is..)
+    - bipm:
+        long: bipm
+        takes_value: false 
+        help: Retain only tracks that match BIPM tracking specifications 
