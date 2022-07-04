@@ -51,8 +51,14 @@ args:
         takes_value: false
         required: false
         help: |
-            Retain only tracks / data that were from a unique space vehicule 
+            Only retain tracks / data that were estimated from a unique space vehicule 
             (not a combination of several vehicules)
+    - combination:
+        short: c
+        long: combination
+        takes_value: false
+        required: false
+        help: Only retain tracks / data that were estimated from a combination of space vehicules
     - sv:
         long: sv
         takes_value: true

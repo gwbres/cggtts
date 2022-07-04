@@ -47,6 +47,16 @@ pub fn main () -> Result<(), Box<dyn std::error::Error>> {
             c.tracks = Vec::new();
             println!("{:#?}", c);
         }
+        
+        // from now on, tracks might be filtered
+        /*if unique {
+            let data : Vec<_> = cggtts.tracks
+                .iter()
+                .filter(|t| t.space_vehicule.prn != 99)
+                .collect();
+            tracks = data;
+        }*/
+        
         if tracks {
             println!("{:#?}", cggtts.tracks);
         }
