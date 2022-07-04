@@ -4,14 +4,13 @@
 //! Homepage: <https://github.com/gwbres/cggtts>
 use clap::App;
 use clap::load_yaml;
-use std::str::FromStr;
 
 /*use gnuplot::{Figure, Caption};
 use gnuplot::{Color, PointSymbol, LineStyle, DashType};
 use gnuplot::{PointSize, AxesCommon, LineWidth};*/
 
 use cggtts::{Cggtts, Track};
-use cggtts::track::{CommonViewClass, IonosphericData};
+use cggtts::track::{CommonViewClass};
 use rinex::constellation::Constellation;
 
 pub fn main () -> Result<(), Box<dyn std::error::Error>> {
