@@ -11,13 +11,13 @@ Cggtts parser
 * The parser supports current revision **2E** only, it will reject files that have different revision number.
 * This parser does not care for file naming conventions
 
-* While it is clearly specified in the standards, that header lines order matter, this parser is tolerant against line/data order, except for the first CGGTT REVISION header line which should always come first.
+* While standard specifications says header lines order do matter,
+this parser is tolerant and only expects the first CGGTT REVISION header to come first.
 
-* We tolerate a missing BLANK between the header section and measurements
-
+* BLANKs between header & measurements data must be respected
 * This parser does not care for whitespaces, padding, it is not disturbed by their abscence
-
-* This parser is case sensitive at the moment, as it appears all fields should be written in upper case, except for data units/scalings 
+* This parser is case sensitive at the moment, all data fields and labels should be provided in upper case,
+as specified in standards
 
 * We accept several \"COMMENTS =\" lines, although it is not specified in CGGTTS. Several comments are then parsed. 
 
