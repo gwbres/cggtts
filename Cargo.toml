@@ -1,2 +1,2 @@
 [workspace]
-members = ["cggtts",]
+members = ["cggtts", "cggtts_cli"]
