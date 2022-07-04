@@ -746,38 +746,70 @@ impl std::fmt::Display for Cggtts {
             content.push_str("COMMENTS = NO COMMENTS\n")
         }
 
-        /*// system delays
-        if let Some(delay) = &self.tot_dly {
-            // total delay defined
-            content.push_str(&format!("TOT DLY = {}\n", delay.to_string()))
-        
+        let delays = self.delay.delays.clone();
+        let constellation: Constellation = if self.tracks.len() > 0 {
+            self.tracks[0].space_vehicule.constellation
         } else {
-            // total delay not defined
-            // => SYS or INT DELAY ?
-            // INT DELAY prioritary
-            if let Some(delay) = &self.int_dly {
-                content.push_str(&format!("INT DLY = {}\n", delay))
-
-            } else if let Some(delay) = &self.sys_dly {
-                content.push_str(&format!("SYS DLY = {}\n", delay))
-            
-            } else {
-                // neither SYS / INT delay
-                // => specify null SYS DLY
-                let null_delay = CalibratedDelay {
-                    constellation: track::Constellation::default(),
-                    values: vec![0.0_f64],
-                    codes: vec![String::from("C1")],
-                    report: String::from("NA"),
-                };
-                content.push_str(&format!("SYS DLY = {}\n", null_delay))
+            Constellation::default()
+        };
+        if delays.len() == 1 {
+            // Single frequency
+            let (code, value) = delays[0];
+            match value {
+                Delay::Internal(v) => {
+                    content.push_str(
+                        &format!("INT DLY = {:.1} ns ({} {})",
+                            v, constellation.to_3_letter_code(),
+                                code));
+                },
+                Delay::System(v) => {
+                    content.push_str(
+                        &format!("SYS DLY = {:.1} ns ({} {})",
+                            v, constellation.to_3_letter_code(),
+                                code));
+                },
             }
-            // other delays always there
-            content.push_str(&format!("CAB DLY = {:.1}\n", self.cab_dly * 1E9));
-            content.push_str(&format!("REF DLY = {:.1}\n", self.ref_dly * 1E9))
-        }*/
+            if let Some(cal_id) = &self.delay.cal_id {
+                content.push_str(
+                    &format!("       CAL_ID = {}\n", cal_id));
+            } else {
+                content.push_str("       CAL_ID = NA\n");
+            }
+
+        } else if delays.len() == 2 {
+            // Dual frequency
+            let (c1, v1) = delays[0];
+            let (c2, v2) = delays[1];
+            match v1 {
+                Delay::Internal(_) => {
+                    content.push_str(
+                        &format!("INT DLY = {:.1} ns ({} {}), {:.1} ns ({} {})",
+                            v1.value(), constellation.to_3_letter_code(), c1,
+                                v2.value(), constellation.to_3_letter_code(), c2));
+                },
+                Delay::System(_) => {
+                    content.push_str(
+                        &format!("SYS DLY = {:.1} ns ({} {}), {:.1} ns ({} {})",
+                            v1.value(), constellation.to_3_letter_code(), c1,
+                                v2.value(), constellation.to_3_letter_code(), c2));
+                },
+            }
+            if let Some(cal_id) = &self.delay.cal_id {
+                content.push_str(
+                    &format!("     CAL_ID = {}\n", cal_id));
+            } else {
+                content.push_str("     CAL_ID = NA\n");
+            }
+        }
+
+        content.push_str(
+            &format!("CAB DLY = {:.1} ns\n", self.delay.rf_cable_delay));
+        
+        content.push_str(
+            &format!("REF DLY = {:.1} ns\n", self.delay.ref_delay));
 
         content.push_str(&format!("REF = {}\n", self.time_reference));
+
         let crc = calc_crc(&content)
             .unwrap();
         content.push_str(&format!("CKSUM = {:2X}\n", crc));
@@ -826,5 +858,23 @@ mod tests {
                 content[i],expect,
                 ck)
         }
+    }
+    
+    #[test]
+    fn test_time_system() {
+        assert_eq!(TimeSystem::default(), TimeSystem::UTC);
+        assert_eq!(TimeSystem::from_str("TAI"), TimeSystem::TAI);
+        assert_eq!(TimeSystem::from_str("UTC"), TimeSystem::UTC);
+        assert_eq!(TimeSystem::from_str("UTC(LAB)"), TimeSystem::UTCk(String::from("LAB"),None));
+        assert_eq!(TimeSystem::from_str("UTC(LAB, 10.0)"), TimeSystem::UTCk(String::from("LAB"), Some(10.0)));
+    }
+
+    #[test]
+    fn test_code() {
+        assert_eq!(Code::default(), Code::C1);
+        assert_eq!(Code::from_str("C2").unwrap(), Code::C2);
+        assert_eq!(Code::from_str("P1").unwrap(), Code::P1);
+        assert_eq!(Code::from_str("P2").unwrap(), Code::P2);
+        assert_eq!(Code::from_str("E5a").unwrap(), Code::E5a);
     }
 }

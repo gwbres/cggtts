@@ -1,5 +1,4 @@
 use crate::cggtts::Code;
-use rinex::constellation::Constellation;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 /// Different types of delay known,
@@ -156,5 +155,23 @@ mod delay {
         assert_eq!(d, Delay::Internal(30.0));
         assert_eq!(delay.value() +20.0, d.value());
         assert_eq!(Delay::default(), Delay::System(0.0));
+    }
+
+    #[test]
+    fn test_system_delay() {
+        let mut delay = SystemDelay::new();
+        assert_eq!(delay.rf_cable_delay, 0.0);
+        delay.rf_cable_delay = 10.0;
+        delay.ref_delay = 20.0;
+        delay.delays.push((Code::C1, Delay::Internal(50.0)));
+        assert_eq!(delay.rf_cable_delay, 10.0);
+        assert_eq!(delay.ref_delay, 20.0);
+        let total = delay.total_delay(Code::C1);
+        assert_eq!(total.is_some(), true);
+        assert_eq!(total.unwrap(), 80.0);
+        let totals = delay.total_delays();
+        assert_eq!(totals.len() > 0, true);
+        assert_eq!(totals[0].0, Code::C1);
+        assert_eq!(totals[0].1, 80.0);
     }
 }
