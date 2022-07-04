@@ -8,7 +8,7 @@ use rinex::constellation::Constellation;
 
 use crate::{Track, Delay, delay::SystemDelay};
 
-/// supported `Cggtts` version,
+/// Supported `Cggtts` version,
 /// non matching input files will be rejected
 const CURRENT_RELEASE: &str = "2E";
 
