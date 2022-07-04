@@ -3,7 +3,7 @@
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
-use rinex::carrier;
+use strum_macros::{EnumString};
 use rinex::constellation::Constellation;
 
 use crate::{Track, Delay, delay::SystemDelay};
@@ -89,6 +89,40 @@ impl std::fmt::Display for TimeSystem {
             TimeSystem::UTC => fmt.write_str("UTC"),
             TimeSystem::UTCk(lab, _) => write!(fmt, "UTC({})", lab),
             TimeSystem::Unknown(s) => fmt.write_str(s),
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(EnumString)]
+pub enum Code {
+    C1,
+    C2,
+    P1,
+    P2,
+    E1,
+    E5a,
+    B1,
+    B2,
+}
+
+impl Default for Code {
+    fn default() -> Code {
+        Code::C1
+    }
+}
+
+impl std::fmt::Display for Code {
+    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Code::C1 => fmt.write_str("C1"),
+            Code::C2 => fmt.write_str("C2"),
+            Code::P1 => fmt.write_str("P1"),
+            Code::P2 => fmt.write_str("P2"),
+            Code::E1 => fmt.write_str("E1"),
+            Code::E5a => fmt.write_str("E5a"),
+            Code::B1 => fmt.write_str("B1"),
+            Code::B2 => fmt.write_str("B2"),
         }
     }
 }
@@ -478,42 +512,114 @@ impl Cggtts {
 
             } else if line.contains("DLY = ") {
 
-                // determine delay denomination
-                let label : String = match scan_fmt!(&line, "{} DLY =.*", String) {
-                    Some(l) => l,
-                    _ => return Err(Error::DelayIdentificationError(String::from(line))),
-                };
+                let items : Vec<&str> = line
+                    .split_ascii_whitespace()
+                    .collect();
+                
+                let dual_carrier = line.contains(",");
+    
+                if items.len() < 4 {
+                    continue // format mismatch
+                }
 
-                // currently we do not support separate values
-                // for two carrier and different System delay values.
-                // We grab all delay values, treat them as single carrier,
-                // and possible second carrier for delays like SYS DLY are left out
-                match label.as_str() {
-                    "CAB" => {
-                        let start_off = line.find("=").unwrap();
-                        let end_off   = line.find("ns").unwrap();
-                        let data = &line[start_off+1..end_off];
-                        let value = f64::from_str(data.trim())?;
-                        system_delay.rf_cable_delay = value
-                    },
-                    "REF" => {
-                        let start_off = line.find("=").unwrap();
-                        let end_off   = line.find("ns").unwrap();
-                        let data = &line[start_off+1..end_off];
-                        let value = f64::from_str(data.trim())?;
-                        system_delay.rf_cable_delay = value
-                        system_delay.ref_delay = value
-                    },
+                match items[0] {
+                    "CAB" => system_delay.rf_cable_delay = f64::from_str(items[3]).unwrap(),
+                    "REF" => system_delay.ref_delay = f64::from_str(items[3]).unwrap(),
                     "SYS" => {
-                        let items : Vec<&str> = line.split_ascii_whitespace().collect();
-"SYS DLY = 000.0 ns (GPS C1)     CAL_ID = NA"
+                        if line.contains("CAL_ID") {
+                            let offset = line.rfind("=").unwrap();
+                            let cal_id = line[offset+1..].trim();
+                            if !cal_id.eq("NA") {
+                                system_delay = system_delay
+                                    .with_calibration_id(cal_id)
+                            }
+                        }
+                        if dual_carrier {
+                            if let Ok(value) = f64::from_str(items[3]) {
+                                let code = items[6].replace("),","");
+                                if let Ok(code) = Code::from_str(&code) {
+                                    system_delay.delays.push((code, Delay::System(value))); 
+                                }
+                            }
+                            if let Ok(value) = f64::from_str(items[7]) {
+                                let code = items[9].replace(")","");
+                                if let Ok(code) = Code::from_str(&code) {
+                                    system_delay.delays.push((code, Delay::System(value))); 
+                                }
+                            }
+
+                        } else {
+                            let value = f64::from_str(items[3]).unwrap();
+                            let code = items[6].replace(")","");
+                            if let Ok(code) = Code::from_str(&code) {
+                                system_delay.delays.push((code, Delay::System(value))); 
+                            }
+                        }
                     },
                     "INT" => {
+                        if line.contains("CAL_ID") {
+                            let offset = line.rfind("=").unwrap();
+                            let cal_id = line[offset+1..].trim();
+                            if !cal_id.eq("NA") {
+                                system_delay = system_delay
+                                    .with_calibration_id(cal_id)
+                            }
+                        }
+                        if dual_carrier {
+                            if let Ok(value) = f64::from_str(items[3]) {
+                                let code = items[6].replace("),","");
+                                if let Ok(code) = Code::from_str(&code) {
+                                    system_delay.delays.push((code, Delay::Internal(value))); 
+                                }
+                            }
+                            if let Ok(value) = f64::from_str(items[7]) {
+                                let code = items[10].replace(")","");
+                                if let Ok(code) = Code::from_str(&code) {
+                                    system_delay.delays.push((code, Delay::Internal(value))); 
+                                }
+                            }
+
+                        } else {
+                            if let Ok(value) = f64::from_str(items[3]) {
+                                let code = items[6].replace(")","");
+                                if let Ok(code) = Code::from_str(&code) {
+                                    system_delay.delays.push((code, Delay::Internal(value))); 
+                                }
+                            }
+                        }
                     },
                     "TOT" => {
-                        // special case
-                        // Build a calibrated delay for all encountered carriers
-                        break
+                        if line.contains("CAL_ID") {
+                            let offset = line.rfind("=").unwrap();
+                            let cal_id = line[offset+1..].trim();
+                            if !cal_id.eq("NA") {
+                                system_delay = system_delay
+                                    .with_calibration_id(cal_id)
+                            }
+                        }
+                        if dual_carrier {
+                            if let Ok(value) = f64::from_str(items[3]) {
+                                let code = items[6].replace("),","");
+                                if let Ok(code) = Code::from_str(&code) {
+                                    system_delay.delays.push((code, Delay::System(value))); 
+                                }
+                            }
+                            if let Ok(value) = f64::from_str(items[7]) {
+                                let code = items[9].replace(")","");
+                                if let Ok(code) = Code::from_str(&code) {
+                                    system_delay.delays.push((code, Delay::System(value))); 
+                                }
+                            }
+
+                        } else {
+                            if let Ok(value) = f64::from_str(items[3]) {
+                                let code = items[6].replace(")","");
+                                if let Ok(code) = Code::from_str(&code) {
+                                    system_delay.delays.push((code, Delay::System(value))); 
+                                }
+                                    
+                            }
+                        }
                     },
                     _ => {}, // non recognized delay type
                 };

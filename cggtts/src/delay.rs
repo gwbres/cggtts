@@ -1,4 +1,4 @@
-use strum_macros::{EnumString};
+use crate::cggtts::Code;
 use rinex::constellation::Constellation;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -36,40 +36,6 @@ impl Delay {
         match self {
             Delay::System(d) => Delay::System(*d + rhs),
             Delay::Internal(d) => Delay::Internal(*d + rhs),
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-#[derive(EnumString)]
-pub enum Code {
-    C1,
-    C2,
-    P1,
-    P2,
-    E1,
-    E5a,
-    B1,
-    B2,
-}
-
-impl Default for Code {
-    fn default() -> Code {
-        Code::C1
-    }
-}
-
-impl std::fmt::Display for Code {
-    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Code::C1 => fmt.write_str("C1"),
-            Code::C2 => fmt.write_str("C2"),
-            Code::P1 => fmt.write_str("P1"),
-            Code::P2 => fmt.write_str("P2"),
-            Code::E1 => fmt.write_str("E1"),
-            Code::E5a => fmt.write_str("E5a"),
-            Code::B1 => fmt.write_str("B1"),
-            Code::B2 => fmt.write_str("B2"),
         }
     }
 }
@@ -130,7 +96,7 @@ pub struct SystemDelay {
     /// reference delay 
     pub ref_delay: f64,
     /// carrier dependend delays
-    pub delays: Vec<(Code, Vec<Delay>)>,
+    pub delays: Vec<(Code, Delay)>,
     /// Calibration ID
     pub cal_id: Option<String>,
 }
@@ -146,20 +112,49 @@ impl SystemDelay {
             cal_id: None,
         }
     }
+    /// Returns Self with additionnal calibration info
+    pub fn with_calibration_id (&self, info: &str) -> Self {
+        Self {
+            rf_cable_delay: self.rf_cable_delay,
+            ref_delay: self.ref_delay,
+            delays: self.delays.clone(),
+            cal_id: Some(info.to_string()),
+        }
+    }
     /// Returns total system delay for given carrier code
-    pub fn total_delay (&self, code: Code) -> Option<Vec<f64>> {
+    pub fn total_delay (&self, code: Code) -> Option<f64> {
         for (k, v) in self.delays.iter() {
             if *k == code {
-                let mut data : Vec<f64> = Vec::new();
-                for d in v.iter() {
-                    data.push(d.value() 
-                        + self.rf_cable_delay
-                        + self.ref_delay
-                    )
-                }
-                return Some(data)
+                return Some(v.value()
+                    + self.rf_cable_delay
+                    + self.ref_delay)
             }
         }
         None
+    }
+    /// Groups total system delay per carrier codes
+    pub fn total_delays (&self) -> Vec<(Code, f64)> {
+        let mut res : Vec<(Code, f64)> = Vec::new();
+        for (k, v) in self.delays.iter() {
+            res.push((*k, v.value() + self.rf_cable_delay + self.ref_delay))
+        }
+        res
+    }
+}
+
+#[cfg(test)]
+mod delay {
+    use super::*;
+    #[test]
+    fn test_delay() {
+        let delay = Delay::Internal(10.0);
+        assert_eq!(delay.value(), 10.0); 
+        assert_eq!(delay.value_seconds(), 10.0E-9);
+        assert_eq!(delay == Delay::Internal(10.0), true);
+        assert_eq!(delay == Delay::System(10.0), false);
+        let d = delay.add_value(20.0);
+        assert_eq!(d, Delay::Internal(30.0));
+        assert_eq!(delay.value() +20.0, d.value());
+        assert_eq!(Delay::default(), Delay::System(0.0));
     }
 }

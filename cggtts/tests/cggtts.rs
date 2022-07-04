@@ -3,8 +3,8 @@ use rinex::constellation::Constellation;
 
 use cggtts::Rcvr;
 use cggtts::Cggtts;
-use cggtts::track::GlonassChannel;
-use cggtts::{CalibratedDelay, Delay, TimeSystem};
+use cggtts::GlonassChannel;
+use cggtts::{Delay, TimeSystem, Code};
 
 #[cfg(test)]
 mod test {
@@ -35,7 +35,7 @@ mod test {
         assert_eq!(cggtts.comments, None);
         assert_eq!(cggtts.tracks.len(), 32);
         let first = cggtts.tracks.first();
-        assert_eq!(cggtts.delay.value(), 0.0);
+        //assert_eq!(cggtts.delay.value(), 0.0);
         assert_eq!(first.is_some(), true);
         let first = first.unwrap();
         assert_eq!(first.space_vehicule, Sv {
@@ -102,8 +102,8 @@ mod test {
         assert_eq!(cggtts.lab, Some(String::from("ABC")));
         assert_eq!(cggtts.nb_channels, 12);
         assert_eq!(cggtts.ims, None);
-        assert_eq!(cggtts.time_reference,
-            TimeSystem::UTCk(String::from("ABC"), None));
+        //assert_eq!(cggtts.time_reference,
+        //    TimeSystem::UTCk(String::from("ABC"), None));
         assert_eq!(cggtts.reference_frame, 
             Some(String::from(
                 "ITRF, PZ-90->ITRF Dx = 0.0 m, Dy = 0.0 m, Dz = 0.0 m, ds = 0.0, Rx = 0.0, Ry = 0.0, Rz = 0.000000"
@@ -112,12 +112,20 @@ mod test {
         assert!((cggtts.coordinates.y - 306998.67).abs() < 1E-6);
         assert!((cggtts.coordinates.z - 4919499.36).abs() < 1E-6);
         assert_eq!(cggtts.comments, None);
-        assert_eq!(cggtts.delay.value(), 53.9 + 237.0 + 149.6);
-        /*assert_eq!(cggtts.delay.calib_delay, CalibratedDelay {
-            cal_id: None,
-            channel: Channel::L1,
-            delay: Delay::Internal(53.9),
-        });*/
+        assert_eq!(cggtts.delay.rf_cable_delay, 237.0);
+        assert_eq!(cggtts.delay.ref_delay, 149.6);
+        assert_eq!(cggtts.delay.delays.len(), 2);
+        assert_eq!(cggtts.delay.delays[0], (Code::C1, Delay::Internal(53.9)));
+        assert_eq!(cggtts.delay.delays[1], (Code::C2, Delay::Internal(49.8)));
+        let total = cggtts.delay.total_delay(Code::C1);
+        assert_eq!(total.is_some(), true);
+        assert_eq!(total.unwrap(), 53.9 +237.0 + 149.6);
+        let total = cggtts.delay.total_delay(Code::C2);
+        assert_eq!(total.is_some(), true);
+        assert_eq!(total.unwrap(), 49.8 +237.0 + 149.6);
+        let cal_id = cggtts.delay.cal_id.clone();
+        assert_eq!(cal_id.is_some(), true);
+        assert_eq!(cal_id.unwrap(), String::from("1nnn-yyyy"));
         
         assert_eq!(cggtts.tracks.len(), 4);
         let first = cggtts.tracks.first();
