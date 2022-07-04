@@ -1,9 +1,7 @@
 CGGTTS package
 ===============
 
-- [ ] support all features for advanced / dual frequency CGGTTS
- - [ ] conclude delay ops/arithmetics 
- - [ ] delays per constellation carrier
+- [x] support all features for advanced / dual frequency CGGTTS
 - [x] test system delay interface
 - [ ] use and verify Cggtts::header CRC field 
 - [x] use and verify Cggtts::track CRC field 
