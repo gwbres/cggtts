@@ -139,11 +139,11 @@ Use `to_string` methods to produce dump CGGTTS measurement
 write!(fd, "{}", cggtts.tracks[0]).unwrap();
 ```
 
-## Advanced CGGTTS
+## Advanced CGGTTTS production
 
 To produce advanced CGGTTS data correctly, one should specify / provide
 
-* provide secondary hardware info (IMS)
+* secondary hardware info (IMS)
 * ionospheric parameters estimate
 * specificy carrier dependent delay [see doc/delay.md]
 
