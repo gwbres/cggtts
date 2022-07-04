@@ -16,11 +16,8 @@ thiserror = "1"
 chrono = "0.4"
 julianday = "1.0.1"
 scan_fmt = "0.1"
-rinex = { git = "https://github.com/gwbres/rinex", branch = "main" }
+rinex = "0.3.3" 
 rust-3d = "0.34.0"
 format_num = "0.1.0"
 strum = "0.23.0"
 strum_macros = "0.23.0"
-
-[dev-dependencies]
-float-cmp = "0.9.0"
