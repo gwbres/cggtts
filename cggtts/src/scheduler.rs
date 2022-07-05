@@ -1,4 +1,5 @@
 //! scheduler: to schedule CGGTTS measurements
+use chrono::Datelike;
 use julianday::ModifiedJulianDay;
 
 /// Modified Julian Day #50722 is taken as reference
@@ -24,7 +25,7 @@ pub struct Scheduler {
     pub duration: std::time::Duration,
 }
 
-    
+impl Scheduler {
     /// Builds a new measurement scheduler,
     /// Inputs:
     ///   t0: optionnal "starting date", otherwise
@@ -40,12 +41,23 @@ pub struct Scheduler {
         }
     }
 
-    /// Returns list of dates for ongoing day
-    /// to perform measurements
-    pub fn scheduled_events (&self) -> Vec<chrono::NaiveDateTime> {
-        let res : Vec<chrono::NaiveDateTime> = Vec::new();
-        for i in 1..89 {
-
+    /// Returns scheduled measurements for given day,
+    /// if date is not provided, we use now()
+    pub fn scheduled_events (&self, date: Option<chrono::NaiveDate>) -> Vec<chrono::NaiveDateTime> {
+        let mut res : Vec<chrono::NaiveDateTime> = Vec::new();
+        let mjd_ref = ModifiedJulianDay::new(REFERENCE_MJD).inner();
+        let date = date.unwrap_or(chrono::Utc::now().naive_utc().date());
+        let mjd = ModifiedJulianDay::from(date).inner();
+        for i in 1..self.tracks_in_24h()-1 {
+            let offset = Scheduler::time_ref(self.n) as i32 - 4*(mjd_ref - mjd)/60;
+            if offset > 0 {
+                let h = offset / 3600;
+                let m = (offset - h*3600)/60;
+                let s = offset -h*3600 - m*60;
+                res.push(
+                    chrono::NaiveDate::from_ymd(date.year(), date.month(), date.day())
+                        .and_hms(h as u32 ,m as u32,s as u32));
+            }
         }
         res
     }
@@ -69,6 +81,11 @@ pub struct Scheduler {
     fn time_ref (observation: u32) -> u32 {
         60 * 2 + (observation -1)*16*60
     }
+    
+    /// Returns number of measurements to perform within 24hours
+    fn tracks_in_24h (&self) -> u64 {
+        24 * 3600 / self.duration.as_secs()
+    }
 }
 
 #[cfg(test)]
@@ -80,6 +97,5 @@ mod test {
         let t0 = chrono::NaiveDate::from_ymd(2022, 07, 05)
             .and_hms(00, 00, 00);
         let scheduler = Scheduler::new(Some(t0), None);
-        println!("{:?}", scheduler.next());
     }
 }
