@@ -2,12 +2,9 @@ use chrono::Timelike;
 use thiserror::Error;
 use format_num::NumberFormat;
 use rinex::{constellation::Constellation, sv::Sv};
+use crate::scheduler;
 use crate::cggtts::{CrcError, calc_crc};
 
-/// `BIPM` tracking duration specifications.
-/// `Cggtts` tracks must respect that duration
-/// to be BIPM compliant, which is not mandatory 
-const BIPM_SPECIFIED_DURATION: std::time::Duration = std::time::Duration::from_secs(13*60); 
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 /// Describes whether this common view is based on a unique 
@@ -18,6 +15,7 @@ pub enum CommonViewClass {
     /// Multiple
     Multiple,
 }
+
 
 impl std::fmt::Display for CommonViewClass {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -264,7 +262,7 @@ impl Track {
     /// Returns True if Self follows BIPM specifications / requirements,
     /// in terms of tracking pursuit
     pub fn follows_bipm_specs (&self) -> bool {
-        self.duration.as_secs() == BIPM_SPECIFIED_DURATION.as_secs()
+        self.duration.as_secs() == scheduler::BIPM_RECOMMENDED_TRACKING.as_secs()
     }
     
     /// Returns a `Track` with desired unique space vehicule
@@ -324,7 +322,7 @@ impl Default for Track {
                 now.time().minute(),
                 now.time().second()
             ),
-            duration: BIPM_SPECIFIED_DURATION, 
+            duration: scheduler::BIPM_RECOMMENDED_TRACKING, 
             elevation: 0.0_f64,
             azimuth: 0.0_f64,
             refsv: 0.0_f64,
@@ -351,7 +349,7 @@ impl std::fmt::Display for Track {
         string.push_str(&format!("{} {} {} {} ",
             self.space_vehicule,
             self.class,
-            julianday::ModifiedJulianDay::from(self.date).inner()-1,
+            julianday::ModifiedJulianDay::from(self.date).inner(),
             self.trktime.format("%H%M%S")));
         string.push_str(&format!("{} {} {} {} {} {} {} {} {} {} {} {} {} ",
             num.format("04d", self.duration.as_secs() as f64),

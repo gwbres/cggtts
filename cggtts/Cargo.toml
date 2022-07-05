@@ -13,7 +13,8 @@ readme = "../README.md"
 [dependencies]
 thiserror = "1"
 chrono = "0.4"
-julianday = "1.0.1"
+#julianday = "1.0.1"
+julianday = { git = "https://github.com/gwbres/julianday", branch = "develop" }
 scan_fmt = "0.1"
 rinex = "0.3.3" 
 rust-3d = "0.34.0"
