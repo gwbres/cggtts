@@ -5,10 +5,10 @@ use rinex::{constellation::Constellation, sv::Sv};
 use crate::scheduler;
 use crate::cggtts::{CrcError, calc_crc};
 
-
-#[derive(PartialEq, Clone, Copy, Debug)]
 /// Describes whether this common view is based on a unique 
 /// Space Vehicule or a combination of several vehicules
+#[derive(PartialEq, Clone, Copy, Debug)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub enum CommonViewClass {
     /// Single 
     Single,
@@ -29,6 +29,7 @@ impl std::fmt::Display for CommonViewClass {
 /// Describes Glonass Frequency channel,
 /// in case this `Track` was esimated using Glonass
 #[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub enum GlonassChannel {
     /// Default value when not using Glonass constellation
     Unknown,
@@ -76,8 +77,9 @@ impl Default for GlonassChannel {
 const TRACK_WITHOUT_IONOSPHERIC :usize = 21;
 const TRACK_WITH_IONOSPHERIC :usize = 24;
 
-#[derive(Debug, PartialEq, Clone)]
 /// A `Track` is a `Cggtts` measurement
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub struct Track {
     /// Common view class.
     /// Most of the time, `Tracks` are estimated
@@ -135,6 +137,7 @@ pub struct Track {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub struct IonosphericData {
     /// Measured ionospheric delay corresponding to the solution E in section 2.3.3.
     pub msio: f64, 

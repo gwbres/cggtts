@@ -122,10 +122,11 @@ pub fn helmert_transform (v: (f64,f64,f64), h: HelmertCoefs) -> (f64,f64,f64)  
     let z = cz + (1.0 * h.s*1E-9) * (-ry*x +rx*y + z);
 }*/
 
-#[derive(Clone, PartialEq, Debug)]
 /// `Rcvr` describes a GNSS receiver
 /// (hardware). Used to describe the
 /// GNSS receiver or hardware used to evaluate IMS parameters
+#[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub struct Rcvr {
     /// Manufacturer of this hardware
     pub manufacturer: String,
@@ -139,8 +140,9 @@ pub struct Rcvr {
     pub release: String,
 }
 
-#[derive(Clone, PartialEq, Debug)]
 /// Known Reference Time Systems
+#[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub enum TimeSystem {
     /// TAI: International Atomic Time
     TAI,
@@ -195,6 +197,7 @@ impl std::fmt::Display for TimeSystem {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[derive(EnumString)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub enum Code {
     C1,
     C2,
@@ -270,6 +273,7 @@ impl std::fmt::Display for Rcvr {
 /// a measurement system and 
 /// and its Common View realizations (`tracks`)
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub struct Cggtts {
     /// file revision release date 
     pub rev_date: chrono::NaiveDate, 

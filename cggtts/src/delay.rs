@@ -1,9 +1,10 @@
 use crate::cggtts::Code;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
 /// Different types of delay known,
 /// refer to documentation to truly understand what they
 /// represent. <!> Delays are always specified in nanoseconds <!> 
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub enum Delay {
     /// Delay defined as `internal`
     Internal(f64),
