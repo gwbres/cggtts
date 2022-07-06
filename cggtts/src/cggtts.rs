@@ -1,5 +1,77 @@
-//! CGGTTS is the core structure, it comprises a list of Track.
-//! Homepage: <https://github.com/gwbres/cggtts>
+//! CGGTTS is the core structure, it comprises
+//! the list of tracks (measurements) and some header information.
+//!
+//! # Example
+//! ```
+//! use cggtts::Cggtts;
+//! fn main() {
+//!     let cggtts = Cggtts::from_file("../data/standard/GZSY8259.506")
+//!         .unwrap();
+//!     assert_eq!(cggtts.lab, Some(String::from("SY82")));
+//!     assert_eq!(cggtts.follows_bipm_specs(), true);
+//!     if let Some(track) = cggtts.tracks.first() {
+//!         let duration = track.duration;
+//!         let (refsys, srsys) = (track.refsys, track.srsys);
+//!         assert_eq!(track.has_ionospheric_data(), false);
+//!         assert_eq!(track.follows_bipm_specs(), true);
+//!     }
+//! }
+//! ```
+//!
+//! # Advanced CGGTTS
+//! Comes with ionospheric parameters estimates
+//!
+//!```
+//! use cggtts::Cggtts;
+//! fn main() {
+//!     let cggtts = Cggtts::from_file("../data/advanced/RZSY8257.000")
+//!         .unwrap();
+//!     if let Some(track) = cggtts.tracks.first() {
+//!         assert_eq!(track.has_ionospheric_data(), true);
+//!         if let Some(iono) = track.ionospheric {
+//!             let (msio, smsi, isg) = (iono.msio, iono.smsi, iono.isg);
+//!         }
+//!     }
+//! }
+//!```
+//!
+//! # CGGTTS production
+//! Use `to_string` to dump CGGTTS data
+//!
+//! ```
+//! use cggtts::{Rcvr, Cggtts, Track};
+//! use rinex::constellation::Constellation;
+//! use std::io::Write;
+//! fn main() {
+//!     let nb_channels = 16;
+//!     let hardware = Rcvr {
+//!         manufacturer: String::from("GoodManufacturer"),
+//!         recv_type: String::from("Unknown"),
+//!         serial_number: String::from("1234"),
+//!         year: 2022,
+//!         release: String::from("V1"),
+//!     };
+//!     let mut cggtts = Cggtts::new(Some("MyAgency"), nb_channels, Some(hardware));
+//!     // add some tracks
+//!     // CGGTTS says we should set "99" as PRN when data
+//!     // is estimated from several space vehicules
+//!     let sv = rinex::sv::Sv {
+//!         constellation: Constellation::GPS,
+//!         prn: 99,
+//!     };
+//!     let mut track = Track::default();
+//!     cggtts.tracks.push(track);
+//!     let mut fd = std::fs::File::create("output.cggtts") // does not respect naming conventions
+//!         .unwrap();
+//!     write!(fd, "{}", cggtts).unwrap();
+//! }
+//! ```
+//!
+//! To produced advanced CGGTTS data correctly, one should specify / provide
+//! - secondary hardware info [IMS]
+//! - ionospheric parameter estimates
+//! - specify carrier dependent delays [see Delay]
+
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
@@ -21,6 +93,34 @@ const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
 
 const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
 "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
+
+/*
+pub struct ITRF {
+    x: f64,
+    y: f64,
+    z: f64,
+    epoch: chrono::NaiveDateTime,
+}
+
+pub struct HelmertCoefs {
+    /// translation coefficients (cx, cy, cz) in meters
+    c: (f64, f64, f64),
+    /// scaling [ppb]
+    s: f64,
+    /// rotation matrix coefficients (rx, ry, rz) in arc second
+    r: (f64, f64, f64),
+}
+
+/// Transforms input 3D vector using Helmert transforms.
+/// Used to convert ITRF and other data
+pub fn helmert_transform (v: (f64,f64,f64), h: HelmertCoefs) -> (f64,f64,f64)  {
+    let (x, y, z) = v;
+    let (cx, cy, cz) = h.c;
+    let (rx, ry, rz) = h.z;
+    let x = cx + (1.0 * h.s*1E-9) * (x - rz*y + ry * z);
+    let y = cy + (1.0 * h.s*1E-9) * (rz*x + y -rx*z);
+    let z = cz + (1.0 * h.s*1E-9) * (-ry*x +rx*y + z);
+}*/
 
 #[derive(Clone, PartialEq, Debug)]
 /// `Rcvr` describes a GNSS receiver
