@@ -473,6 +473,14 @@ impl Cggtts {
         std::time::Duration::from_secs(s)
     }
 
+    /// Returns a filename that would match
+    /// specifications / standard requirements
+    /// to represent self
+    pub fn filename (&self) -> String {
+        let mut res = String::new();
+        res
+    }
+
     /// Builds Self from given `Cggtts` file.
     pub fn from_file (fp: &str) -> Result<Self, Error> {
         let file_content = std::fs::read_to_string(fp)

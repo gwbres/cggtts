@@ -15,6 +15,7 @@ pub mod delay;
 pub mod track;
 pub mod cggtts;
 pub mod scheduler;
+pub mod processing;
 
 pub use crate::{
     delay::Delay,
