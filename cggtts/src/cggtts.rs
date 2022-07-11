@@ -378,17 +378,6 @@ impl Cggtts {
         c
     }
 
-    /// Returns true if all tracks follow 
-    /// BIPM tracking specifications
-    pub fn follows_bipm_specs (&self) -> bool {
-        for track in self.tracks.iter() {
-            if !track.follows_bipm_specs() {
-                return false
-            }
-        }
-        true
-    }
-    
     /// Returns `Cggtts` with same attributes
     /// but desired `Lab` agency
     pub fn with_lab_agency (&self, lab: &str) -> Self { 
@@ -442,11 +431,67 @@ impl Cggtts {
         c
     }
 
+    /// Returns true if all tracks follow 
+    /// BIPM tracking specifications
+    pub fn follows_bipm_specs (&self) -> bool {
+        for track in self.tracks.iter() {
+            if !track.follows_bipm_specs() {
+                return false
+            }
+        }
+        true
+    }
+    
     /// Returns true if Self only contains tracks (measurements)
     /// that have ionospheric parameter estimates
     pub fn has_ionospheric_data (&self) -> bool {
         for track in self.tracks.iter() {
             if !track.has_ionospheric_data() {
+                return false
+            }
+        }
+        true
+    }
+
+    /// Returns true if Self only comprises tracks
+    /// that were estimated with unique vehicules (not combination of several)
+    pub fn unique_space_vehicule (&self) -> bool {
+        for track in self.tracks.iter() {
+            if track.space_vehicule_combination() {
+                return false
+            }
+        }
+        true
+    }
+
+    /// Returns true if Self only comprises tracks
+    /// that were estimated with a combination os space vehicules
+    /// (not unique PRNs)
+    pub fn space_vehicule_combination (&self) -> bool {
+        for track in self.tracks.iter() {
+            if track.unique_space_vehicule() {
+                return false
+            }
+        }
+        true
+    }
+
+    /// Returns true if Self has at least one track
+    /// produced from given constellation
+    pub fn uses_constellation (&self, c: Constellation) -> bool {
+        for track in self.tracks.iter() {
+            if track.uses_constellation(c) {
+                return true
+            }
+        }
+        false
+    }
+
+    /// Returns true if Self was observed entirely
+    /// against given constellation
+    pub fn unique_constellation (&self, c: Constellation) -> bool {
+        for track in self.tracks.iter() {
+            if !track.uses_constellation(c) {
                 return false
             }
         }
@@ -475,9 +520,57 @@ impl Cggtts {
 
     /// Returns a filename that would match
     /// specifications / standard requirements
-    /// to represent self
+    /// to represent self. 
+    /// If lab is not known, we set XX.   
+    /// We use the first two characters for the Rcvr hardware
+    /// info as identification number (only if they are digits).
+    /// We replace by "__" otherwise.
     pub fn filename (&self) -> String {
         let mut res = String::new();
+        if let Some(first) = self.tracks.first() {
+            res.push_str(first.space_vehicule.constellation
+                .to_1_letter_code())
+        } else {
+            res.push_str(Constellation::default()
+                .to_1_letter_code())
+        }
+        if self.has_ionospheric_data() {
+            res.push_str("Z") // Dual Freq / Multi channel
+        } else {
+            if self.unique_space_vehicule() {
+                res.push_str("S") // Single Freq / Channel
+            } else {
+                res.push_str("M") // Single Freq / Multi Channel
+            }
+        }
+        if let Some(lab) = &self.lab {
+            res.push_str(&lab[0..2])
+        } else {
+            res.push_str("XX") // unknown lab
+        }
+        if let Some(rcvr) = &self.rcvr {
+            let sn = rcvr.serial_number.as_str();
+            if let Ok(d0) = u16::from_str_radix(&sn[0..0], 10) {
+                res.push_str(&d0.to_string());
+                if let Ok(d1) = u16::from_str_radix(&sn[1..1], 10) {
+                    res.push_str(&d1.to_string())
+                } else {
+                    res.push_str("_")
+                }
+            } else {
+                res.push_str("_")
+            }
+        } else {
+            res.push_str("__")
+        }
+        if let Some(date) = self.date() {
+            let mjd = julianday::ModifiedJulianDay::from(date).inner();
+            let dd = mjd / 1000;
+            let ddd = mjd - dd;
+            res.push_str(&format!("{}.{}", dd, ddd));
+        } else {
+            res.push_str("YY.YYY")
+        }
         res
     }
 

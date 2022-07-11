@@ -10,10 +10,10 @@ use crate::cggtts::{CrcError, calc_crc};
 #[derive(PartialEq, Clone, Copy, Debug)]
 #[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub enum CommonViewClass {
-    /// Single 
+    /// Single Channel Observation file 
     Single,
-    /// Multiple
-    Multiple,
+    /// Dual Carrier Observation
+    Dual,
 }
 
 
@@ -21,7 +21,7 @@ impl std::fmt::Display for CommonViewClass {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             CommonViewClass::Single => write!(fmt, "99"),
-            CommonViewClass::Multiple => write!(fmt, "FF"),
+            CommonViewClass::Dual => write!(fmt, "FF"),
         }
     }
 }
@@ -248,13 +248,13 @@ impl Track {
     /// Returns true if Self was estimated using a combination
     /// of Space Vehicules from the same constellation
     pub fn space_vehicule_combination (&self) -> bool {
-        !self.unique_space_vehicule()
+        self.space_vehicule.prn == 99
     }
 
     /// Returns true if Self was measured against a unique
     /// Space Vehicule
     pub fn unique_space_vehicule (&self) -> bool {
-        self.space_vehicule.prn != 99
+        !self.space_vehicule_combination()
     }
 
     /// Returns true if Self was measured against given `GNSS` Constellation 
@@ -454,7 +454,7 @@ impl std::str::FromStr for Track {
         Ok(Track {
             class: {
                 if class.eq("FF") {
-                    CommonViewClass::Multiple
+                    CommonViewClass::Dual
                 } else {
                     CommonViewClass::Single
                 }
