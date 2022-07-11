@@ -12,8 +12,8 @@ use crate::cggtts::{CrcError, calc_crc};
 pub enum CommonViewClass {
     /// Single Channel Observation file 
     Single,
-    /// Dual Carrier Observation
-    Dual,
+    /// Multi Channel Observation
+    Multiple,
 }
 
 
@@ -21,7 +21,7 @@ impl std::fmt::Display for CommonViewClass {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             CommonViewClass::Single => write!(fmt, "99"),
-            CommonViewClass::Dual => write!(fmt, "FF"),
+            CommonViewClass::Multiple => write!(fmt, "FF"),
         }
     }
 }
@@ -234,6 +234,7 @@ impl Track {
     /// if parameters were previously assigned, they get overwritten)
     pub fn with_ionospheric_data (&self, data: IonosphericData) -> Self {
         let mut t = self.clone();
+        t.class = CommonViewClass::Multiple; // always when Iono provided
         t.ionospheric = Some(data);
         t
     }
@@ -454,7 +455,7 @@ impl std::str::FromStr for Track {
         Ok(Track {
             class: {
                 if class.eq("FF") {
-                    CommonViewClass::Dual
+                    CommonViewClass::Multiple
                 } else {
                     CommonViewClass::Single
                 }
