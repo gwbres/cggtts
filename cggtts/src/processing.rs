@@ -10,10 +10,21 @@ const SAGNAC_CORRECTION : f64 = 0.0_f64;
 /// Refractivity Index @ seal level
 const NS : f64 = 324.8_f64; 
 
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct Vec3D {
     x: f64,
     y: f64,
     z: f64,
+}
+
+impl Default for Vec3D {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
+    }
 }
 
 impl Vec3D {
