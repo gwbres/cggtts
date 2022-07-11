@@ -158,6 +158,8 @@ mod delay {
         assert_eq!(Delay::default(), Delay::System(0.0));
         let delay = Delay::System(30.5);
         assert_eq!(delay.value(), 30.5);
+        let d = delay.add_value(20.0);
+        assert_eq!(d.value(), 50.5);
     }
 
     #[test]
@@ -176,5 +178,6 @@ mod delay {
         assert_eq!(totals.len() > 0, true);
         assert_eq!(totals[0].0, Code::C1);
         assert_eq!(totals[0].1, 80.0);
+        assert_eq!(delay.total_delay(Code::P1).is_none(), true);
     }
 }

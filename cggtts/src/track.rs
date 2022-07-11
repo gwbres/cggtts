@@ -499,3 +499,20 @@ impl std::str::FromStr for Track {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::GlonassChannel;
+    #[test]
+    fn test_glonass_channel() {
+        let c = GlonassChannel::Unknown;
+        assert_eq!(c.to_string(), "00");
+        let c = GlonassChannel::Channel(1);
+        assert_eq!(c.to_string(), "01");
+        let c = GlonassChannel::Channel(10);
+        assert_eq!(c.to_string(), "0A");
+        assert_eq!(c, GlonassChannel::Channel(10));
+        assert_eq!(c != GlonassChannel::Unknown, true);
+        assert_eq!(GlonassChannel::default(), GlonassChannel::Unknown);
+    }
+}
