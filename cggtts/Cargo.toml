@@ -1,6 +1,6 @@
 [package]
 name = "cggtts"
-version = "3.0.0"
+version = "3.1.0"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to analyze and create CGGTTS data"
@@ -16,8 +16,7 @@ use-serde = ["serde"]
 [dependencies]
 thiserror = "1"
 chrono = "0.4"
-#julianday = "1.0.1"
-julianday = { git = "https://github.com/gwbres/julianday", branch = "develop" }
+julianday = "1.1.0"
 scan_fmt = "0.1"
 rinex = "0.3.3" 
 rust-3d = "0.34.0"
