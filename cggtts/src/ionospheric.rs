@@ -38,11 +38,17 @@ pub fn klobuchar2delay (pos: (f64,f64), e: f64, azim: f64, t: f64, klobuchar: (K
     let phi_m = phi_i + 0.064 * (lambd_i - 1.617).cos();
     
     let mut t = 43200.0 * lambd_i + t;
-    
-    let mut a_i = sum(phi_m, alpha);
-    if a_i < 0.0 {
-        a_i = 0.0
+    if t < 0.0 {
+        t += 86400.0
+    } else if t >= 86400.0 {
+        t = 86400.0
     }
+    
+    // <!> ionospheric delay amplitude <!>
+    //let mut a_i = sum(phi_m, alpha);
+    //if a_i < 0.0 {
+    //    a_i = 0.0
+    //}
     
     let mut p_i = sum(phi_m, beta);
     if p_i < 72000.0 {
