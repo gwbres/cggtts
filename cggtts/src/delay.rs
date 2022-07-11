@@ -1,4 +1,4 @@
-use crate::cggtts::Code;
+use crate::Code;
 
 /// Different types of delay known,
 /// refer to documentation to truly understand what they

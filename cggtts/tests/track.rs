@@ -1,10 +1,10 @@
 use std::str::FromStr;
 use rinex::{constellation::Constellation, sv::Sv};
 use cggtts::{
-    Track, 
+    track::Track, 
     track::CommonViewClass, 
     track::GlonassChannel,
-    track::IonosphericData,
+    ionospheric::IonosphericData,
 };
 
 #[cfg(test)]

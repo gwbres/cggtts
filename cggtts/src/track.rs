@@ -3,7 +3,8 @@ use thiserror::Error;
 use format_num::NumberFormat;
 use rinex::{constellation::Constellation, sv::Sv};
 use crate::scheduler;
-use crate::cggtts::{CrcError, calc_crc};
+use crate::{CrcError, calc_crc};
+use crate::ionospheric;
 
 /// Describes whether this common view is based on a unique 
 /// Space Vehicule or a combination of several vehicules
@@ -126,7 +127,7 @@ pub struct Track {
     /// Optionnal Ionospheric Data.
     /// Technically, these require a dual carrier
     /// GNSS receiver for their evaluation
-    pub ionospheric: Option<IonosphericData>,
+    pub ionospheric: Option<ionospheric::IonosphericData>,
     /// Glonass Channel Frequency [1:24], O for other GNSS
     pub fr: GlonassChannel, 
     /// Receiver Hardware Channel [0:99], 0 if Unknown
@@ -134,44 +135,6 @@ pub struct Track {
     /// Carrier frequency standard 3 letter code,
     /// refer to RINEX specifications for meaning
     pub frc: String, 
-}
-
-#[derive(Copy, Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
-pub struct IonosphericData {
-    /// Measured ionospheric delay corresponding to the solution E in section 2.3.3.
-    pub msio: f64, 
-    /// Slope of the measured ionospheric delay corresponding to the solution E in section 2.3.3.
-    pub smsi: f64, 
-    /// [Ionospheric Sigma] Root-mean-square of the residuals corresponding to the solution E in section2.3.3
-    pub isg: f64, 
-}
-
-impl Into<(f64,f64,f64)> for IonosphericData {
-    fn into (self) -> (f64,f64,f64) {
-        (self.msio, self.smsi, self.isg)
-    }
-}
-
-impl From<(f64,f64,f64)> for IonosphericData {
-    fn from (data: (f64,f64,f64)) -> Self {
-        Self {
-            msio: data.0,
-            smsi: data.1,
-            isg: data.2,
-        }
-    }
-}
-
-impl Default for IonosphericData {
-    /// Builds Null Ionospheric Parameter estimates
-    fn default() -> Self {
-        Self {
-            msio: 0.0,
-            smsi: 0.0,
-            isg: 0.0,
-        }
-    }
 }
 
 #[derive(Error, Debug)]
@@ -232,7 +195,7 @@ impl Track {
 
     /// Returns a new `Track` with given Ionospheric parameters,
     /// if parameters were previously assigned, they get overwritten)
-    pub fn with_ionospheric_data (&self, data: IonosphericData) -> Self {
+    pub fn with_ionospheric_data (&self, data: ionospheric::IonosphericData) -> Self {
         let mut t = self.clone();
         t.class = CommonViewClass::Multiple; // always when Iono provided
         t.ionospheric = Some(data);
@@ -478,7 +441,7 @@ impl std::str::FromStr for Track {
             smdi,
             ionospheric: {
                 if let (Some(msio), Some(smsi), Some(isg)) = (msio, smsi, isg) {
-                    Some(IonosphericData {
+                    Some(ionospheric::IonosphericData {
                         msio,
                         smsi,
                         isg,

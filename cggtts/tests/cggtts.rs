@@ -1,10 +1,10 @@
 use rinex::sv::Sv;
 use rinex::constellation::Constellation;
 
-use cggtts::Rcvr;
-use cggtts::Cggtts;
-use cggtts::GlonassChannel;
-use cggtts::{Delay, TimeSystem, Code};
+use cggtts::{Cggtts, Rcvr};
+use cggtts::{TimeSystem, Code};
+use cggtts::track::GlonassChannel;
+use cggtts::delay::Delay;
 
 #[cfg(test)]
 mod test {
