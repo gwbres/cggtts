@@ -558,7 +558,7 @@ impl Cggtts {
                     res.push_str("_")
                 }
             } else {
-                res.push_str("_")
+                res.push_str("__")
             }
         } else {
             res.push_str("__")
@@ -566,7 +566,7 @@ impl Cggtts {
         if let Some(date) = self.date() {
             let mjd = julianday::ModifiedJulianDay::from(date).inner();
             let dd = mjd / 1000;
-            let ddd = mjd - dd;
+            let ddd = mjd - dd * 1000;
             res.push_str(&format!("{}.{}", dd, ddd));
         } else {
             res.push_str("YY.YYY")

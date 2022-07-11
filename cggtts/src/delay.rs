@@ -156,6 +156,8 @@ mod delay {
         assert_eq!(d, Delay::Internal(30.0));
         assert_eq!(delay.value() +20.0, d.value());
         assert_eq!(Delay::default(), Delay::System(0.0));
+        let delay = Delay::System(30.5);
+        assert_eq!(delay.value(), 30.5);
     }
 
     #[test]

@@ -46,6 +46,8 @@ mod test {
         let _dumped = cggtts.to_string();
         let _compare = std::fs::read_to_string(
             &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/standard/GZSY8259.568")).unwrap();
+        
+        assert_eq!(cggtts.filename(), String::from("GMSY__59.568"));
     }
     #[test]
     fn parse_standard_data() {
