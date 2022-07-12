@@ -1,10 +1,13 @@
 use crate::Code;
 
+#[cfg(feature = "with-serde")]
+use serde::{Serialize, Deserialize};
+
 /// Different types of delay known,
 /// refer to documentation to truly understand what they
 /// represent. <!> Delays are always specified in nanoseconds <!> 
 #[derive(Debug, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum Delay {
     /// Delay defined as `internal`
     Internal(f64),
@@ -90,6 +93,7 @@ fn carrier_dependant_delay_parsing (string: &str)
 /// System Delay describe the total measurement systems delay
 /// to be used in `Cggtts`
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub struct SystemDelay {
     /// RF/cable delay
     pub rf_cable_delay: f64,

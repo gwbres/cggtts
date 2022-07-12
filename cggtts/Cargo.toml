@@ -11,14 +11,14 @@ edition = "2018"
 readme = "../README.md"
 
 [features]
-use-serde = ["serde"]
+with-serde = ["serde"]
 
 [dependencies]
 thiserror = "1"
 chrono = "0.4"
 julianday = "1.1.0"
 scan_fmt = "0.1"
-rinex = "0.3.3" 
+rinex = { git = "https://github.com/gwbres/rinex", features = ["with-serde"] } 
 rust-3d = "0.34.0"
 format_num = "0.1.0"
 strum = "0.23.0"

@@ -83,9 +83,10 @@
 //! - ionospheric parameter estimates
 //! - specify carrier dependent delays [see Delay]
 
-#[cfg(feature = "use-serde")]
+#[cfg(feature = "with-serde")]
 #[macro_use]
 extern crate serde;
+use serde::{Serialize, Deserialize};
 
 pub mod delay;
 pub mod track;
@@ -148,7 +149,7 @@ pub fn helmert_transform (v: (f64,f64,f64), h: HelmertCoefs) -> (f64,f64,f64)  
 /// (hardware). Used to describe the
 /// GNSS receiver or hardware used to evaluate IMS parameters
 #[derive(Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub struct Rcvr {
     /// Manufacturer of this hardware
     pub manufacturer: String,
@@ -164,7 +165,7 @@ pub struct Rcvr {
 
 /// Known Reference Time Systems
 #[derive(Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum TimeSystem {
     /// TAI: International Atomic Time
     TAI,
@@ -219,7 +220,7 @@ impl std::fmt::Display for TimeSystem {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[derive(EnumString)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum Code {
     C1,
     C2,
@@ -291,13 +292,45 @@ impl std::fmt::Display for Rcvr {
     }
 }
 
+#[cfg(feature = "with-serde")]
+mod point3d_formatter {
+    pub fn serialize<S>(p: rust_3d::Point3D, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = format!("{},{},{}",p.x,p.y,p.z); 
+        serializer.serialize_str(&s)
+    }
+}
+
+#[cfg(feature = "with-serde")]
+pub mod datetime_formatter {
+    use serde::{Serializer};
+    pub fn serialize<S>(datetime: &chrono::NaiveDateTime, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = format!("{}", datetime.format("%Y-%m-%d %H:%M:%S"));
+        serializer.serialize_str(&s)
+    }
+
+    /*pub fn deserialize<'de, D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>, 
+    {
+        let s = String::deserialize(deserializer)?;
+        chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S")?
+    }*/
+}
+
 /// `Cggtts` structure comprises
 /// a measurement system and 
 /// and its Common View realizations (`tracks`)
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
+//#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub struct Cggtts {
     /// file revision release date 
+    //#[cfg_attr(feature = "with-serde", serde(with = "datetime_formatter"))]
     pub rev_date: chrono::NaiveDate, 
     /// laboratory / agency where measurements were performed (if unknown)
     pub lab: Option<String>, 
@@ -314,6 +347,7 @@ pub struct Cggtts {
     pub reference_frame: Option<String>,
     /// Antenna phase center coordinates [m]
     /// in `ITFR`, `ECEF` or other spatial systems
+    //#[cfg_attr(feature = "with-serde", serde(with = "point3d_formatter"))]
     pub coordinates: rust_3d::Point3D, 
     /// Comments (if any..)
     pub comments: Option<Vec<String>>, 

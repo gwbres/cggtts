@@ -6,10 +6,13 @@ use crate::scheduler;
 use crate::{CrcError, calc_crc};
 use crate::ionospheric;
 
+#[cfg(feature = "with-serde")]
+use serde::{Serialize, Deserialize};
+
 /// Describes whether this common view is based on a unique 
 /// Space Vehicule or a combination of several vehicules
 #[derive(PartialEq, Clone, Copy, Debug)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum CommonViewClass {
     /// Single Channel Observation file 
     Single,
@@ -30,7 +33,7 @@ impl std::fmt::Display for CommonViewClass {
 /// Describes Glonass Frequency channel,
 /// in case this `Track` was esimated using Glonass
 #[derive(Debug, Copy, Clone)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum GlonassChannel {
     /// Default value when not using Glonass constellation
     Unknown,
@@ -80,7 +83,6 @@ const TRACK_WITH_IONOSPHERIC :usize = 24;
 
 /// A `Track` is a `Cggtts` measurement
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "use-serde", derive(Serialize, Deserialize))]
 pub struct Track {
     /// Common view class.
     /// Most of the time, `Tracks` are estimated
