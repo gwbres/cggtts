@@ -103,6 +103,9 @@ use rinex::constellation::Constellation;
 use crate::track::Track;
 use crate::delay::{Delay, SystemDelay};
 
+#[cfg(feature = "with-serde")]
+use serde::{Serialize, Deserialize};
+
 /// Supported `Cggtts` version,
 /// non matching input files will be rejected
 const CURRENT_RELEASE: &str = "2E";
@@ -327,7 +330,6 @@ pub mod datetime_formatter {
 /// a measurement system and 
 /// and its Common View realizations (`tracks`)
 #[derive(Debug, Clone)]
-//#[cfg_attr(feature = "with-serde", derive(Serialize))]
 pub struct Cggtts {
     /// file revision release date 
     //#[cfg_attr(feature = "with-serde", serde(with = "datetime_formatter"))]

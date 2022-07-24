@@ -15,15 +15,15 @@ fn sum (data: f64, coeff: Klobuchar) -> f64 {
     + coeff.3 * data.powf(3.0_f64)
 }
 
-/// Computes Ionospheric Delay from Klobuchar Parameters
-/// and current space vehicule parameters
-/// Inputs:
-///   - pos: vehicule (latitude, longitude) estimates in ddeg
-///   - e: vehicule elevation in degrees
-///   - t: GPS time (seconds)
-///   - azim: vehicule azimuth in degrees 
-///   - klobuchar: (alpha, beta) coefficients tuple
-pub fn klobuchar2delay (pos: (f64,f64), e: f64, azim: f64, t: f64, klobuchar: (Klobuchar, Klobuchar)) -> f64 {
+/// Computes Ionospheric Delay for L1 frequency from Klobuchar Parameters
+/// and current space vehicule parameters  
+/// Inputs:  
+/// - pos: vehicule (latitude, longitude) estimates in ddeg  
+/// - e: vehicule elevation in degrees  
+/// - t: GPS time (seconds)  
+/// - azim: vehicule azimuth in degrees  
+/// - klobuchar: (alpha, beta) coefficients tuple  
+pub fn ionospheric_delay (pos: (f64,f64), e: f64, azim: f64, t: f64, klobuchar: (Klobuchar, Klobuchar)) -> f64 {
     let e = deg2rad(e);
     let azim = deg2rad(azim);
     let (phi_u, lambd_u) = pos;
@@ -68,6 +68,15 @@ pub fn klobuchar2delay (pos: (f64,f64), e: f64, azim: f64, t: f64, klobuchar: (K
     }
     
     //I = fL1/f * I pour translation
+}
+
+/// Converts a Ionspheric delay estimated
+/// for one frequency to another
+/// Inputs:
+/// - freq: frequency to convert to, in Hz
+pub fn ionospheric_delay_cv (delay: f64, freq: f64) -> f64 {
+    //1.405 / freq 
+    0.0_f64
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
