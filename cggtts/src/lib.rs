@@ -82,12 +82,6 @@
 //! - secondary hardware info [IMS]
 //! - ionospheric parameter estimates
 //! - specify carrier dependent delays [see Delay]
-
-#[cfg(feature = "with-serde")]
-#[macro_use]
-extern crate serde;
-use serde::{Serialize, Deserialize};
-
 pub mod delay;
 pub mod track;
 pub mod scheduler;
@@ -102,6 +96,10 @@ use rinex::constellation::Constellation;
 
 use crate::track::Track;
 use crate::delay::{Delay, SystemDelay};
+
+#[cfg(feature = "with-serde")]
+#[macro_use]
+extern crate serde;
 
 #[cfg(feature = "with-serde")]
 use serde::{Serialize, Deserialize};
