@@ -18,7 +18,7 @@ thiserror = "1"
 chrono = "0.4"
 julianday = "1.1.0"
 scan_fmt = "0.1"
-rinex = { git = "https://github.com/gwbres/rinex", features = ["with-serde"] } 
+rinex = { version = "0.4.0", features = ["with-serde"] } 
 rust-3d = "0.34.0"
 format_num = "0.1.0"
 strum = "0.23.0"
