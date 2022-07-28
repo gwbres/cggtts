@@ -25,4 +25,13 @@ information and measurement data. It is a file parser (reader) and producer
 (data generator).
 * [Tracks](doc/track.md) are actual `Cggtts` measurements
 * [Delay](doc/delay.md) represent the measurement internal delays
-* [cggtts-cli](cggtts_cli/README.md) command line application to parse & analyze CGGTTS data
+* [cggtts-cli](cggtts_cli/README.md) command line application to parse & analyze CGGTTS data.
+This application is just initiated and there is still a lot to achieve regarding this one.
+
+
+## TODO 
+
+- [ ] Conclude / improve the track generation interface
+- [ ] Provide a track scheduling interface
+- [ ] Deal with data scaling better
+- [ ] Enhance the command line app
