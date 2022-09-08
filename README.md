@@ -1,6 +1,6 @@
 CGGTTS 
 ======
-Rust package to parse and crate CGGTTS data files.
+Rust package to parse and generate CGGTTS data.
 
 [![crates.io](https://img.shields.io/crates/v/cggtts.svg)](https://crates.io/crates/cggtts)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/gwbres/cggtts/blob/main/LICENSE-APACHE)
