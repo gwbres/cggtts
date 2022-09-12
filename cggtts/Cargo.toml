@@ -1,6 +1,6 @@
 [package]
 name = "cggtts"
-version = "3.1.0"
+version = "3.2.0"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to analyze and create CGGTTS data"
@@ -11,14 +11,14 @@ edition = "2018"
 readme = "../README.md"
 
 [features]
-with-serde = ["serde"]
+default = [] # no features by default
 
 [dependencies]
 thiserror = "1"
 chrono = "0.4"
 julianday = "1.1.0"
 scan_fmt = "0.1"
-rinex = { version = "0.4.0", features = ["with-serde"] } 
+rinex = { version = "0.4.0", features = ["serde"] } 
 rust-3d = "0.34.0"
 format_num = "0.1.0"
 strum = "0.23.0"
