@@ -391,6 +391,8 @@ pub enum Error {
     NonAsciiData(#[from] CrcError),
     #[error("checksum error, got \"{0}\" but \"{1}\" locally computed")]
     ChecksumError(u8, u8),
+    #[error("file format error")]
+    FormatError,
 }
 
 impl Default for Cggtts {
@@ -632,8 +634,7 @@ impl Cggtts {
 
     /// Builds Self from given `Cggtts` file.
     pub fn from_file (fp: &str) -> Result<Self, Error> {
-        let file_content = std::fs::read_to_string(fp)
-            .unwrap();
+        let file_content = std::fs::read_to_string(fp)?;
         let mut lines = file_content.split("\n")
             .map(|x| x.to_string())
             //.map(|x| x.to_string() +"\n")
@@ -641,8 +642,7 @@ impl Cggtts {
                 .into_iter();
         
         // init variables
-        let mut line = lines.next()
-            .unwrap();
+        let mut line = lines.next().ok_or(Error::VersionFormatError)?;
         let mut system_delay = SystemDelay::new();
         
         // VERSION must be first
@@ -668,8 +668,7 @@ impl Cggtts {
         let mut time_reference = TimeSystem::default(); 
         let (mut x, mut y, mut z) : (f64,f64,f64) = (0.0, 0.0, 0.0);
 
-        line = lines.next()
-            .unwrap();
+        line = lines.next().ok_or(Error::FormatError)?;
 
         loop {
             if line.starts_with("REV DATE = ") {
@@ -677,7 +676,7 @@ impl Cggtts {
                     (Some(year),
                     Some(month),
                     Some(day)) => {
-                        rev_date = chrono::NaiveDate::from_ymd(year, month, day);
+                        rev_date = chrono::NaiveDate::from_ymd_opt(year, month, day).ok_or(Error::RevisionDateParsingError)?;
                     },
                     _ => {}
                 }
@@ -784,8 +783,8 @@ impl Cggtts {
                 }
 
                 match items[0] {
-                    "CAB" => system_delay.rf_cable_delay = f64::from_str(items[3]).unwrap(),
-                    "REF" => system_delay.ref_delay = f64::from_str(items[3]).unwrap(),
+                    "CAB" => system_delay.rf_cable_delay = f64::from_str(items[3])?,
+                    "REF" => system_delay.ref_delay = f64::from_str(items[3])?,
                     "SYS" => {
                         if line.contains("CAL_ID") {
                             let offset = line.rfind("=").unwrap();
@@ -922,9 +921,9 @@ impl Cggtts {
         }
         
         // BLANKS 
-        let _ = lines.next().unwrap(); // Blank
-        let _ = lines.next().unwrap(); // labels
-        let _ = lines.next().unwrap(); // units currently discarded
+        let _ = lines.next(); // Blank
+        let _ = lines.next(); // labels
+        let _ = lines.next(); // units currently discarded
         // tracks parsing
         let mut tracks: Vec<Track> = Vec::new();
         loop {
