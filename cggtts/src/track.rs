@@ -386,14 +386,14 @@ impl std::str::FromStr for Track {
         let smdi = f64::from_str(items[16])? * 0.1E-12;
 
         let (msio, smsi, isg, fr, hc, frc, ck) : 
-            (Option<f64>,Option<f64>,Option<f64>,u8,u8,String,u8) 
+            (Option<f64>,Option<f64>,Option<f64>,u8,u8,String,&str) 
             = match items.len() {
                 TRACK_WITHOUT_IONOSPHERIC => {
                     (None,None,None,
                     u8::from_str_radix(items[17], 16)?, 
                     u8::from_str_radix(items[18], 10)?,
                     items[19].to_string(),
-                    u8::from_str_radix(items[20], 16)?)
+                    items[20])
                 },
                 TRACK_WITH_IONOSPHERIC => {
                     (Some(f64::from_str(items[17])? * 0.1E-9), 
@@ -402,13 +402,13 @@ impl std::str::FromStr for Track {
                     u8::from_str_radix(items[20], 16)?, 
                     u8::from_str_radix(items[21], 16)?,
                     items[22].to_string(),
-                    u8::from_str_radix(items[23], 16)?)
+                    items[23])
                 },
                 _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
         };
 
         // checksum 
-        let end_pos = line.rfind(&format!("{:2X}",ck))
+        let end_pos = line.rfind(ck)
             .unwrap(); // already matching
         let _cksum = calc_crc(&line.split_at(end_pos-1).0)?;
         // verification
