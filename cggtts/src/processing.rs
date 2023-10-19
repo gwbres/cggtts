@@ -1,14 +1,14 @@
-//! Set of methods to compute CGGTTS data and 
+//! Set of methods to compute CGGTTS data and
 //! produce tracks
 
 /// Speed of light in [m/s]
-const SPEED_OF_LIGHT : f64 = 300_000_000.0_f64;
+const SPEED_OF_LIGHT: f64 = 300_000_000.0_f64;
 
 /// SAGNAC correction associated with Earth rotation
-const SAGNAC_CORRECTION : f64 = 0.0_f64;
+const SAGNAC_CORRECTION: f64 = 0.0_f64;
 
 /// Refractivity Index @ seal level
-const NS : f64 = 324.8_f64; 
+const NS: f64 = 324.8_f64;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct Vec3D {
@@ -28,14 +28,14 @@ impl Default for Vec3D {
 }
 
 impl Vec3D {
-    pub fn norm (&self) -> f64 {
+    pub fn norm(&self) -> f64 {
         (self.x.powf(2.0) + self.y.powf(2.0) + self.z.powf(2.0)).sqrt()
     }
 }
 
 impl std::ops::Sub<Vec3D> for Vec3D {
     type Output = Vec3D;
-    fn sub (self, rhs: Vec3D) -> Vec3D {
+    fn sub(self, rhs: Vec3D) -> Vec3D {
         Vec3D {
             x: self.x - rhs.x,
             y: self.y - rhs.y,
@@ -49,14 +49,14 @@ pub enum Policy {
     /// see [p6: Data processing paragraph]
     Simple,
     /// Use n tap smoothing.   
-    /// This feature is not needed when using a 
+    /// This feature is not needed when using a
     /// modern GNSS receiver
     Smoothing(u32),
 }
 
 pub struct Params {
     /// Raw measurements
-    pr : f64,
+    pr: f64,
     /// Current elevation [°]
     e: f64,
     /// Current altitude [km]
@@ -70,17 +70,17 @@ pub struct Params {
     /// Current Rcvr vector
     x_rec: Vec3D,
     /// Carrier dependent delay
-    delay : f64,
+    delay: f64,
     /// RF delay
-    rf_delay : f64,
+    rf_delay: f64,
     /// REF delay
-    ref_delay : f64,
+    ref_delay: f64,
     /// Group delay
     grp_delay: f64,
 }
 
 /// Computes dn constant
-fn dn () -> f64 {
+fn dn() -> f64 {
     -7.32 * (0.005577 * NS).exp()
 }
 
@@ -90,24 +90,24 @@ fn nslog() -> f64 {
 
 /// Computes R_h quantity [eq(8)] Tropospheric delay at zenith,
 /// from space vehicule altitude in [km]
-fn r_h (altitude: f64) -> f64 {
+fn r_h(altitude: f64) -> f64 {
     let dn = dn();
     let nslog = nslog();
     if altitude < 1.0 {
-        (2162.0 + NS * (1.0-altitude)
-            + 0.5*dn*(1.0 - altitude.powf(2.0))) *10E-3 /SPEED_OF_LIGHT
+        (2162.0 + NS * (1.0 - altitude) + 0.5 * dn * (1.0 - altitude.powf(2.0))) * 10E-3
+            / SPEED_OF_LIGHT
     } else {
-        let frac = (NS + dn)/nslog;
+        let frac = (NS + dn) / nslog;
         let e_1 = (-nslog).exp();
-        let e_2 = (0.125*(1.0-altitude)*nslog).exp();
-        (732.0 - (8.0 * frac *(e_1 - e_2))) *10E-3 /SPEED_OF_LIGHT
+        let e_2 = (0.125 * (1.0 - altitude) * nslog).exp();
+        (732.0 - (8.0 * frac * (e_1 - e_2))) * 10E-3 / SPEED_OF_LIGHT
     }
 }
 
 /// Computes f_e
 /// - e: elevation [°]
-fn f_e (e: f64) -> f64 {
-    1.0 / (e.sin() + 0.00143/(e.tan() +0.0455))
+fn f_e(e: f64) -> f64 {
+    1.0 / (e.sin() + 0.00143 / (e.tan() + 0.0455))
 }
 
 /// Relativistic delay
@@ -125,24 +125,27 @@ fn dt_iono() -> f64 {
 /// - x_sat: current Sv vector
 /// - x_rec: rcvr estimate
 /// - h: altitude in km
-/// - e: elevation in ° 
+/// - e: elevation in °
 ///
 /// Returns
 /// - dt_sat : [eq(2)]
 /// - dt_ref : [eq(7)]
 /// - dt_tropo : [eq(6)]
 /// - dt_iono : [eq(5)]
-pub fn process (data: Params) -> (f64, f64, f64) {
+pub fn process(data: Params) -> (f64, f64, f64) {
     // compensation
-    let p = data.pr 
-        - SPEED_OF_LIGHT * (data.delay + data.rf_delay - data.ref_delay);
+    let p = data.pr - SPEED_OF_LIGHT * (data.delay + data.rf_delay - data.ref_delay);
     let fe = f_e(data.e);
     let rh = r_h(data.h);
     let dt_tropo = fe * rh;
-    let d_tclk_tsat = 1.0/SPEED_OF_LIGHT * (p - (data.x_sat - data.x_rec).norm() - SAGNAC_CORRECTION)
-        + dt_rel() - dt_iono() - dt_tropo - data.grp_delay;
+    let d_tclk_tsat = 1.0 / SPEED_OF_LIGHT
+        * (p - (data.x_sat - data.x_rec).norm() - SAGNAC_CORRECTION)
+        + dt_rel()
+        - dt_iono()
+        - dt_tropo
+        - data.grp_delay;
     let d_tclk_tref = d_tclk_tsat + data.t_sat - data.t_ref;
-    (d_tclk_tsat, d_tclk_tref, dt_tropo) 
+    (d_tclk_tsat, d_tclk_tref, dt_tropo)
 }
 
 /*
@@ -161,7 +164,7 @@ pub fn process (data: Params) -> (f64, f64, f64) {
     /// Compensations & computations are then performed internally
     ///
     /// # Input:
-    /// - pr: raw pseudo range 
+    /// - pr: raw pseudo range
     /// - x_sat: 3D vehicule position estimate in IRTF system (must be IRTF!)
     /// - x_rec: 3D receiver position estimate in IRTF system (must be IRTF!)
     /// - dt_rel_corr : relativistic clock correction for space vehicule
@@ -173,16 +176,16 @@ pub fn process (data: Params) -> (f64, f64, f64) {
         let p = symbol - SPEED_OF_LIGHT * (self.delay.value() + self.cab_delay - self.ref_delay);
         self.buffer.push(p)
     }
-    
-    pub fn run (&mut self, elevation: f64, 
-            x_sat: (f64,f64,f64), x_rec: (f64,f64,f64), dt_rel_corr: f64, 
-                iono_dt: f64, dtropo: f64, grp_delay: f64) 
+
+    pub fn run (&mut self, elevation: f64,
+            x_sat: (f64,f64,f64), x_rec: (f64,f64,f64), dt_rel_corr: f64,
+                iono_dt: f64, dtropo: f64, grp_delay: f64)
     {
     }
-    
+
     pub fn next()
         self.buffer.push(p);
-        dt = 
+        dt =
 }
 
 /*
@@ -198,10 +201,10 @@ impl Iterator for Scheduler {
 pub struct Scheduler {
     /// TrackGen policy
     pub processing : Policy,
-    /// Current work date 
+    /// Current work date
     day: chrono::NaiveDate,
     /// should match BIPM recommendations,
-    /// but custom values can be used (shortest tracking in particular) 
+    /// but custom values can be used (shortest tracking in particular)
     trk_duration: std::time::Duration,
     /// Scheduled events for today
     events: Vec<chrono::NaiveTime>,
@@ -224,8 +227,8 @@ impl Scheduler {
         let duration = trk_duration.unwrap_or(BIPM_RECOMMENDED_TRACKING);
         //let events = Scheduler::events(day, duration);
         Self {
-            day, 
-            trk_duration, 
+            day,
+            trk_duration,
             events: Vec::new(),
         }
     }
@@ -235,7 +238,7 @@ impl Scheduler {
     /// if date is not provided, we use now()
     pub fn scheduled_events (&self, date: Option<chrono::NaiveDate>) -> Vec<chrono::NaiveDateTime> {
         let mut res : Vec<chrono::NaiveDateTime> = Vec::new();
-    
+
     /// Call this once day has changed to reset internal FSM
     pub fn new_day (&mut self) {
         //self.day = chrono::Utc::now().naive_utc().date();
@@ -244,7 +247,7 @@ impl Scheduler {
 
     /// Updates tracking duration to new value
     pub fn update_trk_duration (&mut self, new: std::time::Duration) {
-        self.duration = new 
+        self.duration = new
     }
 
     /// Returns scheduled measurements for given day,
@@ -273,20 +276,20 @@ impl Scheduler {
     /// Returns duration (time interval) between given date
     /// and next scheduled measurement
     pub fn time_to_next (&self, datetime: chrono::NaiveDateTime) -> std::time::Duration {
-        //let offset = Scheduler::time_ref(self.n); 
+        //let offset = Scheduler::time_ref(self.n);
         std::time::Duration::from_secs(10)
     }
 
-    /// Returns offset in seconds during the course of `MJD_REF` 
-    /// reference Modified Julian Day (defined in standards), 
+    /// Returns offset in seconds during the course of `MJD_REF`
+    /// reference Modified Julian Day (defined in standards),
     /// for given nth observation within that day.
     ///
-    /// Input: 
-    ///  - observation: observation counter 
+    /// Input:
+    ///  - observation: observation counter
     fn time_ref (observation: u32) -> u32 {
         60 * 2 + (observation -1)*16*60
     }
-    
+
     /// Returns number of measurements to perform within 24hours
     fn tracks_in_24h (&self) -> u64 {
         24 * 3600 / self.duration.as_secs()

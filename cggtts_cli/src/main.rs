@@ -2,27 +2,24 @@
 //! Refer to README for command line arguments.    
 //! Based on crate <https://github.com/gwbres/cggtts>     
 //! Homepage: <https://github.com/gwbres/cggtts>
-use clap::App;
 use clap::load_yaml;
+use clap::App;
 
 /*use gnuplot::{Figure, Caption};
 use gnuplot::{Color, PointSymbol, LineStyle, DashType};
 use gnuplot::{PointSize, AxesCommon, LineWidth};*/
 
+use cggtts::track::CommonViewClass;
 use cggtts::{Cggtts, Track};
-use cggtts::track::{CommonViewClass};
 use rinex::constellation::Constellation;
 
-pub fn main () -> Result<(), Box<dyn std::error::Error>> {
-	let yaml = load_yaml!("cli.yml");
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let yaml = load_yaml!("cli.yml");
     let app = App::from_yaml(yaml);
-	let matches = app.get_matches();
+    let matches = app.get_matches();
 
-    // General 
-    let filepaths : Vec<&str> = matches.value_of("filepath")
-        .unwrap()
-            .split(",")
-            .collect();
+    // General
+    let filepaths: Vec<&str> = matches.value_of("filepath").unwrap().split(",").collect();
 
     let header = matches.is_present("header");
     let tracks = matches.is_present("tracks");
@@ -33,7 +30,7 @@ pub fn main () -> Result<(), Box<dyn std::error::Error>> {
     let iono = matches.is_present("ionospheric");
     let sv = matches.is_present("sv");
     let unique = matches.is_present("unique");
-    
+
     for fp in filepaths.iter() {
         let cggtts = Cggtts::from_file(fp);
         if cggtts.is_err() {
@@ -46,7 +43,7 @@ pub fn main () -> Result<(), Box<dyn std::error::Error>> {
             c.tracks = Vec::new();
             println!("{:#?}", c);
         }
-        
+
         // from now on, tracks might be filtered
         /*if unique {
             let data : Vec<_> = cggtts.tracks
@@ -55,7 +52,7 @@ pub fn main () -> Result<(), Box<dyn std::error::Error>> {
                 .collect();
             tracks = data;
         }*/
-        
+
         if tracks {
             println!("{:#?}", cggtts.tracks);
         }
@@ -63,7 +60,8 @@ pub fn main () -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", cggtts.follows_bipm_specs())
         }
         if iono {
-            let data : Vec<_> = cggtts.tracks
+            let data: Vec<_> = cggtts
+                .tracks
                 .iter()
                 .filter(|t| t.has_ionospheric_data())
                 .map(|t| t.ionospheric)

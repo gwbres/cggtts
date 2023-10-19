@@ -1,17 +1,17 @@
-use chrono::Timelike;
-use thiserror::Error;
-use format_num::NumberFormat;
-use crate::scheduler;
-use crate::{CrcError, calc_crc};
 use crate::ionospheric;
+use crate::scheduler;
+use crate::{calc_crc, CrcError};
+use chrono::Timelike;
+use format_num::NumberFormat;
+use thiserror::Error;
 
-use hifitime::{Epoch, Duration};
 use gnss::prelude::{Constellation, SV};
+use hifitime::{Duration, Epoch};
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-/// Describes whether this common view is based on a unique 
+/// Describes whether this common view is based on a unique
 /// or a combination of SV
 #[derive(PartialEq, Clone, Copy, Debug)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
@@ -23,7 +23,7 @@ pub enum CommonViewClass {
 }
 
 impl std::fmt::UpperHex for CommonViewClass {
-    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             CommonViewClass::Single => write!(fmt, "99"),
             CommonViewClass::Multiple => write!(fmt, "FF"),
@@ -43,7 +43,7 @@ pub enum GlonassChannel {
 }
 
 impl std::fmt::Display for GlonassChannel {
-    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             GlonassChannel::Unknown => write!(fmt, "00"),
             GlonassChannel::Channel(c) => write!(fmt, "{:02X}", c),
@@ -52,22 +52,16 @@ impl std::fmt::Display for GlonassChannel {
 }
 
 impl PartialEq for GlonassChannel {
-    fn eq (&self, rhs: &Self) -> bool {
+    fn eq(&self, rhs: &Self) -> bool {
         match self {
-            GlonassChannel::Unknown => {
-                match rhs {
-                    GlonassChannel::Unknown => true,
-                    _ => false
-                }
+            GlonassChannel::Unknown => match rhs {
+                GlonassChannel::Unknown => true,
+                _ => false,
             },
-            GlonassChannel::Channel(c0) => {
-                match rhs {
-                    GlonassChannel::Channel(c1) => {
-                        c0 == c1
-                    },
-                    _ => false,
-                }
-            }
+            GlonassChannel::Channel(c0) => match rhs {
+                GlonassChannel::Channel(c1) => c0 == c1,
+                _ => false,
+            },
         }
     }
 }
@@ -79,8 +73,8 @@ impl Default for GlonassChannel {
     }
 }
 
-const TRACK_WITH_IONOSPHERIC :usize = 24;
-const TRACK_WITHOUT_IONOSPHERIC :usize = 21;
+const TRACK_WITH_IONOSPHERIC: usize = 24;
+const TRACK_WITHOUT_IONOSPHERIC: usize = 21;
 
 /// A `Track` is a `Cggtts` measurement
 #[derive(Debug, PartialEq, Clone)]
@@ -89,20 +83,20 @@ pub struct Track {
     /// Most of the time, `Tracks` are estimated
     /// using a combination of Spave Vehicules
     pub class: CommonViewClass,
-    /// Epoch of this track 
+    /// Epoch of this track
     pub epoch: Epoch,
     /// Tracking duration
     pub duration: Duration,
-    /// Space vehicule against which this 
+    /// Space vehicule against which this
     /// measurement / track was realized.
-    /// Is only relevant, as a whole, 
+    /// Is only relevant, as a whole,
     /// if `class` is set to CommonViewClass::Single.
     /// Refer to [class]
     pub sv: Sv,
     /// Elevation (angle) at Tracking midpoint [in degrees]
-    pub elevation: f64, 
+    pub elevation: f64,
     /// Azimuth (angle) at Tracking midpoint in [degrees]
-    pub azimuth: f64, 
+    pub azimuth: f64,
     pub refsv: f64,
     pub srsv: f64,
     pub refsys: f64,
@@ -118,24 +112,24 @@ pub struct Track {
     /// ephemeris (Time of Clock).
     pub ioe: u16,
     /// Modeled tropospheric delay corresponding to the solution C in section 2.3.3
-    pub mdtr: f64, 
+    pub mdtr: f64,
     /// Slope of the modeled tropospheric delay corresponding to the solution C in section 2.3.3
-    pub smdt: f64, 
+    pub smdt: f64,
     /// Modelled ionospheric delay corresponding to the solution D in section 2.3.3.
-    pub mdio: f64, 
+    pub mdio: f64,
     /// Slope of the modelled ionospheric delay corresponding to the solution D in section 2.3.3.
-    pub smdi: f64, 
+    pub smdi: f64,
     /// Optionnal Ionospheric Data.
     /// Technically, these require a dual carrier
     /// GNSS receiver for their evaluation
     pub ionospheric: Option<ionospheric::IonosphericData>,
     /// Glonass Channel Frequency [1:24], O for other GNSS
-    pub fr: GlonassChannel, 
+    pub fr: GlonassChannel,
     /// Receiver Hardware Channel [0:99], 0 if Unknown
-    pub hc: u8, 
+    pub hc: u8,
     /// Carrier frequency standard 3 letter code,
     /// refer to RINEX specifications for meaning
-    pub frc: String, 
+    pub frc: String,
 }
 
 #[derive(Error, Debug)]
@@ -162,24 +156,25 @@ impl Track {
     /// production date set to `Today()`.
     /// To customize, use `with_` methods later on,
     /// for example to provide ionospheric parameters or use a different date
-    pub fn new (class: CommonViewClass,
+    pub fn new(
+        class: CommonViewClass,
         epoch: Epoch,
         duration: Duration,
         sv: Sv,
-        elevation: f64, 
-        azimuth: f64, 
-        refsv: f64, 
+        elevation: f64,
+        azimuth: f64,
+        refsv: f64,
         srsv: f64,
-        refsys: f64, 
-        srsys:f64, 
-        dsg: f64, 
-        ioe: u16, 
+        refsys: f64,
+        srsys: f64,
+        dsg: f64,
+        ioe: u16,
         mdtr: f64,
-        smdt: f64, 
-        mdio: f64, 
-        smdi: f64, 
+        smdt: f64,
+        mdio: f64,
+        smdi: f64,
         fr: GlonassChannel,
-        hc: u8, 
+        hc: u8,
         frc: &str,
     ) -> Self {
         Self {
@@ -209,7 +204,7 @@ impl Track {
 
     /// Returns a new `Track` with given Ionospheric parameters,
     /// if parameters were previously assigned, they get overwritten)
-    pub fn with_ionospheric_data (&self, data: ionospheric::IonosphericData) -> Self {
+    pub fn with_ionospheric_data(&self, data: ionospheric::IonosphericData) -> Self {
         let mut t = self.clone();
         t.class = CommonViewClass::Multiple; // always when Iono provided
         t.ionospheric = Some(data);
@@ -217,7 +212,7 @@ impl Track {
     }
 
     /// Returns a `Track` with desired duration
-    pub fn with_duration (&self, duration: std::time::Duration) -> Self {
+    pub fn with_duration(&self, duration: std::time::Duration) -> Self {
         let mut t = self.clone();
         t.duration = duration;
         t
@@ -225,57 +220,57 @@ impl Track {
 
     /// Returns true if Self was estimated using a combination
     /// of Space Vehicules from the same constellation
-    pub fn sv_combination (&self) -> bool {
+    pub fn sv_combination(&self) -> bool {
         self.sv.prn == 99
     }
 
     /// Returns true if Self was measured against a unique
     /// Space Vehicule
-    pub fn unique_sv (&self) -> bool {
+    pub fn unique_sv(&self) -> bool {
         !self.sv_combination()
     }
 
-    /// Returns true if Self was measured against given `GNSS` Constellation 
-    pub fn uses_constellation (&self, c: Constellation) -> bool {
+    /// Returns true if Self was measured against given `GNSS` Constellation
+    pub fn uses_constellation(&self, c: Constellation) -> bool {
         self.sv.constellation == c
     }
 
     /// Returns True if Self follows BIPM specifications / requirements,
     /// in terms of tracking pursuit
-    pub fn follows_bipm_specs (&self) -> bool {
+    pub fn follows_bipm_specs(&self) -> bool {
         self.duration.as_secs() == scheduler::BIPM_RECOMMENDED_TRACKING.as_secs()
     }
-    
+
     /// Returns a `Track` with desired unique space vehicule
-    pub fn with_sv (&self, sv: Sv) -> Self {
+    pub fn with_sv(&self, sv: Sv) -> Self {
         let mut t = self.clone();
         t.sv = sv.clone();
         t
     }
 
     /// Returns a track with desired elevation angle in Degrees
-    pub fn with_elevation (&self, elevation: f64) -> Self {
+    pub fn with_elevation(&self, elevation: f64) -> Self {
         let mut t = self.clone();
         t.elevation = elevation;
         t
     }
 
-    /// Returns a `Track` with given azimuth angle in Degrees, at tracking midpoint 
-    pub fn with_azimuth (&self, azimuth: f64) -> Self { 
+    /// Returns a `Track` with given azimuth angle in Degrees, at tracking midpoint
+    pub fn with_azimuth(&self, azimuth: f64) -> Self {
         let mut t = self.clone();
         t.azimuth = azimuth;
         t
     }
 
     /// Returns a `Track` with desired Frequency carrier code
-    pub fn with_carrier_code (&self, code: &str) -> Self {
+    pub fn with_carrier_code(&self, code: &str) -> Self {
         let mut t = self.clone();
         t.frc = code.to_string();
         t
     }
-    
+
     /// Returns true if Self comes with Ionospheric parameter estimates
-    pub fn has_ionospheric_data (&self) -> bool { 
+    pub fn has_ionospheric_data(&self) -> bool {
         self.ionospheric.is_some()
     }
 }
@@ -301,9 +296,9 @@ impl Default for Track {
             trktime: chrono::NaiveTime::from_hms(
                 now.time().hour(),
                 now.time().minute(),
-                now.time().second()
+                now.time().second(),
             ),
-            duration: scheduler::BIPM_RECOMMENDED_TRACKING, 
+            duration: scheduler::BIPM_RECOMMENDED_TRACKING,
             elevation: 0.0_f64,
             azimuth: 0.0_f64,
             refsv: 0.0_f64,
@@ -318,21 +313,24 @@ impl Default for Track {
             smdi: 0.0_f64,
             fr: GlonassChannel::default(),
             hc: 0,
-            frc: String::from("XXX"), 
+            frc: String::from("XXX"),
         }
     }
 }
 
 impl std::fmt::Display for Track {
-    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
         let num = NumberFormat::new();
-        string.push_str(&format!("{} {} {} {} ",
+        string.push_str(&format!(
+            "{} {} {} {} ",
             self.sv,
             self.class,
             julianday::ModifiedJulianDay::from(self.date).inner(),
-            self.trktime.format("%H%M%S")));
-        string.push_str(&format!("{} {} {} {} {} {} {} {} {} {} {} {} {} ",
+            self.trktime.format("%H%M%S")
+        ));
+        string.push_str(&format!(
+            "{} {} {} {} {} {} {} {} {} {} {} {} {} ",
             num.format("04d", self.duration.as_secs() as f64),
             num.format("03d", self.elevation * 10.0),
             num.format("04d", self.azimuth * 10.0),
@@ -346,36 +344,34 @@ impl std::fmt::Display for Track {
             num.format("+04d", self.smdt * 1E13),
             num.format("04d", self.mdio * 1E10),
             num.format("+04d", self.smdi * 1E13),
-            ));
+        ));
         if let Some(iono) = self.ionospheric {
-            string.push_str(&format!("{} {} {} ",
+            string.push_str(&format!(
+                "{} {} {} ",
                 num.format("11d", iono.msio * 1E10),
                 num.format("+6d", iono.smsi * 1E13),
                 num.format("04d", iono.isg * 1E10),
             ));
         }
 
-        string.push_str(&format!("{:02} {:02X} {}",
-            self.fr,
-            self.hc,
-            self.frc));
+        string.push_str(&format!("{:02} {:02X} {}", self.fr, self.hc, self.frc));
 
         if let Ok(crc) = calc_crc(&string) {
-            string.push_str(&format!(" {:2X}", crc+32))
+            string.push_str(&format!(" {:2X}", crc + 32))
         }
         fmt.write_str(&string)
     }
 }
 
 impl std::str::FromStr for Track {
-    type Err = Error; 
+    type Err = Error;
     /// Builds a `Track` from given str content
-    fn from_str (line: &str) -> Result<Self, Self::Err> {
+    fn from_str(line: &str) -> Result<Self, Self::Err> {
         let cleanedup = String::from(line.trim());
         let items: Vec<&str> = cleanedup.split_ascii_whitespace().collect();
         if items.len() != TRACK_WITH_IONOSPHERIC {
             if items.len() != TRACK_WITHOUT_IONOSPHERIC {
-                return Err(Error::InvalidDataFormatError(String::from(cleanedup)))
+                return Err(Error::InvalidDataFormatError(String::from(cleanedup)));
             }
         }
 
@@ -397,32 +393,39 @@ impl std::str::FromStr for Track {
         let mdio = f64::from_str(items[15])? * 0.1E-9;
         let smdi = f64::from_str(items[16])? * 0.1E-12;
 
-        let (msio, smsi, isg, fr, hc, frc, ck) : 
-            (Option<f64>,Option<f64>,Option<f64>,u8,u8,String,&str) 
-            = match items.len() {
-                TRACK_WITHOUT_IONOSPHERIC => {
-                    (None,None,None,
-                    u8::from_str_radix(items[17], 16)?, 
-                    u8::from_str_radix(items[18], 10)?,
-                    items[19].to_string(),
-                    items[20])
-                },
-                TRACK_WITH_IONOSPHERIC => {
-                    (Some(f64::from_str(items[17])? * 0.1E-9), 
-                    Some(f64::from_str(items[18])? * 0.1E-12), 
-                    Some(f64::from_str(items[19])? * 0.1E-9),
-                    u8::from_str_radix(items[20], 16)?, 
-                    u8::from_str_radix(items[21], 16)?,
-                    items[22].to_string(),
-                    items[23])
-                },
-                _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
+        let (msio, smsi, isg, fr, hc, frc, ck): (
+            Option<f64>,
+            Option<f64>,
+            Option<f64>,
+            u8,
+            u8,
+            String,
+            &str,
+        ) = match items.len() {
+            TRACK_WITHOUT_IONOSPHERIC => (
+                None,
+                None,
+                None,
+                u8::from_str_radix(items[17], 16)?,
+                u8::from_str_radix(items[18], 10)?,
+                items[19].to_string(),
+                items[20],
+            ),
+            TRACK_WITH_IONOSPHERIC => (
+                Some(f64::from_str(items[17])? * 0.1E-9),
+                Some(f64::from_str(items[18])? * 0.1E-12),
+                Some(f64::from_str(items[19])? * 0.1E-9),
+                u8::from_str_radix(items[20], 16)?,
+                u8::from_str_radix(items[21], 16)?,
+                items[22].to_string(),
+                items[23],
+            ),
+            _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
         };
 
-        // checksum 
-        let end_pos = line.rfind(ck)
-            .unwrap(); // already matching
-        let _cksum = calc_crc(&line.split_at(end_pos-1).0)?;
+        // checksum
+        let end_pos = line.rfind(ck).unwrap(); // already matching
+        let _cksum = calc_crc(&line.split_at(end_pos - 1).0)?;
         // verification
         /*if cksum != ck {
             println!("GOT {} EXPECT {}", ck, cksum);
@@ -455,11 +458,7 @@ impl std::str::FromStr for Track {
             smdi,
             ionospheric: {
                 if let (Some(msio), Some(smsi), Some(isg)) = (msio, smsi, isg) {
-                    Some(ionospheric::IonosphericData {
-                        msio,
-                        smsi,
-                        isg,
-                    })
+                    Some(ionospheric::IonosphericData { msio, smsi, isg })
                 } else {
                     None
                 }

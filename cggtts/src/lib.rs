@@ -83,22 +83,22 @@
 //! - ionospheric parameter estimates
 //! - specify carrier dependent delays [see Delay]
 pub mod delay;
-pub mod track;
-pub mod scheduler;
-pub mod processing;
 pub mod ionospheric;
+pub mod processing;
+pub mod scheduler;
+pub mod track;
 
-use hifitime::{TimeScale, Epoch};
+use hifitime::{Epoch, TimeScale};
 
 extern crate gnss_rs as gnss;
 
-use thiserror::Error;
-use std::str::FromStr;
 use scan_fmt::scan_fmt;
-use strum_macros::{EnumString};
+use std::str::FromStr;
+use strum_macros::EnumString;
+use thiserror::Error;
 
-use crate::track::Track;
 use crate::delay::{Delay, SystemDelay};
+use crate::track::Track;
 use gnss::prelude::{Constellation, SV};
 
 #[cfg(feature = "serde")]
@@ -106,14 +106,14 @@ use gnss::prelude::{Constellation, SV};
 extern crate serde;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Supported `Cggtts` version,
 /// non matching input files will be rejected
 const CURRENT_RELEASE: &str = "2E";
 
 /// Latest revision date
-const LATEST_REVISION_DATE : &str = "2014-02-20";
+const LATEST_REVISION_DATE: &str = "2014-02-20";
 
 /// labels in case we provide Ionospheric parameters estimates
 const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
@@ -199,7 +199,7 @@ impl TimeSystem {
             // UTCk with lab + offset
             if let (Some(lab), Some(offset)) = scan_fmt!(s, "UTC({},{})", String, f64) {
                 TimeSystem::UTCk(lab, Some(offset))
-            } 
+            }
             // UTCk with only agency name
             else if let Some(lab) = scan_fmt!(s, "UTC({})", String) {
                 TimeSystem::UTCk(lab, None)
@@ -207,7 +207,7 @@ impl TimeSystem {
                 TimeSystem::UTC
             }
         } else {
-            TimeSystem::Unknown(s.to_string()) 
+            TimeSystem::Unknown(s.to_string())
         }
     }
 }
@@ -217,13 +217,13 @@ impl From<TimeScale> for TimeSystem {
         match ts {
             TimeScale::UTC => Self::UTC,
             TimeScale::TAI => Self::TAI,
-            _ => Self::TAI /* incorrect usage */ 
+            _ => Self::TAI, /* incorrect usage */
         }
     }
 }
 
 impl std::fmt::Display for TimeSystem {
-    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             TimeSystem::TAI => fmt.write_str("TAI"),
             TimeSystem::UTC => fmt.write_str("UTC"),
@@ -233,8 +233,7 @@ impl std::fmt::Display for TimeSystem {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-#[derive(EnumString)]
+#[derive(Clone, Copy, PartialEq, Debug, EnumString)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Code {
     C1,
@@ -254,7 +253,7 @@ impl Default for Code {
 }
 
 impl std::fmt::Display for Code {
-    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Code::C1 => fmt.write_str("C1"),
             Code::C2 => fmt.write_str("C2"),
@@ -270,21 +269,18 @@ impl std::fmt::Display for Code {
 
 #[derive(Error, Debug)]
 pub enum CrcError {
-    #[error("failed to compute CRC over non utf8 data")] 
+    #[error("failed to compute CRC over non utf8 data")]
     NonAsciiData(String),
 }
 
 /// computes crc for given str content
-pub fn calc_crc (content: &str) -> Result<u8, CrcError> {
+pub fn calc_crc(content: &str) -> Result<u8, CrcError> {
     match content.is_ascii() {
         true => {
             let mut ck: u8 = 0;
             let mut ptr = content.encode_utf16();
             for _ in 0..ptr.clone().count() {
-                ck = ck.wrapping_add(
-                    ptr.next()
-                    .unwrap()
-                    as u8)
+                ck = ck.wrapping_add(ptr.next().unwrap() as u8)
             }
             Ok(ck)
         },
@@ -292,7 +288,7 @@ pub fn calc_crc (content: &str) -> Result<u8, CrcError> {
     }
 }
 
-impl std::fmt::Display for Rcvr { 
+impl std::fmt::Display for Rcvr {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.write_str(&self.manufacturer)?;
         fmt.write_str(" ")?;
@@ -313,14 +309,14 @@ mod point3d_formatter {
     where
         S: serde::Serializer,
     {
-        let s = format!("{},{},{}",p.x,p.y,p.z); 
+        let s = format!("{},{},{}", p.x, p.y, p.z);
         serializer.serialize_str(&s)
     }
 }
 
 #[cfg(feature = "serde")]
 pub mod datetime_formatter {
-    use serde::{Serializer};
+    use serde::Serializer;
     pub fn serialize<S>(datetime: &chrono::NaiveDateTime, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -331,7 +327,7 @@ pub mod datetime_formatter {
 
     /*pub fn deserialize<'de, D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>, 
+        D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S")?
@@ -339,38 +335,38 @@ pub mod datetime_formatter {
 }
 
 /// `Cggtts` structure comprises
-/// a measurement system and 
+/// a measurement system and
 /// and its Common View realizations (`tracks`)
 #[derive(Debug, Clone)]
 pub struct Cggtts {
-    /// file revision release date 
+    /// file revision release date
     //#[cfg_attr(feature = "serde", serde(with = "datetime_formatter"))]
     pub rev_date: hifitime::Epoch,
     /// laboratory / agency where measurements were performed (if unknown)
-    pub lab: Option<String>, 
+    pub lab: Option<String>,
     /// possible GNSS receiver infos
-    pub rcvr: Option<Rcvr>, 
+    pub rcvr: Option<Rcvr>,
     /// nb of GNSS receiver channels
-    pub nb_channels: u16, 
+    pub nb_channels: u16,
     /// IMS Ionospheric Measurement System (if any)
-    pub ims: Option<Rcvr>, 
+    pub ims: Option<Rcvr>,
     /// Description of Reference time system (if any)
-    pub time_reference: TimeSystem, 
+    pub time_reference: TimeSystem,
     /// Reference frame, coordinates system and conversions,
     /// used in `coordinates` field
     pub reference_frame: Option<String>,
     /// Antenna phase center coordinates [m]
     /// in `ITFR`, `ECEF` or other spatial systems
     //#[cfg_attr(feature = "serde", serde(with = "point3d_formatter"))]
-    pub coordinates: rust_3d::Point3D, 
+    pub coordinates: rust_3d::Point3D,
     /// Comments (if any..)
-    pub comments: Option<Vec<String>>, 
+    pub comments: Option<Vec<String>>,
     /// Describes the measurement systems delay.
     /// Refer to [Delay] enum,
     /// to understand their meaning.
     /// Refer to [SystemDelay] and [CalibratedDelay] to understand
     /// how to specify the measurement systems delay.
-    pub delay: SystemDelay, 
+    pub delay: SystemDelay,
     /// Tracks: actual measurements / realizations
     pub tracks: Vec<Track>,
 }
@@ -413,9 +409,7 @@ impl Default for Cggtts {
     /// Buils default `Cggtts` structure,
     fn default() -> Cggtts {
         Cggtts {
-            rev_date: chrono::NaiveDate::parse_from_str(
-                LATEST_REVISION_DATE,
-                "%Y-%m-%d").unwrap(),
+            rev_date: chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d").unwrap(),
             lab: None,
             nb_channels: 0,
             coordinates: rust_3d::Point3D {
@@ -425,11 +419,11 @@ impl Default for Cggtts {
             },
             rcvr: None,
             tracks: Vec::new(),
-            ims: None, 
+            ims: None,
             reference_frame: None,
             time_reference: TimeSystem::default(),
             comments: None,
-            delay: SystemDelay::new(), 
+            delay: SystemDelay::new(),
         }
     }
 }
@@ -438,7 +432,7 @@ impl Cggtts {
     /// Builds `Cggtts` object with desired attributes.
     /// Date is set to `now` by default, use
     /// `with_date()` to customize.
-    pub fn new (lab: Option<&str>, nb_channels: u16, rcvr: Option<Rcvr>) -> Self { 
+    pub fn new(lab: Option<&str>, nb_channels: u16, rcvr: Option<Rcvr>) -> Self {
         let mut c = Self::default();
         if let Some(lab) = lab {
             c = c.with_lab_agency(lab);
@@ -452,21 +446,21 @@ impl Cggtts {
 
     /// Returns `Cggtts` with same attributes
     /// but desired `Lab` agency
-    pub fn with_lab_agency (&self, lab: &str) -> Self { 
+    pub fn with_lab_agency(&self, lab: &str) -> Self {
         let mut c = self.clone();
         c.lab = Some(lab.to_string());
         c
     }
-    
+
     /// Returns ̀`Cggtts` with desired number of channels
-    pub fn with_nb_channels (&self, ch: u16) -> Self { 
+    pub fn with_nb_channels(&self, ch: u16) -> Self {
         let mut c = self.clone();
         c.nb_channels = ch;
         c
     }
 
     /// Returns `Cggtts` with desired Receiver infos
-    pub fn with_receiver (&self, rcvr: Rcvr) -> Self { 
+    pub fn with_receiver(&self, rcvr: Rcvr) -> Self {
         let mut c = self.clone();
         c.rcvr = Some(rcvr);
         c
@@ -474,7 +468,7 @@ impl Cggtts {
 
     /// Returns `Cggtts` with desired `IMS` evaluation
     /// hardware infos
-    pub fn with_ims_infos (&self, ims: Rcvr) -> Self { 
+    pub fn with_ims_infos(&self, ims: Rcvr) -> Self {
         let mut c = self.clone();
         c.ims = Some(ims);
         c
@@ -483,43 +477,43 @@ impl Cggtts {
     /// Returns `cggtts` but with desired antenna phase center
     /// coordinates, coordinates should be in `IRTF` reference system,
     /// and expressed in meter.
-    pub fn with_antenna_coordinates (&self, coords: rust_3d::Point3D) -> Self {
+    pub fn with_antenna_coordinates(&self, coords: rust_3d::Point3D) -> Self {
         let mut c = self.clone();
         c.coordinates = coords;
         c
     }
-    
-    /// Returns `Cggtts` with desired reference time system description 
-    pub fn with_time_reference (&self, reference: TimeSystem) -> Self { 
+
+    /// Returns `Cggtts` with desired reference time system description
+    pub fn with_time_reference(&self, reference: TimeSystem) -> Self {
         let mut c = self.clone();
         c.time_reference = reference;
         c
     }
 
-    /// Returns `Cggtts` with desired Reference Frame 
-    pub fn with_reference_frame (&self, reference: &str) -> Self {
+    /// Returns `Cggtts` with desired Reference Frame
+    pub fn with_reference_frame(&self, reference: &str) -> Self {
         let mut c = self.clone();
         c.reference_frame = Some(reference.to_string());
         c
     }
 
-    /// Returns true if all tracks follow 
+    /// Returns true if all tracks follow
     /// BIPM tracking specifications
-    pub fn follows_bipm_specs (&self) -> bool {
+    pub fn follows_bipm_specs(&self) -> bool {
         for track in self.tracks.iter() {
             if !track.follows_bipm_specs() {
-                return false
+                return false;
             }
         }
         true
     }
-    
+
     /// Returns true if Self only contains tracks (measurements)
     /// that have ionospheric parameter estimates
-    pub fn has_ionospheric_data (&self) -> bool {
+    pub fn has_ionospheric_data(&self) -> bool {
         for track in self.tracks.iter() {
             if !track.has_ionospheric_data() {
-                return false
+                return false;
             }
         }
         true
@@ -527,10 +521,10 @@ impl Cggtts {
 
     /// Returns true if Self only comprises tracks
     /// that were estimated with unique vehicules (not combination of several)
-    pub fn unique_space_vehicule (&self) -> bool {
+    pub fn unique_space_vehicule(&self) -> bool {
         for track in self.tracks.iter() {
             if track.sv_combination() {
-                return false
+                return false;
             }
         }
         true
@@ -539,10 +533,10 @@ impl Cggtts {
     /// Returns true if Self only comprises tracks
     /// that were estimated with a combination os space vehicules
     /// (not unique PRNs)
-    pub fn space_vehicule_combination (&self) -> bool {
+    pub fn space_vehicule_combination(&self) -> bool {
         for track in self.tracks.iter() {
             if track.unique_space_vehicule() {
-                return false
+                return false;
             }
         }
         true
@@ -550,10 +544,10 @@ impl Cggtts {
 
     /// Returns true if Self has at least one track
     /// produced from given constellation
-    pub fn uses_constellation (&self, c: Constellation) -> bool {
+    pub fn uses_constellation(&self, c: Constellation) -> bool {
         for track in self.tracks.iter() {
             if track.uses_constellation(c) {
-                return true
+                return true;
             }
         }
         false
@@ -561,10 +555,10 @@ impl Cggtts {
 
     /// Returns true if Self was observed entirely
     /// against given constellation
-    pub fn unique_constellation (&self, c: Constellation) -> bool {
+    pub fn unique_constellation(&self, c: Constellation) -> bool {
         for track in self.tracks.iter() {
             if !track.uses_constellation(c) {
-                return false
+                return false;
             }
         }
         true
@@ -572,7 +566,7 @@ impl Cggtts {
 
     /// Returns production date (y/m/d) of this file
     /// using MJD field of first track produced
-    pub fn date (&self) -> Option<chrono::NaiveDate> {
+    pub fn date(&self) -> Option<chrono::NaiveDate> {
         if let Some(t) = self.tracks.first() {
             Some(t.date)
         } else {
@@ -582,7 +576,7 @@ impl Cggtts {
 
     /// Returns total set duration,
     /// by cummulating all measurements duration
-    pub fn total_duration (&self) -> std::time::Duration {
+    pub fn total_duration(&self) -> std::time::Duration {
         let mut s = 0;
         for t in self.tracks.iter() {
             s += t.duration.as_secs()
@@ -592,19 +586,19 @@ impl Cggtts {
 
     /// Returns a filename that would match
     /// specifications / standard requirements
-    /// to represent self. 
+    /// to represent self.
     /// If lab is not known, we set XX.   
     /// We use the first two characters for the Rcvr hardware
     /// info as identification number (only if they are digits).
     /// We replace by "__" otherwise.
-    pub fn filename (&self) -> String {
+    pub fn filename(&self) -> String {
         let mut res = String::new();
         let constellation = match self.tracks.first() {
             Some(track) => track.space_vehicle.constellation,
             None => Constellation::default(),
-        }
-        res.push_str(format!("{:x}", constellation)); 
-        
+        };
+        res.push_str(format!("{:x}", constellation));
+
         if self.has_ionospheric_data() {
             res.push_str("Z") // Dual Freq / Multi channel
         } else {
@@ -620,7 +614,7 @@ impl Cggtts {
         } else {
             res.push_str("XX") // unknown lab
         }
-        
+
         if let Some(rcvr) = &self.rcvr {
             let sn = rcvr.serial_number.as_str();
             if let Ok(d0) = u16::from_str_radix(&sn[0..0], 10) {
@@ -648,153 +642,153 @@ impl Cggtts {
     }
 
     /// Builds Self from given `Cggtts` file.
-    pub fn from_file (fp: &str) -> Result<Self, Error> {
+    pub fn from_file(fp: &str) -> Result<Self, Error> {
         let file_content = std::fs::read_to_string(fp)?;
-        let mut lines = file_content.split("\n")
+        let mut lines = file_content
+            .split("\n")
             .map(|x| x.to_string())
             //.map(|x| x.to_string() +"\n")
             //.map(|x| x.to_string() +"\r"+"\n")
-                .into_iter();
-        
+            .into_iter();
+
         // init variables
         let mut line = lines.next().ok_or(Error::VersionFormatError)?;
         let mut system_delay = SystemDelay::new();
-        
+
         // VERSION must be first
         let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
             Some(version) => {
                 if !version.eq(&CURRENT_RELEASE) {
-                    return Err(Error::VersionMismatch)
+                    return Err(Error::VersionMismatch);
                 }
             },
             _ => return Err(Error::VersionFormatError),
         };
-        
-        let mut _cksum :u8 = calc_crc(&line)?;
-        
-        let mut rev_date = chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d")
-            .unwrap();
-        let mut nb_channels :u16 = 0;
-        let mut rcvr : Option<Rcvr> = None;
-        let mut ims : Option<Rcvr> = None;
+
+        let mut _cksum: u8 = calc_crc(&line)?;
+
+        let mut rev_date =
+            chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d").unwrap();
+        let mut nb_channels: u16 = 0;
+        let mut rcvr: Option<Rcvr> = None;
+        let mut ims: Option<Rcvr> = None;
         let mut lab: Option<String> = None;
         let mut comments: Vec<String> = Vec::new();
         let mut reference_frame: Option<String> = None;
-        let mut time_reference = TimeSystem::default(); 
-        let (mut x, mut y, mut z) : (f64,f64,f64) = (0.0, 0.0, 0.0);
+        let mut time_reference = TimeSystem::default();
+        let (mut x, mut y, mut z): (f64, f64, f64) = (0.0, 0.0, 0.0);
 
         line = lines.next().ok_or(Error::FormatError)?;
 
         loop {
             if line.starts_with("REV DATE = ") {
-                match scan_fmt! (&line, "REV DATE = {d} {d} {d}", i32, u32, u32) {
-                    (Some(year),
-                    Some(month),
-                    Some(day)) => {
-                        rev_date = chrono::NaiveDate::from_ymd_opt(year, month, day).ok_or(Error::RevisionDateParsingError)?;
+                match scan_fmt!(&line, "REV DATE = {d} {d} {d}", i32, u32, u32) {
+                    (Some(year), Some(month), Some(day)) => {
+                        rev_date = chrono::NaiveDate::from_ymd_opt(year, month, day)
+                            .ok_or(Error::RevisionDateParsingError)?;
                     },
-                    _ => {}
+                    _ => {},
                 }
             } else if line.starts_with("RCVR = ") {
-                match scan_fmt! (&line, "RCVR = {} {} {} {d} {}", String, String, String, String, String) {
-                    (Some(manufacturer),
-                    Some(recv_type),
-                    Some(serial_number),
-                    Some(year),
-                    Some(release)) => {
+                match scan_fmt!(
+                    &line,
+                    "RCVR = {} {} {} {d} {}",
+                    String,
+                    String,
+                    String,
+                    String,
+                    String
+                ) {
+                    (
+                        Some(manufacturer),
+                        Some(recv_type),
+                        Some(serial_number),
+                        Some(year),
+                        Some(release),
+                    ) => {
                         rcvr = Some(Rcvr {
-                            manufacturer, 
-                            recv_type, 
-                            serial_number, 
-                            year: u16::from_str_radix(&year, 10)?, 
-                            release, 
-                        })
-                    },
-                    _ => {}
-                }
-
-            } else if line.starts_with("CH = ") {
-                match scan_fmt!(&line, "CH = {d}", u16) {
-                    Some(n) => nb_channels = n,
-                    _ => {} 
-                };
-
-            } else if line.starts_with("IMS = ") {
-                match scan_fmt!(&line, "IMS = {} {} {} {d} {}", String, String, String, String, String) {
-                    (Some(manufacturer),
-                    Some(recv_type),
-                    Some(serial_number),
-                    Some(year),
-                    Some(release)) => { 
-                        ims = Some(Rcvr {
-                            manufacturer, 
-                            recv_type, 
-                            serial_number, 
-                            year: u16::from_str_radix(&year, 10)?, 
+                            manufacturer,
+                            recv_type,
+                            serial_number,
+                            year: u16::from_str_radix(&year, 10)?,
                             release,
                         })
                     },
-                    _ => {}, 
+                    _ => {},
                 }
-            
+            } else if line.starts_with("CH = ") {
+                match scan_fmt!(&line, "CH = {d}", u16) {
+                    Some(n) => nb_channels = n,
+                    _ => {},
+                };
+            } else if line.starts_with("IMS = ") {
+                match scan_fmt!(
+                    &line,
+                    "IMS = {} {} {} {d} {}",
+                    String,
+                    String,
+                    String,
+                    String,
+                    String
+                ) {
+                    (
+                        Some(manufacturer),
+                        Some(recv_type),
+                        Some(serial_number),
+                        Some(year),
+                        Some(release),
+                    ) => {
+                        ims = Some(Rcvr {
+                            manufacturer,
+                            recv_type,
+                            serial_number,
+                            year: u16::from_str_radix(&year, 10)?,
+                            release,
+                        })
+                    },
+                    _ => {},
+                }
             } else if line.starts_with("LAB = ") {
                 match line.strip_prefix("LAB = ") {
-                    Some(s) => {
-                        lab = Some(String::from(s.trim()))
-                    },
+                    Some(s) => lab = Some(String::from(s.trim())),
                     _ => {},
                 }
             } else if line.starts_with("X = ") {
                 match scan_fmt!(&line, "X = {f}", f64) {
-                    Some(f) => {
-                        x = f
-                    },
+                    Some(f) => x = f,
                     _ => {},
                 }
             } else if line.starts_with("Y = ") {
                 match scan_fmt!(&line, "Y = {f}", f64) {
-                    Some(f) => {
-                        y = f
-                    },
+                    Some(f) => y = f,
                     _ => {},
                 }
             } else if line.starts_with("Z = ") {
                 match scan_fmt!(&line, "Z = {f}", f64) {
-                    Some(f) => {
-                        z = f
-                    },
+                    Some(f) => z = f,
                     _ => {},
                 }
-            
             } else if line.starts_with("FRAME = ") {
                 let frame = line.split_at(7).1.trim();
                 if !frame.eq("?") {
                     reference_frame = Some(frame.to_string())
                 }
-
             } else if line.starts_with("COMMENTS = ") {
-                let c = line.strip_prefix("COMMENTS =")
-                    .unwrap()
-                    .trim();
+                let c = line.strip_prefix("COMMENTS =").unwrap().trim();
                 if !c.eq("NO COMMENTS") {
                     comments.push(c.to_string())
                 }
-
             } else if line.starts_with("REF = ") {
                 if let Some(s) = scan_fmt!(&line, "REF = {}", String) {
                     time_reference = TimeSystem::from_str(&s)
                 }
-
             } else if line.contains("DLY = ") {
+                let items: Vec<&str> = line.split_ascii_whitespace().collect();
 
-                let items : Vec<&str> = line
-                    .split_ascii_whitespace()
-                    .collect();
-                
                 let dual_carrier = line.contains(",");
-    
+
                 if items.len() < 4 {
-                    continue // format mismatch
+                    continue; // format mismatch
                 }
 
                 match items[0] {
@@ -803,62 +797,58 @@ impl Cggtts {
                     "SYS" => {
                         if line.contains("CAL_ID") {
                             let offset = line.rfind("=").unwrap();
-                            let cal_id = line[offset+1..].trim();
+                            let cal_id = line[offset + 1..].trim();
                             if !cal_id.eq("NA") {
-                                system_delay = system_delay
-                                    .with_calibration_id(cal_id)
+                                system_delay = system_delay.with_calibration_id(cal_id)
                             }
                         }
                         if dual_carrier {
                             if let Ok(value) = f64::from_str(items[3]) {
-                                let code = items[6].replace("),","");
+                                let code = items[6].replace("),", "");
                                 if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::System(value))); 
+                                    system_delay.delays.push((code, Delay::System(value)));
                                 }
                             }
                             if let Ok(value) = f64::from_str(items[7]) {
-                                let code = items[9].replace(")","");
+                                let code = items[9].replace(")", "");
                                 if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::System(value))); 
+                                    system_delay.delays.push((code, Delay::System(value)));
                                 }
                             }
-
                         } else {
                             let value = f64::from_str(items[3]).unwrap();
-                            let code = items[6].replace(")","");
+                            let code = items[6].replace(")", "");
                             if let Ok(code) = Code::from_str(&code) {
-                                system_delay.delays.push((code, Delay::System(value))); 
+                                system_delay.delays.push((code, Delay::System(value)));
                             }
                         }
                     },
                     "INT" => {
                         if line.contains("CAL_ID") {
                             let offset = line.rfind("=").unwrap();
-                            let cal_id = line[offset+1..].trim();
+                            let cal_id = line[offset + 1..].trim();
                             if !cal_id.eq("NA") {
-                                system_delay = system_delay
-                                    .with_calibration_id(cal_id)
+                                system_delay = system_delay.with_calibration_id(cal_id)
                             }
                         }
                         if dual_carrier {
                             if let Ok(value) = f64::from_str(items[3]) {
-                                let code = items[6].replace("),","");
+                                let code = items[6].replace("),", "");
                                 if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::Internal(value))); 
+                                    system_delay.delays.push((code, Delay::Internal(value)));
                                 }
                             }
                             if let Ok(value) = f64::from_str(items[7]) {
-                                let code = items[10].replace(")","");
+                                let code = items[10].replace(")", "");
                                 if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::Internal(value))); 
+                                    system_delay.delays.push((code, Delay::Internal(value)));
                                 }
                             }
-
                         } else {
                             if let Ok(value) = f64::from_str(items[3]) {
-                                let code = items[6].replace(")","");
+                                let code = items[6].replace(")", "");
                                 if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::Internal(value))); 
+                                    system_delay.delays.push((code, Delay::Internal(value)));
                                 }
                             }
                         }
@@ -866,88 +856,78 @@ impl Cggtts {
                     "TOT" => {
                         if line.contains("CAL_ID") {
                             let offset = line.rfind("=").unwrap();
-                            let cal_id = line[offset+1..].trim();
+                            let cal_id = line[offset + 1..].trim();
                             if !cal_id.eq("NA") {
-                                system_delay = system_delay
-                                    .with_calibration_id(cal_id)
+                                system_delay = system_delay.with_calibration_id(cal_id)
                             }
                         }
                         if dual_carrier {
                             if let Ok(value) = f64::from_str(items[3]) {
-                                let code = items[6].replace("),","");
+                                let code = items[6].replace("),", "");
                                 if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::System(value))); 
+                                    system_delay.delays.push((code, Delay::System(value)));
                                 }
                             }
                             if let Ok(value) = f64::from_str(items[7]) {
-                                let code = items[9].replace(")","");
+                                let code = items[9].replace(")", "");
                                 if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::System(value))); 
+                                    system_delay.delays.push((code, Delay::System(value)));
                                 }
                             }
-
                         } else {
                             if let Ok(value) = f64::from_str(items[3]) {
-                                let code = items[6].replace(")","");
+                                let code = items[6].replace(")", "");
                                 if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::System(value))); 
+                                    system_delay.delays.push((code, Delay::System(value)));
                                 }
-                                    
                             }
                         }
                     },
                     _ => {}, // non recognized delay type
                 };
-            
             } else if line.starts_with("CKSUM = ") {
-
-                let _ck :u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
-                    Some(s) => {
-                        match u8::from_str_radix(&s, 16) {
-                            Ok(hex) => hex,
-                            _ => return Err(Error::ChecksumParsingError),
-                        }
+                let _ck: u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
+                    Some(s) => match u8::from_str_radix(&s, 16) {
+                        Ok(hex) => hex,
+                        _ => return Err(Error::ChecksumParsingError),
                     },
                     _ => return Err(Error::ChecksumFormatError),
                 };
-                
+
                 // check CRC
-                let end_pos = line.find("= ")
-                    .unwrap();
-                _cksum = _cksum.wrapping_add(
-                    calc_crc(
-                        &line.split_at(end_pos+2).0)?);
-        
+                let end_pos = line.find("= ").unwrap();
+                _cksum = _cksum.wrapping_add(calc_crc(&line.split_at(end_pos + 2).0)?);
+
                 //if cksum != ck {
                 //    return Err(Error::ChecksumError(ck, cksum))
                 //}
-                break
+                break;
             }
 
             // CRC
-            _cksum = _cksum.wrapping_add(
-                calc_crc(&line)?);
-            
+            _cksum = _cksum.wrapping_add(calc_crc(&line)?);
+
             if let Some(l) = lines.next() {
-                line = l 
+                line = l
             } else {
-                break
+                break;
             }
         }
-        
-        // BLANKS 
+
+        // BLANKS
         let _ = lines.next(); // Blank
         let _ = lines.next(); // labels
         let _ = lines.next(); // units currently discarded
-        // tracks parsing
+                              // tracks parsing
         let mut tracks: Vec<Track> = Vec::new();
         loop {
             let line = match lines.next() {
                 Some(s) => s,
-                _ => break // we're done parsing
+                _ => break, // we're done parsing
             };
-            if line.len() == 0 { // empty line
-                break // we're done parsing
+            if line.len() == 0 {
+                // empty line
+                break; // we're done parsing
             }
             if let Ok(track) = Track::from_str(&line) {
                 tracks.push(track)
@@ -961,11 +941,7 @@ impl Cggtts {
             ims,
             lab,
             reference_frame,
-            coordinates: rust_3d::Point3D {
-                x,
-                y,
-                z,
-            },
+            coordinates: rust_3d::Point3D { x, y, z },
             comments: {
                 if comments.len() == 0 {
                     None
@@ -975,14 +951,14 @@ impl Cggtts {
             },
             delay: system_delay,
             time_reference,
-            tracks
+            tracks,
         })
     }
 }
 
 impl std::fmt::Display for Cggtts {
     /// Writes self into a `Cggtts` file
-    fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut content = String::new();
         let line = format!("CGGTTS GENERIC DATA FORMAT VERSION = {}\n", CURRENT_RELEASE);
         content.push_str(&line);
@@ -994,8 +970,8 @@ impl std::fmt::Display for Cggtts {
         } else {
             content.push_str("RCVR = RRRRRRRR\n")
         }
-        
-        let line = format!("CH = {}\n", self.nb_channels); 
+
+        let line = format!("CH = {}\n", self.nb_channels);
         content.push_str(&line);
 
         if let Some(ims) = &self.ims {
@@ -1003,14 +979,14 @@ impl std::fmt::Display for Cggtts {
         } else {
             content.push_str("IMS = 99999\n")
         }
-        
-        content.push_str(&format!("LAB = {}\n", self.nb_channels)); 
-        content.push_str(&format!("X = {}\n", self.coordinates.x)); 
-        content.push_str(&format!("Y = {}\n", self.coordinates.y)); 
-        content.push_str(&format!("Z = {}\n", self.coordinates.z)); 
+
+        content.push_str(&format!("LAB = {}\n", self.nb_channels));
+        content.push_str(&format!("X = {}\n", self.coordinates.x));
+        content.push_str(&format!("Y = {}\n", self.coordinates.y));
+        content.push_str(&format!("Z = {}\n", self.coordinates.z));
 
         if let Some(r) = &self.reference_frame {
-            content.push_str(&format!("FRAME = {}\n", r)); 
+            content.push_str(&format!("FRAME = {}\n", r));
         } else {
             content.push_str(&format!("FRAME = ITRF\n"));
         }
@@ -1032,61 +1008,69 @@ impl std::fmt::Display for Cggtts {
             let (code, value) = delays[0];
             match value {
                 Delay::Internal(v) => {
-                    content.push_str(
-                        &format!("INT DLY = {:.1} ns ({} {})",
-                            v, constellation.to_3_letter_code(),
-                                code));
+                    content.push_str(&format!(
+                        "INT DLY = {:.1} ns ({} {})",
+                        v,
+                        constellation.to_3_letter_code(),
+                        code
+                    ));
                 },
                 Delay::System(v) => {
-                    content.push_str(
-                        &format!("SYS DLY = {:.1} ns ({} {})",
-                            v, constellation.to_3_letter_code(),
-                                code));
+                    content.push_str(&format!(
+                        "SYS DLY = {:.1} ns ({} {})",
+                        v,
+                        constellation.to_3_letter_code(),
+                        code
+                    ));
                 },
             }
             if let Some(cal_id) = &self.delay.cal_id {
-                content.push_str(
-                    &format!("       CAL_ID = {}\n", cal_id));
+                content.push_str(&format!("       CAL_ID = {}\n", cal_id));
             } else {
                 content.push_str("       CAL_ID = NA\n");
             }
-
         } else if delays.len() == 2 {
             // Dual frequency
             let (c1, v1) = delays[0];
             let (c2, v2) = delays[1];
             match v1 {
                 Delay::Internal(_) => {
-                    content.push_str(
-                        &format!("INT DLY = {:.1} ns ({} {}), {:.1} ns ({} {})",
-                            v1.value(), constellation.to_3_letter_code(), c1,
-                                v2.value(), constellation.to_3_letter_code(), c2));
+                    content.push_str(&format!(
+                        "INT DLY = {:.1} ns ({} {}), {:.1} ns ({} {})",
+                        v1.value(),
+                        constellation.to_3_letter_code(),
+                        c1,
+                        v2.value(),
+                        constellation.to_3_letter_code(),
+                        c2
+                    ));
                 },
                 Delay::System(_) => {
-                    content.push_str(
-                        &format!("SYS DLY = {:.1} ns ({} {}), {:.1} ns ({} {})",
-                            v1.value(), constellation.to_3_letter_code(), c1,
-                                v2.value(), constellation.to_3_letter_code(), c2));
+                    content.push_str(&format!(
+                        "SYS DLY = {:.1} ns ({} {}), {:.1} ns ({} {})",
+                        v1.value(),
+                        constellation.to_3_letter_code(),
+                        c1,
+                        v2.value(),
+                        constellation.to_3_letter_code(),
+                        c2
+                    ));
                 },
             }
             if let Some(cal_id) = &self.delay.cal_id {
-                content.push_str(
-                    &format!("     CAL_ID = {}\n", cal_id));
+                content.push_str(&format!("     CAL_ID = {}\n", cal_id));
             } else {
                 content.push_str("     CAL_ID = NA\n");
             }
         }
 
-        content.push_str(
-            &format!("CAB DLY = {:.1} ns\n", self.delay.rf_cable_delay));
-        
-        content.push_str(
-            &format!("REF DLY = {:.1} ns\n", self.delay.ref_delay));
+        content.push_str(&format!("CAB DLY = {:.1} ns\n", self.delay.rf_cable_delay));
+
+        content.push_str(&format!("REF DLY = {:.1} ns\n", self.delay.ref_delay));
 
         content.push_str(&format!("REF = {}\n", self.time_reference));
 
-        let crc = calc_crc(&content)
-            .unwrap();
+        let crc = calc_crc(&content).unwrap();
         content.push_str(&format!("CKSUM = {:2X}\n", crc));
         content.push_str("\n"); // blank
 
@@ -1119,29 +1103,31 @@ mod tests {
             "R24 FF 57000 000600  780 347 394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P",
             "G99 99 59509 002200 0780 099 0099 +9999999999 +99999 +9999989831   -724    35 999 9999 +999 9999 +999 00 00 L1C"
         ];
-        let expected = vec![
-            0x0F, 
-            0x71,
-        ];
+        let expected = vec![0x0F, 0x71];
         for i in 0..content.len() {
-            let ck = calc_crc(content[i])
-                .unwrap();
+            let ck = calc_crc(content[i]).unwrap();
             let expect = expected[i];
-            assert_eq!(ck,
-                expect,
+            assert_eq!(
+                ck, expect,
                 "Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",
-                content[i],expect,
-                ck)
+                content[i], expect, ck
+            )
         }
     }
-    
+
     #[test]
     fn test_time_system() {
         assert_eq!(TimeSystem::default(), TimeSystem::UTC);
         assert_eq!(TimeSystem::from_str("TAI"), TimeSystem::TAI);
         assert_eq!(TimeSystem::from_str("UTC"), TimeSystem::UTC);
-        assert_eq!(TimeSystem::from_str("UTC(LAB)"), TimeSystem::UTCk(String::from("LAB"),None));
-        assert_eq!(TimeSystem::from_str("UTC(LAB, 10.0)"), TimeSystem::UTCk(String::from("LAB"), Some(10.0)));
+        assert_eq!(
+            TimeSystem::from_str("UTC(LAB)"),
+            TimeSystem::UTCk(String::from("LAB"), None)
+        );
+        assert_eq!(
+            TimeSystem::from_str("UTC(LAB, 10.0)"),
+            TimeSystem::UTCk(String::from("LAB"), Some(10.0))
+        );
     }
 
     #[test]

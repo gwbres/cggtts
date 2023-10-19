@@ -1,11 +1,8 @@
-use std::str::FromStr;
-use rinex::{constellation::Constellation, sv::Sv};
 use cggtts::{
-    track::Track, 
-    track::CommonViewClass, 
-    track::GlonassChannel,
-    ionospheric::IonosphericData,
+    ionospheric::IonosphericData, track::CommonViewClass, track::GlonassChannel, track::Track,
 };
+use rinex::{constellation::Constellation, sv::Sv};
+use std::str::FromStr;
 
 #[cfg(test)]
 mod track {
@@ -28,15 +25,18 @@ mod track {
 
     #[test]
     fn parser() {
-        let content = 
+        let content =
 "G99 99 59568 001000 0780 099 0099 +9999999999 +99999       +1536   +181   26 999 9999 +999 9999 +999 00 00 L1C D3";
         let track = Track::from_str(content);
         assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
-        assert_eq!(track.space_vehicule, Sv {
-            constellation: Constellation::GPS,
-            prn: 99
-        });
+        assert_eq!(
+            track.space_vehicule,
+            Sv {
+                constellation: Constellation::GPS,
+                prn: 99
+            }
+        );
         assert_eq!(track.class, CommonViewClass::Single);
         assert_eq!(track.follows_bipm_specs(), true);
         assert_eq!(track.duration, std::time::Duration::from_secs(780));
@@ -49,17 +49,20 @@ mod track {
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
         let dumped = track.to_string();
-        assert_eq!(content.to_owned(), dumped); 
-        
+        assert_eq!(content.to_owned(), dumped);
+
         let content =
 "G99 99 59563 001400 0780 099 0099 +9999999999 +99999       +1588  +1027   27 999 9999 +999 9999 +999 00 00 L1C EA";
         let track = Track::from_str(content);
         assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
-        assert_eq!(track.space_vehicule, Sv {
-            constellation: Constellation::GPS,
-            prn: 99
-        });
+        assert_eq!(
+            track.space_vehicule,
+            Sv {
+                constellation: Constellation::GPS,
+                prn: 99
+            }
+        );
         assert_eq!(track.class, CommonViewClass::Single);
         assert_eq!(track.follows_bipm_specs(), true);
         assert_eq!(track.duration, std::time::Duration::from_secs(780));
@@ -70,7 +73,7 @@ mod track {
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
         let dumped = track.to_string();
-        assert_eq!(content.to_owned(), dumped); 
+        assert_eq!(content.to_owned(), dumped);
 
         let content =
 "G99 99 59563 232200 0780 099 0099 +9999999999 +99999       +1529   -507   23 999 9999 +999 9999 +999 00 00 L1C D9";
@@ -87,17 +90,20 @@ mod track {
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
         let dumped = track.to_string();
-        assert_eq!(content.to_owned(), dumped); 
+        assert_eq!(content.to_owned(), dumped);
 
         let content =
 "G99 99 59567 001400 0780 099 0099 +9999999999 +99999       +1561   -151   27 999 9999 +999 9999 +999 00 00 L1C D4";
         let track = Track::from_str(content);
         assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
-        assert_eq!(track.space_vehicule, Sv {
-            constellation: Constellation::GPS,
-            prn: 99
-        });
+        assert_eq!(
+            track.space_vehicule,
+            Sv {
+                constellation: Constellation::GPS,
+                prn: 99
+            }
+        );
         assert_eq!(track.class, CommonViewClass::Single);
         //assert_eq!(track.trktime 043400)
         assert_eq!(track.follows_bipm_specs(), true);
@@ -109,7 +115,7 @@ mod track {
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
         let dumped = track.to_string();
-        assert_eq!(content.to_owned(), dumped); 
+        assert_eq!(content.to_owned(), dumped);
     }
     #[test]
     fn parser_ionospheric() {
@@ -134,11 +140,11 @@ mod track {
     }
     #[test]
     fn test_ionospheric_data() {
-        let data : IonosphericData = (1E-9,1E-13,1E-10).into();
+        let data: IonosphericData = (1E-9, 1E-13, 1E-10).into();
         assert_eq!(data.msio, 1E-9);
         assert_eq!(data.smsi, 1E-13);
         assert_eq!(data.isg, 1E-10);
-        let (msio, smsi, isg): (f64,f64,f64) = data.into();
+        let (msio, smsi, isg): (f64, f64, f64) = data.into();
         assert_eq!(msio, data.msio);
         assert_eq!(smsi, data.smsi);
         assert_eq!(isg, data.isg);
