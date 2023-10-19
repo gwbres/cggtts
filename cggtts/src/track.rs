@@ -11,26 +11,6 @@ use hifitime::{Duration, Epoch};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Describes whether this common view is based on a unique
-/// or a combination of SV
-#[derive(PartialEq, Clone, Copy, Debug)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
-pub enum CommonViewClass {
-    /// Single Channel
-    SingleChannel,
-    /// Multi Channel
-    MultiChannel,
-}
-
-impl std::fmt::UpperHex for CommonViewClass {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            CommonViewClass::Single => write!(fmt, "99"),
-            CommonViewClass::Multiple => write!(fmt, "FF"),
-        }
-    }
-}
-
 /// Describes Glonass Frequency channel,
 /// in case this `Track` was estimated using Glonass
 #[derive(Debug, Copy, Clone)]
@@ -135,7 +115,7 @@ pub struct Track {
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("track data format mismatch")]
-    InvalidDataFormatError(String),
+    InvalidFormat(String),
     #[error("failed to parse space vehicule")]
     SvError(#[from] rinex::sv::Error),
     #[error("failed to parse int number")]
@@ -365,17 +345,22 @@ impl std::fmt::Display for Track {
 
 impl std::str::FromStr for Track {
     type Err = Error;
-    /// Builds a `Track` from given str content
+    /* 
+     * Builds a Track from given str description
+     */
     fn from_str(line: &str) -> Result<Self, Self::Err> {
         let cleanedup = String::from(line.trim());
-        let items: Vec<&str> = cleanedup.split_ascii_whitespace().collect();
-        if items.len() != TRACK_WITH_IONOSPHERIC {
-            if items.len() != TRACK_WITHOUT_IONOSPHERIC {
-                return Err(Error::InvalidDataFormatError(String::from(cleanedup)));
-            }
+        let items = cleanedup
+            .split_ascii_whitespace();
+        
+        if items.count() != TRACK_WITH_IONOSPHERIC || items.count() != TRACK_WITHOUT_IONOSPHERIC {
+            return Err(Error::InvalidFormat(String::from(cleanedup)));
         }
 
-        let sv = Sv::from_str(items[0])?;
+        let mut epoch = Epoch::default();
+        let sv = Sv::from_str(items.next()?.trim())?;
+
+
         let class = items[1];
         let mjd = i32::from_str_radix(items[2], 10)?;
         let trktime = chrono::NaiveTime::parse_from_str(items[3], "%H%M%S")?;
@@ -420,7 +405,7 @@ impl std::str::FromStr for Track {
                 items[22].to_string(),
                 items[23],
             ),
-            _ => return Err(Error::InvalidDataFormatError(String::from(cleanedup))),
+            _ => return Err(Error::InvalidFormat(String::from(cleanedup))),
         };
 
         // checksum
@@ -441,6 +426,7 @@ impl std::str::FromStr for Track {
                 }
             },
             sv,
+            epoch:
             date: julianday::ModifiedJulianDay::new(mjd).to_date(),
             trktime,
             duration: std::time::Duration::from_secs(duration_secs),

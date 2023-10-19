@@ -88,6 +88,9 @@ pub mod processing;
 pub mod scheduler;
 pub mod track;
 
+mod class;
+mod time_system;
+
 use hifitime::{Epoch, TimeScale};
 
 extern crate gnss_rs as gnss;
@@ -105,22 +108,42 @@ use gnss::prelude::{Constellation, SV};
 #[macro_use]
 extern crate serde;
 
+pub mod prelude {
+    pub use Cggtts;
+    pub use track::Track;
+    pub use class::CommonViewClass;
+    pub use rinex::prelude::SV;
+    pub use rinex::prelude::Constellation;
+    pub use hifitime::prelude::TimeScale;
+    pub use hifitime::prelude::Epoch;
+    pub use hifitime::prelude::Duration;
+}
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Supported `Cggtts` version,
-/// non matching input files will be rejected
-const CURRENT_RELEASE: &str = "2E";
+lazy_static! {
+    
+    /// Supported `Cggtts` version,
+    /// non matching input files will be rejected
+    pub const CURRENT_RELEASE: &str = "2E";
 
-/// Latest revision date
-const LATEST_REVISION_DATE: &str = "2014-02-20";
+    const LATEST_REVISION_DATE: Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
+    
+    /*
+     * Labels in case we provide Ionospheric parameters estimates
+     */
+    const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
+    "SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
 
-/// labels in case we provide Ionospheric parameters estimates
-const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
-"SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
-
-const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
+    /*
+     * Labels in case Ionospheric compensation is not available
+     */
+    const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
 "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
+
+}
+
 
 /*
 pub struct ITRF {
@@ -166,71 +189,6 @@ pub struct Rcvr {
     pub year: u16,
     /// Receiver software revision number
     pub release: String,
-}
-
-/// Known Reference Time Systems
-#[derive(Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum TimeSystem {
-    /// TAI: International Atomic Time
-    TAI,
-    /// UTC: Universal Coordinate Time
-    UTC,
-    /// UTC(k): Laboratory local official
-    /// UTC image, agency name
-    /// and optionnal |offset| to universal UTC
-    /// in nanoseconds
-    UTCk(String, Option<f64>),
-    /// Unknown Time system
-    Unknown(String),
-}
-
-impl Default for TimeSystem {
-    fn default() -> TimeSystem {
-        TimeSystem::UTC
-    }
-}
-
-impl TimeSystem {
-    pub fn from_str(s: &str) -> TimeSystem {
-        if s.eq("TAI") {
-            TimeSystem::TAI
-        } else if s.contains("UTC") {
-            // UTCk with lab + offset
-            if let (Some(lab), Some(offset)) = scan_fmt!(s, "UTC({},{})", String, f64) {
-                TimeSystem::UTCk(lab, Some(offset))
-            }
-            // UTCk with only agency name
-            else if let Some(lab) = scan_fmt!(s, "UTC({})", String) {
-                TimeSystem::UTCk(lab, None)
-            } else {
-                TimeSystem::UTC
-            }
-        } else {
-            TimeSystem::Unknown(s.to_string())
-        }
-    }
-}
-
-impl From<TimeScale> for TimeSystem {
-    pub fn from(ts: TimeScale) -> Self {
-        match ts {
-            TimeScale::UTC => Self::UTC,
-            TimeScale::TAI => Self::TAI,
-            _ => Self::TAI, /* incorrect usage */
-        }
-    }
-}
-
-impl std::fmt::Display for TimeSystem {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            TimeSystem::TAI => fmt.write_str("TAI"),
-            TimeSystem::UTC => fmt.write_str("UTC"),
-            TimeSystem::UTCk(lab, _) => write!(fmt, "UTC({})", lab),
-            TimeSystem::Unknown(s) => fmt.write_str(s),
-        }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, EnumString)]
@@ -339,14 +297,13 @@ pub mod datetime_formatter {
 /// and its Common View realizations (`tracks`)
 #[derive(Debug, Clone)]
 pub struct Cggtts {
-    /// file revision release date
-    //#[cfg_attr(feature = "serde", serde(with = "datetime_formatter"))]
+    /// File release date
     pub rev_date: hifitime::Epoch,
-    /// laboratory / agency where measurements were performed (if unknown)
+    /// Laboratory / agency (data producer)
     pub lab: Option<String>,
-    /// possible GNSS receiver infos
+    /// Possible GNSS receiver infos
     pub rcvr: Option<Rcvr>,
-    /// nb of GNSS receiver channels
+    /// # of GNSS receiver channels
     pub nb_channels: u16,
     /// IMS Ionospheric Measurement System (if any)
     pub ims: Option<Rcvr>,
@@ -564,24 +521,20 @@ impl Cggtts {
         true
     }
 
-    /// Returns production date (y/m/d) of this file
-    /// using MJD field of first track produced
-    pub fn date(&self) -> Option<chrono::NaiveDate> {
-        if let Some(t) = self.tracks.first() {
-            Some(t.date)
-        } else {
-            None
-        }
+    /// Returns Epoch of this file's generation
+    pub fn epoch(&self) -> Option<Epoch> {
+        self.tracks.first()
+            .map(|e| e)
     }
 
     /// Returns total set duration,
     /// by cummulating all measurements duration
-    pub fn total_duration(&self) -> std::time::Duration {
-        let mut s = 0;
-        for t in self.tracks.iter() {
-            s += t.duration.as_secs()
+    pub fn total_duration(&self) -> Duration {
+        let mut dt = Duration::default();
+        for trk in self.iter() {
+            t += trk.duration();
         }
-        std::time::Duration::from_secs(s)
+        t
     }
 
     /// Returns a filename that would match
@@ -645,7 +598,7 @@ impl Cggtts {
     pub fn from_file(fp: &str) -> Result<Self, Error> {
         let file_content = std::fs::read_to_string(fp)?;
         let mut lines = file_content
-            .split("\n")
+            .lines()
             .map(|x| x.to_string())
             //.map(|x| x.to_string() +"\n")
             //.map(|x| x.to_string() +"\r"+"\n")
@@ -665,7 +618,7 @@ impl Cggtts {
             _ => return Err(Error::VersionFormatError),
         };
 
-        let mut _cksum: u8 = calc_crc(&line)?;
+        let mut cksum: u8 = calc_crc(&line)?;
 
         let mut rev_date =
             chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d").unwrap();
@@ -999,7 +952,7 @@ impl std::fmt::Display for Cggtts {
 
         let delays = self.delay.delays.clone();
         let constellation: Constellation = if self.tracks.len() > 0 {
-            self.tracks[0].space_vehicule.constellation
+            self.tracks[0].sv.constellation
         } else {
             Constellation::default()
         };
@@ -1137,5 +1090,12 @@ mod tests {
         assert_eq!(Code::from_str("P1").unwrap(), Code::P1);
         assert_eq!(Code::from_str("P2").unwrap(), Code::P2);
         assert_eq!(Code::from_str("E5a").unwrap(), Code::E5a);
+    }
+}
+
+impl Iterator for Cggtts {
+    type Item = Track;
+    fn iter() -> {
+        self.tracks.iter()
     }
 }
