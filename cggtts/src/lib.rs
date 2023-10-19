@@ -101,8 +101,8 @@ use strum_macros::EnumString;
 use thiserror::Error;
 use version::Version;
 
-use crate::class::CommonViewClass;
 use crate::delay::{Delay, SystemDelay};
+use crate::track::class::CommonViewClass;
 use crate::track::Track;
 use gnss::prelude::{Constellation, SV};
 use time_system::TimeSystem;
@@ -118,9 +118,9 @@ pub mod prelude {
     pub use hifitime::prelude::TimeScale;
     pub use rinex::prelude::Constellation;
     pub use rinex::prelude::SV;
-    pub use track::Track;
-    pub use version::Version;
     pub use Cggtts;
+    pub use Track;
+    pub use Version;
 }
 
 #[cfg(feature = "serde")]
@@ -620,7 +620,7 @@ impl Cggtts {
 
         while let Some(line) = lines.next() {
             if line.starts_with("REV DATE = ") {
-                match scan_fmt!(&line, "REV DATE = {d} {d} {d}", i32, u8, u8) {
+                match scan_fmt!(&line, "REV DATE = {d}-{d}-{d}", i32, u8, u8) {
                     (Some(y), Some(m), Some(d)) => {
                         release_date = Epoch::from_gregorian_utc_at_midnight(y, m, d);
                     },

@@ -1,5 +1,4 @@
-use crate::crc::{calc_crc, CrcError};
-use crate::ionospheric;
+use crate::crc::{calc_crc, Error as CrcError};
 use format_num::NumberFormat;
 use thiserror::Error;
 
@@ -44,9 +43,9 @@ pub struct Track {
     /// Optionnal Ionospheric compensation terms
     pub iono: Option<IonosphericData>,
     /// Glonass Channel Frequency [1:24], O for other GNSS
-    pub fr: Option<GlonassChannel>,
+    pub fr: GlonassChannel,
     /// Optionnal receiver channel [0:99], 0 if Unknown
-    pub hc: Option<u8>,
+    pub hc: u8,
     /// Carrier frequency standard 3 letter code,
     /// refer to RINEX specifications for meaning
     pub frc: String,
@@ -111,7 +110,7 @@ impl Track {
         azimuth: f64,
         data: TrackData,
         iono: Option<IonosphericData>,
-        rcvr_channel: Option<u8>,
+        rcvr_channel: u8,
         frc: Carrier,
     ) -> Self {
         Self {
@@ -124,7 +123,7 @@ impl Track {
             data,
             iono,
             fr: None,
-            hc: recvr_channel,
+            hc,
             frc,
         }
     }
@@ -165,7 +164,7 @@ impl Track {
         azimuth: f64,
         data: TrackData,
         iono: Option<IonosphericData>,
-        rcvr_channel: Option<u8>,
+        rcvr_channel: u8,
         frc: Carrier,
     ) -> Self {
         Self {
@@ -191,7 +190,7 @@ impl Track {
         data: TrackData,
         iono: Option<IonosphericData>,
         glo_channel: u16,
-        rcvr_channel: Option<u8>,
+        rcvr_channel: u8,
         frc: Carrier,
     ) -> Self {
         Self {
@@ -241,7 +240,7 @@ impl Track {
     /// Returns True if Self follows BIPM specifications / requirements,
     /// in terms of tracking pursuit
     pub fn follows_bipm_specs(&self) -> bool {
-        self.duration.as_secs() == scheduler::BIPM_RECOMMENDED_TRACKING.as_secs()
+        self.duration.to_seconds() == scheduler::BIPM_RECOMMENDED_TRACKING.as_secs()
     }
 
     /// Returns a `Track` with desired unique space vehicule
@@ -274,7 +273,7 @@ impl Track {
 
     /// Returns true if Self comes with Ionospheric parameter estimates
     pub fn has_ionospheric_data(&self) -> bool {
-        self.ionospheric.is_some()
+        self.iono.is_some()
     }
 }
 
@@ -454,8 +453,11 @@ impl std::str::FromStr for Track {
 
         let mut epoch = Epoch::default();
 
-        let sv = SV::from_str(items.next().ok_or(Error::SvMissing)?.trim())?;
-
+        let sv = SV::from_str(
+            items
+                .next()
+                .ok_or(Error::MissingField(String::from("SV")))?,
+        )?;
         let class = CommonViewClass::from_str(
             items
                 .next()
@@ -469,15 +471,30 @@ impl std::str::FromStr for Track {
             .parse::<i32>()
             .map_err(|_| Error::FieldParsing(String::from("MJD")))?;
 
-        let trk_sttime = items.next().ok_or(Error::TrkStartTimeMissing)?;
+        let trk_sttime = items
+            .next()
+            .ok_or(Error::MissingField(String::from("STTIME")))?;
 
         if trk_sttime.len() < 6 {
-            return Err(Error(TrkStartTimeFormat));
+            return Err(Error::InvalidTrkTimeFormat);
         }
 
-        let y = trk_sttime[0..2].parse::<u8>()?;
-        let m = trk_sttime[2..4].parse::<u8>()?;
-        let d = trk_sttime[4..6].parse::<u8>()?;
+        let h = trk_sttime[0..2]
+            .parse::<u8>()
+            .map_err(|_| Error::FieldParsing(String::from("Hours")))?;
+
+        let m = trk_sttime[2..4]
+            .parse::<u8>()
+            .map_err(|_| Error::FieldParsing(String::from("Minutes")))?;
+
+        let s = trk_sttime[4..6]
+            .parse::<u8>()
+            .map_err(|_| Error::FieldParsing(String::from("Seconds")))?;
+
+        let mut epoch = Epoch::from_mjd_utc(mjd as f64);
+        epoch = epoch + (h as f64) * Unit::Hour;
+        epoch = epoch + (m as f64) * Unit::Minute;
+        epoch = epoch + (s as f64) * Unit::Second;
 
         let duration = Duration::from_seconds(
             items
@@ -489,16 +506,16 @@ impl std::str::FromStr for Track {
 
         let elevation = items
             .next()
-            .ok_or(Error::MissingField(String::from("ELEV")))?
+            .ok_or(Error::MissingField(String::from("ELV")))?
             .parse::<f64>()
-            .map_err(|_| Error::FieldParsing(String::from("ELEV")))?
+            .map_err(|_| Error::FieldParsing(String::from("ELV")))?
             * 0.1;
 
         let azimuth = items
             .next()
-            .ok_or(Error::MissingField(String::from("AZI")))?
+            .ok_or(Error::MissingField(String::from("AZTH")))?
             .parse::<f64>()
-            .map_err(|_| Error::FieldParsing(String::from("AZI")))?
+            .map_err(|_| Error::FieldParsing(String::from("AZTH")))?
             * 0.1;
 
         //let (data, iono, hc, frc, ck) = match items.count() {
@@ -510,13 +527,17 @@ impl std::str::FromStr for Track {
             },
         };
 
-        let fr = GlonassChannel::from_str(items.next().ok_or(Error::GlonassChannelMissing)?)?;
+        let fr = GlonassChannel::from_str(
+            items
+                .next()
+                .ok_or(Error::MissingField(String::from("fr")))?,
+        )?;
 
         let hc = items
             .next()
-            .ok_or(Error::HcMissing)?
+            .ok_or(Error::MissingField(String::from("hc")))?
             .parse::<u8>()
-            .map_err(|_| Error::HcParsing)?;
+            .map_err(|_| Error::FieldParsing(String::from("hc")))?;
 
         // checksum
         let end_pos = line.rfind(ck).unwrap(); // already matching
@@ -531,7 +552,6 @@ impl std::str::FromStr for Track {
             sv,
             class,
             epoch,
-            trktime,
             duration,
             elevation,
             azimuth,
