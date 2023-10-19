@@ -29,10 +29,8 @@ impl std::str::FromStr for GlonassChannel {
         if s.eq("0") {
             Ok(Self::Unknown)
         } else {
-            let ch = s.trim().parse::<u8>()
-                .ok_or(Error::GlonassChannelParsing)?;
-            Ok(
-                Self::Channel(ch))
+            let ch = s.trim().parse::<u8>().ok_or(Error::GlonassChannelParsing)?;
+            Ok(Self::Channel(ch))
         }
     }
 }
@@ -58,4 +56,3 @@ impl Default for GlonassChannel {
         Self::Unknown
     }
 }
-

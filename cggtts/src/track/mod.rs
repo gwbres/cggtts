@@ -1,7 +1,7 @@
-use thiserror::Error;
+use crate::crc::{calc_crc, CrcError};
 use crate::ionospheric;
 use format_num::NumberFormat;
-use crate::crc::{calc_crc, CrcError};
+use thiserror::Error;
 
 mod glonass;
 use glonass::GlonassChannel;
@@ -12,8 +12,11 @@ use iono::IonosphericData;
 mod scheduler;
 pub use scheduler::TrackScheduler;
 
-use hifitime::{Duration, Epoch};
+mod class;
+pub use class::CommonViewClass;
+
 use gnss::prelude::{Constellation, SV};
+use hifitime::{Duration, Epoch};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -59,64 +62,10 @@ pub enum Error {
     NonAsciiData(#[from] CrcError),
     #[error("checksum error - expecting \"{0}\" - got \"{1}\"")]
     ChecksumError(u8, u8),
-    #[error("failed to parse azimuth angle")]
-    AzimuthParsing,
-    #[error("missing azimuth field")]
-    AzimuthMissing,
-    #[error("failed to parse elevation angle")]
-    ElevationParsing,
-    #[error("missing elevation field")]
-    ElevationMissing,
-    #[error("missing REFSV field")]
-    REFSvMissing,
-    #[error("failed to parse REFSV")]
-    REFSVParsing,
-    #[error("missing SRSV field")]
-    SRSvMissing,
-    #[error("failed to parse SRSV")]
-    SRSVParsing,
-    #[error("missing REFSYS field")]
-    REFSysMissing,
-    #[error("failed to parse REFSYS")]
-    REFSYSParsing,
-    #[error("missing SRSYS field")]
-    SRSysMissing,
-    #[error("failed to parse SRSYS")]
-    SRSYSParsing,
-    #[error("missing DSG field")]
-    DSGMissing,
-    #[error("failed to parse DSG")]
-    DSGParsing,
-    #[error("failed to parse IOE")]
-    IOEParsing,
-    #[error("missing IOE field")]
-    IOEMissing,
-    #[error("failed to parse IOE")]
-    IOEParsing,
-    #[error("missing MDTR field")]
-    MDTRMissing,
-    #[error("failed to parse MDTR")]
-    MDTRParsing,
-    #[error("missing SMDT field")]
-    SMDTMissing,
-    #[error("failed to parse SMDT")]
-    SMDTParsing,
-    #[error("missing MDIO field")]
-    MDIOMissing,
-    #[error("failed to parse MDIO")]
-    MDIOParsing,
-    #[error("missing SMDI field")]
-    SMDIMissing,
-    #[error("failed to parse SMDI")]
-    SMDIParsing,
-    #[error("missing HC field")]
-    HcMissing,
-    #[error("failed to parse HC")]
-    HcParsing,
-    #[error("missing FR field")]
-    FRMissing,
-    #[error("failed to parse FR")]
-    FRParsing,
+    #[error("failed to parse \"{0}\" field")]
+    FieldParsing(String),
+    #[error("missing \"{0}\" field")]
+    MissingField(String),
 }
 
 /// Track (clock) data
@@ -137,7 +86,7 @@ struct TrackData {
     /// Three-digit decimal code indicating the ephemeris used for the computation.
     /// As no IOE is associated with the GLONASS navigation messages, the values 1-96 have to be
     /// used to indicate the date of the ephemeris used, given by the number of the quarter of an hour in
-    /// the day, starting at 1=00h00m00s. 
+    /// the day, starting at 1=00h00m00s.
     /// For BeiDou, IOE will report the integer hour in the date of the ephemeris (Time of Clock).
     pub ioe: u16,
     /// Modeled tropospheric delay corresponding to the solution C in section 2.3.3
@@ -209,8 +158,8 @@ impl Track {
     }
     /// Builds new CGGTTS track resulting from a melting pot realization
     pub fn new_melting_pot(
-        epoch: Epoch, 
-        duration: Duration, 
+        epoch: Epoch,
+        duration: Duration,
         class: CommonViewClass,
         elevation: f64,
         azimuth: f64,
@@ -229,7 +178,7 @@ impl Track {
             iono,
             fr: glo_channel,
             hc: rcvr_channel,
-            frc
+            frc,
         }
     }
     /// Builds a new CGGTTS track from Glonass melting pot realization
@@ -375,55 +324,74 @@ impl std::fmt::Display for Track {
 }
 
 fn parse_data(items: std::str::Lines<'_>) -> Result<TrackData, Error> {
-    let refsv = items.next()
-        .ok_or(Error::REFSvMissing)?
+    let refsv = items
+        .next()
+        .ok_or(Error::MissingField(String::from("REFSV")))?
         .parse::<f64>()
-        .map_err(|_| Error::REFSVParsing)? * 0.1E-9;
-    
-    let srsv = items.next()
-        .ok_or(Error::SRSvMissing)?
-        .parse::<f64>()
-        .map_err(|_| Error::SRSVParsing)? * 0.1E-12;
+        .map_err(|_| Error::FieldParsing(String::from("REFSV")))?
+        * 0.1E-9;
 
-    let refsys = items.next()
-        .ok_or(Error::REFSysMissing)?
+    let srsv = items
+        .next()
+        .ok_or(Error::MissingField(String::from("SRSV")))?
         .parse::<f64>()
-        .map_err(|_| Error::REFSYSParsing)? * 0.1E-9;
+        .map_err(|_| Error::FieldParsing(String::from("SRSV")))?
+        * 0.1E-12;
 
-    let srsys = items.next()
-        .ok_or(Error::SRSysMissing)?
+    let refsys = items
+        .next()
+        .ok_or(Error::MissingField(String::from("REFSYS")))?
         .parse::<f64>()
-        .map_err(|_| Error::SRSYSParsing)? * 0.1E-12;
+        .map_err(|_| Error::FieldParsing(String::from("REFSYS")))?
+        * 0.1E-9;
 
-    let dsg = items.next()
-        .ok_or(Error::DSGMissing)?
+    let srsys = items
+        .next()
+        .ok_or(Error::MissingField(String::from("SRSYS")))?
         .parse::<f64>()
-        .map_err(|_| Error::DSGParsing)? * 0.1E-9;
+        .map_err(|_| Error::FieldParsing(String::from("SRSYS")))?
+        * 0.1E-12;
 
-    let ioe = items.next()
-        .ok_or(Error::IOEMissing)?
+    let dsg = items
+        .next()
+        .ok_or(Error::MissingField(String::from("DSG")))?
+        .parse::<f64>()
+        .map_err(|_| Error::FieldParsing(String::from("DSG")))?
+        * 0.1E-9;
+
+    let ioe = items
+        .next()
+        .ok_or(Error::MissingField(String::from("IOE")))?
         .parse::<u16>()
-        .map_err(|_| Error::IOEParsing)?;
+        .map_err(|_| Error::FieldParsing(String::from("IOE")))?;
 
-    let mdtr = items.next()
-        .ok_or(Error::MDTRMissing)?
+    let mdtr = items
+        .next()
+        .ok_or(Error::MissingField(String::from("MDTR")))?
         .parse::<f64>()
-        .map_err(|_| Error::MDTRParsing)? * 0.1E-9;
-    
-    let smdt = items.next()
-        .ok_or(Error::SMDTMissing)?
-        .parse::<f64>()
-        .map_err(|_| Error::SMDTParsing)? * 0.1E-12;
+        .map_err(|_| Error::FieldParsing(String::from("MDTR")))?
+        * 0.1E-9;
 
-    let mdio = items.next()
-        .ok_or(Error::MDIOMissing)?
+    let smdt = items
+        .next()
+        .ok_or(Error::MissingField(String::from("SMDT")))?
         .parse::<f64>()
-        .map_err(|_| Error::MDIOParsing)? * 0.1E-9;
-    
-    let smdi = items.next()
-        .ok_or(Error::SMDIMissing)?
+        .map_err(|_| Error::FieldParsing(String::from("SMDT")))?
+        * 0.1E-12;
+
+    let mdio = items
+        .next()
+        .ok_or(Error::MissingField(String::from("MDIO")))?
         .parse::<f64>()
-        .map_err(|_| Error::SMDIParsing)? * 0.1E-12;
+        .map_err(|_| Error::FieldParsing(String::from("MDIO")))?
+        * 0.1E-9;
+
+    let smdi = items
+        .next()
+        .ok_or(Error::MissingField(String::from("SMDI")))?
+        .parse::<f64>()
+        .map_err(|_| Error::FieldParsing(String::from("SMDI")))?
+        * 0.1E-12;
 
     Ok(TrackData {
         refsv,
@@ -439,119 +407,117 @@ fn parse_data(items: std::str::Lines<'_>) -> Result<TrackData, Error> {
     })
 }
 
-fn parse_without_iono(lines: std::str::Lines<'_>) -> Result<(TrackData, Option<IonosphericData>), Error> {
-    let data = parse_data(lines)?; 
+fn parse_without_iono(
+    lines: std::str::Lines<'_>,
+) -> Result<(TrackData, Option<IonosphericData>), Error> {
+    let data = parse_data(lines)?;
     (data, None)
 }
 
-fn parse_with_iono(lines: std::str::Lines<'_>) -> Result<(TrackData, Option<IonosphericData>), Error> {
-    let data = parse_data(lines)?; 
-    
-    let msio = items.next()
+fn parse_with_iono(
+    lines: std::str::Lines<'_>,
+) -> Result<(TrackData, Option<IonosphericData>), Error> {
+    let data = parse_data(lines)?;
+
+    let msio = items
+        .next()
         .ok_or(Error::MSIOMissing)?
         .parse::<f64>()
-        .map_err(|_| Error::MSIOParsing) * 0.1E-9;
+        .map_err(|_| Error::MSIOParsing)
+        * 0.1E-9;
 
-    let smsi = items.next()
+    let smsi = items
+        .next()
         .ok_or(Error::SMSIMissing)?
         .parse::<f64>()
-        .map_err(|_| Error::SMSIParsing) * 0.1E-12;
+        .map_err(|_| Error::SMSIParsing)
+        * 0.1E-12;
 
-    let isg = items.next()
+    let isg = items
+        .next()
         .ok_or(Error::ISGMissing)?
         .parse::<f64>()
-        .map_err(|_| Error::ISGParsing) * 0.1E-9;
+        .map_err(|_| Error::ISGParsing)
+        * 0.1E-9;
 
-    (data, Some(IonosphericData {
-        msio,
-        smsi,
-        isg,
-    }))
+    (data, Some(IonosphericData { msio, smsi, isg }))
 }
 
 impl std::str::FromStr for Track {
     type Err = Error;
-    /* 
+    /*
      * Builds a Track from given str description
      */
     fn from_str(line: &str) -> Result<Self, Self::Err> {
         let cleanedup = String::from(line.trim());
-        let items = cleanedup
-            .split_ascii_whitespace();
-        
+        let items = cleanedup.split_ascii_whitespace();
+
         let mut epoch = Epoch::default();
 
-        let sv = SV::from_str(items.next()
-            .ok_or(Error::SvMissing)?
-            .trim())?;
+        let sv = SV::from_str(items.next().ok_or(Error::SvMissing)?.trim())?;
 
         let class = CommonViewClass::from_str(
-            items.next()
-                .ok_or(Error::CvClassMissing)?
-                .trim())?;
+            items
+                .next()
+                .ok_or(Error::MissingField(String::from("CL")))?
+                .trim(),
+        )?;
 
-        let mjd = items.next()
-            .ok_or(Error::MjdMissing)?
+        let mjd = items
+            .next()
+            .ok_or(Error::MissingField(String::from("MJD")))?
             .parse::<i32>()
-            .map_err(|_| Error::MjdParsing)?;
-        
-        let trk_sttime = items.next()
-            .ok_or(Error::TrkStartTimeMissing)?;
+            .map_err(|_| Error::FieldParsing(String::from("MJD")))?;
+
+        let trk_sttime = items.next().ok_or(Error::TrkStartTimeMissing)?;
 
         if trk_sttime.len() < 6 {
             return Err(Error(TrkStartTimeFormat));
         }
 
-        let y = trk_sttime[0..2]
-            .parse::<u8>()?;
-        let m = trk_sttime[2..4]
-            .parse::<u8>()?;
-        let d = trk_sttime[4..6]
-            .parse::<u8>()?;
+        let y = trk_sttime[0..2].parse::<u8>()?;
+        let m = trk_sttime[2..4].parse::<u8>()?;
+        let d = trk_sttime[4..6].parse::<u8>()?;
 
         let duration = Duration::from_seconds(
-            items.next()
-                .ok_or(Error::TrkDurationMissing)?
+            items
+                .next()
+                .ok_or(Error::MissingField(String::from("STTIME")))?
                 .parse::<f64>()
-                .map_err(|_| Error::TrkDurationParsing)?);
+                .map_err(|_| Error::FieldParsing(String::from("STTIME")))?,
+        );
 
-        let elevation = items.next()
-            .ok_or(Error::ElevationMissing)?
+        let elevation = items
+            .next()
+            .ok_or(Error::MissingField(String::from("ELEV")))?
             .parse::<f64>()
-            .map_err(|_| Error::ElevationParsing)? * 0.1;
-        
-        let azimuth = items.next()
-            .ok_or(Error::AzimuthMissing)?
-            .parse::<f64>()
-            .map_err(|_| Error::AzimuthParsing)? * 0.1;
+            .map_err(|_| Error::FieldParsing(String::from("ELEV")))?
+            * 0.1;
 
-        let azimuth = items.next()
-            .ok_or(Error::AzimuthMissing)?
+        let azimuth = items
+            .next()
+            .ok_or(Error::MissingField(String::from("AZI")))?
             .parse::<f64>()
-            .map_err(|_| Error::AzimuthParsing)? * 0.1;
+            .map_err(|_| Error::FieldParsing(String::from("AZI")))?
+            * 0.1;
 
         //let (data, iono, hc, frc, ck) = match items.count() {
         let (data, iono) = match items.count() {
-            TRACK_WITH_IONOSPHERIC => {
-                parse_with_iono(&mut lines)?
-            },
-            TRACK_WITHOUT_IONOSPHERIC => {
-                parse_without_iono(&mut lines)?
-            },
+            TRACK_WITH_IONOSPHERIC => parse_with_iono(&mut lines)?,
+            TRACK_WITHOUT_IONOSPHERIC => parse_without_iono(&mut lines)?,
             _ => {
                 return Err(Error::InvalidFormat);
-            }
+            },
         };
 
-        let fr = GlonassChannel::from_str(items.next()
-            .ok_or(Error::GlonassChannelMissing)?)?;
+        let fr = GlonassChannel::from_str(items.next().ok_or(Error::GlonassChannelMissing)?)?;
 
-        let hc = items.next()
+        let hc = items
+            .next()
             .ok_or(Error::HcMissing)?
             .parse::<u8>()
             .map_err(|_| Error::HcParsing)?;
 
-        
         // checksum
         let end_pos = line.rfind(ck).unwrap(); // already matching
         let _cksum = calc_crc(&line.split_at(end_pos - 1).0)?;
@@ -562,14 +528,8 @@ impl std::str::FromStr for Track {
         }*/
 
         Ok(Track {
-            class: {
-                if class.eq("FF") {
-                    CommonViewClass::Multiple
-                } else {
-                    CommonViewClass::Single
-                }
-            },
             sv,
+            class,
             epoch,
             trktime,
             duration,

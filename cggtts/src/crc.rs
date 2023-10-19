@@ -19,6 +19,6 @@ pub(crate) fn calc_crc(content: &str) -> Result<u8, CrcError> {
             }
             Ok(ck)
         },
-        false => return Err(Error::NonUtf8Data)
+        false => return Err(Error::NonUtf8Data),
     }
 }

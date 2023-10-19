@@ -1,6 +1,5 @@
 /// Describes whether this common view is based on a unique
 /// or a combination of SV
-
 use crate::Error;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -21,7 +20,6 @@ impl std::fmt::UpperHex for CommonViewClass {
     }
 }
 
-
 impl std::str::FromStr for CommonViewClass {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -41,7 +39,13 @@ mod test {
     fn cv_class() {
         assert_eq!(format!("{:X}", CommonViewClass::MultiChannel), "FF");
         assert_eq!(format!("{:X}", CommonViewClass::SingleChannel), "99");
-        assert_eq!(CommonViewClas::from_str("FF"), Ok(CommonViewClass::MultiChannel));
-        assert_eq!(CommonViewClas::from_str("FF"), Ok(CommonViewClass::MultiChannel));
+        assert_eq!(
+            CommonViewClas::from_str("FF"),
+            Ok(CommonViewClass::MultiChannel)
+        );
+        assert_eq!(
+            CommonViewClas::from_str("FF"),
+            Ok(CommonViewClass::MultiChannel)
+        );
     }
 }
