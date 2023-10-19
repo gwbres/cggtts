@@ -1,8 +1,8 @@
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Klobuchar coefficients
 pub type Klobuchar = (f64, f64, f64, f64);
-
-#[cfg(feature = "with-serde")]
-use serde::{Deserialize, Serialize};
 
 fn deg2rad(deg: f64) -> f64 {
     std::f64::consts::PI * deg / 180.0
@@ -83,7 +83,7 @@ pub fn ionospheric_delay_cv(delay: f64, freq: f64) -> f64 {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IonosphericData {
     /// Measured ionospheric delay
     /// corresponding to the solution E in section 2.3.3.
@@ -113,7 +113,6 @@ impl From<(f64, f64, f64)> for IonosphericData {
 }
 
 impl Default for IonosphericData {
-    /// Builds Null Ionospheric Parameter estimates
     fn default() -> Self {
         Self {
             msio: 0.0,

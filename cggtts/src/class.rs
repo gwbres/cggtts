@@ -1,5 +1,8 @@
 /// Describes whether this common view is based on a unique
 /// or a combination of SV
+
+use crate::Error;
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum CommonViewClass {
@@ -23,7 +26,7 @@ impl std::str::FromStr for CommonViewClass {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.eq("FF") {
-            Ok(Self::MultipleChannel)
+            Ok(Self::MultiChannel)
         } else if s.eq("99") {
             Ok(Self::SingleChannel)
         } else {

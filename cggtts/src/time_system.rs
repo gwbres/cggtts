@@ -45,7 +45,7 @@ impl TimeSystem {
 }
 
 impl From<TimeScale> for TimeSystem {
-    pub fn from(ts: TimeScale) -> Self {
+    fn from(ts: TimeScale) -> Self {
         match ts {
             TimeScale::UTC => Self::UTC,
             TimeScale::TAI => Self::TAI,

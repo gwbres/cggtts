@@ -82,26 +82,30 @@
 //! - secondary hardware info [IMS]
 //! - ionospheric parameter estimates
 //! - specify carrier dependent delays [see Delay]
-pub mod delay;
-pub mod ionospheric;
-pub mod processing;
-pub mod scheduler;
-pub mod track;
 
+pub mod track;
+pub mod delay;
+pub mod processing;
+
+mod crc;
 mod class;
+mod version;
 mod time_system;
 
-use hifitime::{Epoch, TimeScale};
+use hifitime::{Epoch, Duration, TimeScale};
 
 extern crate gnss_rs as gnss;
 
+use version::Version;
+use thiserror::Error;
 use scan_fmt::scan_fmt;
 use std::str::FromStr;
 use strum_macros::EnumString;
-use thiserror::Error;
 
-use crate::delay::{Delay, SystemDelay};
 use crate::track::Track;
+use time_system::TimeSystem;
+use crate::class::CommonViewClass;
+use crate::delay::{Delay, SystemDelay};
 use gnss::prelude::{Constellation, SV};
 
 #[cfg(feature = "serde")]
@@ -112,6 +116,7 @@ pub mod prelude {
     pub use Cggtts;
     pub use track::Track;
     pub use class::CommonViewClass;
+    pub use version::Version;
     pub use rinex::prelude::SV;
     pub use rinex::prelude::Constellation;
     pub use hifitime::prelude::TimeScale;
@@ -123,27 +128,25 @@ pub mod prelude {
 use serde::{Deserialize, Serialize};
 
 lazy_static! {
-    
     /// Supported `Cggtts` version,
     /// non matching input files will be rejected
     pub const CURRENT_RELEASE: &str = "2E";
 
-    const LATEST_REVISION_DATE: Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
+    static const LATEST_REVISION_DATE : Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
     
     /*
      * Labels in case we provide Ionospheric parameters estimates
      */
-    const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
+    static const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
     "SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
 
     /*
      * Labels in case Ionospheric compensation is not available
      */
-    const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
+    static const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
 "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
 
 }
-
 
 /*
 pub struct ITRF {
@@ -225,27 +228,6 @@ impl std::fmt::Display for Code {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum CrcError {
-    #[error("failed to compute CRC over non utf8 data")]
-    NonAsciiData(String),
-}
-
-/// computes crc for given str content
-pub fn calc_crc(content: &str) -> Result<u8, CrcError> {
-    match content.is_ascii() {
-        true => {
-            let mut ck: u8 = 0;
-            let mut ptr = content.encode_utf16();
-            for _ in 0..ptr.clone().count() {
-                ck = ck.wrapping_add(ptr.next().unwrap() as u8)
-            }
-            Ok(ck)
-        },
-        false => return Err(CrcError::NonAsciiData(String::from(content))),
-    }
-}
-
 impl std::fmt::Display for Rcvr {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.write_str(&self.manufacturer)?;
@@ -272,33 +254,16 @@ mod point3d_formatter {
     }
 }
 
-#[cfg(feature = "serde")]
-pub mod datetime_formatter {
-    use serde::Serializer;
-    pub fn serialize<S>(datetime: &chrono::NaiveDateTime, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let s = format!("{}", datetime.format("%Y-%m-%d %H:%M:%S"));
-        serializer.serialize_str(&s)
-    }
-
-    /*pub fn deserialize<'de, D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S")?
-    }*/
-}
-
 /// `Cggtts` structure comprises
 /// a measurement system and
 /// and its Common View realizations (`tracks`)
 #[derive(Debug, Clone)]
 pub struct Cggtts {
-    /// File release date
-    pub rev_date: hifitime::Epoch,
+    /// CGGTTS release used in this file.
+    /// We currently only support 2E (latest)
+    pub version: Version,
+    /// Release date of this file revision.
+    pub release_date: hifitime::Epoch,
     /// Laboratory / agency (data producer)
     pub lab: Option<String>,
     /// Possible GNSS receiver infos
@@ -328,7 +293,7 @@ pub struct Cggtts {
     pub tracks: Vec<Track>,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to parse file")]
     IoError(#[from] std::io::Error),
@@ -344,29 +309,34 @@ pub enum Error {
     RevisionDateFormatError,
     #[error("failed to parse revision date")]
     RevisionDateParsingError,
+    #[error("non supported revision \"{0}\"")]
+    NonSupportedRevision(String),
     #[error("failed to parse \"{0}\" coordinates")]
     CoordinatesParsingError(String),
     #[error("failed to identify delay value in line \"{0}\"")]
     DelayIdentificationError(String),
     #[error("failed to parse frequency dependent delay from \"{0}\"")]
     FrequencyDependentDelayParsingError(String),
+    #[error("bad common view class")]
+    BadCommonViewClass,
     #[error("checksum format error")]
     ChecksumFormatError,
     #[error("failed to parse checksum value")]
     ChecksumParsingError,
-    #[error("crc calc() failed over non utf8 data: \"{0}\"")]
-    NonAsciiData(#[from] CrcError),
-    #[error("checksum error, got \"{0}\" but \"{1}\" locally computed")]
-    ChecksumError(u8, u8),
     #[error("file format error")]
     FormatError,
+    #[error("crc error")]
+    CrcError(#[from] crc::Error),
+    #[error("missing crc field")]
+    CrcMissing,
 }
 
 impl Default for Cggtts {
     /// Buils default `Cggtts` structure,
-    fn default() -> Cggtts {
-        Cggtts {
-            rev_date: chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d").unwrap(),
+    fn default() -> Self {
+        Self {
+            version: Version::default(),
+            release_date: LATEST_REVISION_DATE,
             lab: None,
             nb_channels: 0,
             coordinates: rust_3d::Point3D {
@@ -386,69 +356,47 @@ impl Default for Cggtts {
 }
 
 impl Cggtts {
-    /// Builds `Cggtts` object with desired attributes.
-    /// Date is set to `now` by default, use
-    /// `with_date()` to customize.
-    pub fn new(lab: Option<&str>, nb_channels: u16, rcvr: Option<Rcvr>) -> Self {
-        let mut c = Self::default();
-        if let Some(lab) = lab {
-            c = c.with_lab_agency(lab);
-        }
-        c = c.with_nb_channels(nb_channels);
-        if let Some(rcvr) = rcvr {
-            c = c.with_receiver(rcvr);
-        }
-        c
-    }
-
-    /// Returns `Cggtts` with same attributes
-    /// but desired `Lab` agency
-    pub fn with_lab_agency(&self, lab: &str) -> Self {
+    /// Returns Self with desired "lab" agency
+    pub fn lab_agency(&self, lab: &str) -> Self {
         let mut c = self.clone();
         c.lab = Some(lab.to_string());
         c
     }
-
-    /// Returns ̀`Cggtts` with desired number of channels
-    pub fn with_nb_channels(&self, ch: u16) -> Self {
+    /// Returns ̀Self with desired number of channels
+    pub fn nb_channels(&self, ch: u16) -> Self {
         let mut c = self.clone();
         c.nb_channels = ch;
         c
     }
-
-    /// Returns `Cggtts` with desired Receiver infos
-    pub fn with_receiver(&self, rcvr: Rcvr) -> Self {
+    /// Returns Self with desired receiver info
+    pub fn receiver(&self, rcvr: Rcvr) -> Self {
         let mut c = self.clone();
         c.rcvr = Some(rcvr);
         c
     }
-
-    /// Returns `Cggtts` with desired `IMS` evaluation
-    /// hardware infos
-    pub fn with_ims_infos(&self, ims: Rcvr) -> Self {
+    /// Returns Self with desired "ims" hardware info
+    pub fn ims(&self, ims: Rcvr) -> Self {
         let mut c = self.clone();
         c.ims = Some(ims);
         c
     }
-
-    /// Returns `cggtts` but with desired antenna phase center
-    /// coordinates, coordinates should be in `IRTF` reference system,
-    /// and expressed in meter.
-    pub fn with_antenna_coordinates(&self, coords: rust_3d::Point3D) -> Self {
+    /// Returns Self but with desired antenna phase center
+    /// coordinates, coordinates should be in IRTF meters.
+    pub fn antenna_coordinates(&self, coords: rust_3d::Point3D) -> Self {
         let mut c = self.clone();
         c.coordinates = coords;
         c
     }
 
     /// Returns `Cggtts` with desired reference time system description
-    pub fn with_time_reference(&self, reference: TimeSystem) -> Self {
+    pub fn time_reference(&self, reference: TimeSystem) -> Self {
         let mut c = self.clone();
         c.time_reference = reference;
         c
     }
 
     /// Returns `Cggtts` with desired Reference Frame
-    pub fn with_reference_frame(&self, reference: &str) -> Self {
+    pub fn reference_frame(&self, reference: &str) -> Self {
         let mut c = self.clone();
         c.reference_frame = Some(reference.to_string());
         c
@@ -476,42 +424,86 @@ impl Cggtts {
         true
     }
 
-    /// Returns true if Self only comprises tracks
-    /// that were estimated with unique vehicules (not combination of several)
-    pub fn unique_space_vehicule(&self) -> bool {
+    /// Returns common view class, used in this file.
+    /// For a file to be SingleChannel, all tracks must be SingleChannel tracks,
+    /// otherwise we consider MultiChannel
+    pub fn common_view_class(&self) -> CommonViewClass {
+        for trk in self.tracks.iter() {
+            if trk.class != CommonViewClass::SingleChannel {
+                return CommonViewClass::MultiChannel;
+            }
+        }
+        CommonViewClass::SingleChannel
+    }
+
+    /// Returns true if Self is a single channel file
+    pub fn single_channel(&self) -> bool {
+        self.common_view_class() == CommonViewClass::SingleChannel
+    }
+    
+    /// Returns true if Self is a multi channel file
+    pub fn multi_channel(&self) -> bool {
+        self.common_view_class() == CommonViewClass::MultiChannel
+    }
+
+    /// Returns true if Self is only made of melting pot tracks
+    pub fn melting_pot(&self) -> bool {
         for track in self.tracks.iter() {
-            if track.sv_combination() {
+            if !track.melting_pot() {
                 return false;
             }
         }
         true
     }
 
-    /// Returns true if Self only comprises tracks
-    /// that were estimated with a combination os space vehicules
-    /// (not unique PRNs)
-    pub fn space_vehicule_combination(&self) -> bool {
-        for track in self.tracks.iter() {
-            if track.unique_space_vehicule() {
-                return false;
-            }
-        }
-        true
+    /// Returns true if Self is only made of single SV realizations
+    pub fn single_sv(&self) -> bool {
+        !self.melting_pot()
     }
 
     /// Returns true if Self has at least one track
-    /// produced from given constellation
+    /// referenced against given constellation
     pub fn uses_constellation(&self, c: Constellation) -> bool {
-        for track in self.tracks.iter() {
-            if track.uses_constellation(c) {
-                return true;
+        self.tracks.iter().filter_map(|trk| {
+            if trk.sv.constellation == c {
+                Some(trk)
+            } else {
+                None
             }
-        }
-        false
+        })
+        .count() > 0
     }
 
-    /// Returns true if Self was observed entirely
-    /// against given constellation
+    /// Returns track Iterator
+    pub fn tracks(&self) -> impl Iterator<Item = Track> {
+        self.tracks.iter()
+    }
+
+    /// Returns an iterator over CGGTTS tracks that were generated by tracking
+    /// this vehicle
+    pub fn sv_tracks(&self, sv: SV) -> impl Iterator<Item = Track> {
+        self.tracks.filter_map(|trk| {
+            if trk.sv == sv {
+                Some(trk)
+            } else {
+                None
+            }
+        })
+    }
+    
+    /// Returns an iterator over CGGTTS tracks that were generated by tracking
+    /// this constellation 
+    pub fn constellation_tracks(&self, c: Constellation) -> impl Iterator<Item = Track> {
+        self.tracks.filter_map(|trk| {
+            if trk.sv.constllation == c {
+                Some(trk)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns true if Self was generated by tracking a uique constellation
     pub fn unique_constellation(&self, c: Constellation) -> bool {
         for track in self.tracks.iter() {
             if !track.uses_constellation(c) {
@@ -524,17 +516,17 @@ impl Cggtts {
     /// Returns Epoch of this file's generation
     pub fn epoch(&self) -> Option<Epoch> {
         self.tracks.first()
-            .map(|e| e)
+            .map(|trk| trk.epoch)
     }
 
     /// Returns total set duration,
     /// by cummulating all measurements duration
     pub fn total_duration(&self) -> Duration {
         let mut dt = Duration::default();
-        for trk in self.iter() {
-            t += trk.duration();
+        for trk in self.tracks.iter() {
+            dt += trk.duration;
         }
-        t
+        dt
     }
 
     /// Returns a filename that would match
@@ -546,16 +538,17 @@ impl Cggtts {
     /// We replace by "__" otherwise.
     pub fn filename(&self) -> String {
         let mut res = String::new();
+        
         let constellation = match self.tracks.first() {
-            Some(track) => track.space_vehicle.constellation,
+            Some(track) => track.sv.constellation,
             None => Constellation::default(),
         };
-        res.push_str(format!("{:x}", constellation));
+        res.push_str(&format!("{:x}", constellation));
 
         if self.has_ionospheric_data() {
             res.push_str("Z") // Dual Freq / Multi channel
         } else {
-            if self.unique_space_vehicule() {
+            if self.single_channel() {
                 res.push_str("S") // Single Freq / Channel
             } else {
                 res.push_str("M") // Single Freq / Multi Channel
@@ -583,14 +576,14 @@ impl Cggtts {
         } else {
             res.push_str("__")
         }
-        if let Some(date) = self.date() {
-            let mjd = julianday::ModifiedJulianDay::from(date).inner();
-            let dd = mjd / 1000;
-            let ddd = mjd - dd * 1000;
-            res.push_str(&format!("{}.{}", dd, ddd));
+
+        if let Some(epoch) = self.epoch() {
+            let mjd = epoch.to_mjd_utc_days();
+            res.push_str(&format!("{:02}.{:03}", mjd.floor() as u32, mjd.fract() as u32));
         } else {
             res.push_str("YY.YYY")
         }
+
         res
     }
 
@@ -599,29 +592,17 @@ impl Cggtts {
         let file_content = std::fs::read_to_string(fp)?;
         let mut lines = file_content
             .lines()
-            .map(|x| x.to_string())
-            //.map(|x| x.to_string() +"\n")
-            //.map(|x| x.to_string() +"\r"+"\n")
             .into_iter();
 
         // init variables
-        let mut line = lines.next().ok_or(Error::VersionFormatError)?;
         let mut system_delay = SystemDelay::new();
 
-        // VERSION must be first
-        let _ = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
-            Some(version) => {
-                if !version.eq(&CURRENT_RELEASE) {
-                    return Err(Error::VersionMismatch);
-                }
-            },
-            _ => return Err(Error::VersionFormatError),
-        };
+        let mut cksum: u8 = crc::calc_crc(
+            lines.next().ok_or(Error::CrcMissing)?
+        )?;
 
-        let mut cksum: u8 = calc_crc(&line)?;
-
-        let mut rev_date =
-            chrono::NaiveDate::parse_from_str(LATEST_REVISION_DATE, "%Y-%m-%d").unwrap();
+        let mut line = lines.next().ok_or(Error::VersionFormatError)?;
+        let mut release_date = Epoch::default();
         let mut nb_channels: u16 = 0;
         let mut rcvr: Option<Rcvr> = None;
         let mut ims: Option<Rcvr> = None;
@@ -631,14 +612,25 @@ impl Cggtts {
         let mut time_reference = TimeSystem::default();
         let (mut x, mut y, mut z): (f64, f64, f64) = (0.0, 0.0, 0.0);
 
-        line = lines.next().ok_or(Error::FormatError)?;
+        // VERSION must come first
+        let version = lines
+            .next()
+            .ok_or(Error::VersionFormatError)?;
 
-        loop {
+        let version = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
+            Some(version) => Version::from_str(&version)?,
+            _ => return Err(Error::VersionFormatError),
+        };
+
+        line = lines
+            .next()
+            .ok_or(Error::FormatError)?;
+        
+        while let Some(line) = lines.next() {
             if line.starts_with("REV DATE = ") {
-                match scan_fmt!(&line, "REV DATE = {d} {d} {d}", i32, u32, u32) {
-                    (Some(year), Some(month), Some(day)) => {
-                        rev_date = chrono::NaiveDate::from_ymd_opt(year, month, day)
-                            .ok_or(Error::RevisionDateParsingError)?;
+                match scan_fmt!(&line, "REV DATE = {d} {d} {d}", i32, u8, u8) {
+                    (Some(y), Some(m), Some(d)) => {
+                        release_date = Epoch::from_gregorian_utc_at_midnight(y, m, d);
                     },
                     _ => {},
                 }
@@ -838,6 +830,7 @@ impl Cggtts {
                     },
                     _ => {}, // non recognized delay type
                 };
+            
             } else if line.starts_with("CKSUM = ") {
                 let _ck: u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
                     Some(s) => match u8::from_str_radix(&s, 16) {
@@ -849,7 +842,7 @@ impl Cggtts {
 
                 // check CRC
                 let end_pos = line.find("= ").unwrap();
-                _cksum = _cksum.wrapping_add(calc_crc(&line.split_at(end_pos + 2).0)?);
+                cksum = cksum.wrapping_add(crc::calc_crc(&line.split_at(end_pos + 2).0)?);
 
                 //if cksum != ck {
                 //    return Err(Error::ChecksumError(ck, cksum))
@@ -858,7 +851,7 @@ impl Cggtts {
             }
 
             // CRC
-            _cksum = _cksum.wrapping_add(calc_crc(&line)?);
+            cksum = cksum.wrapping_add(crc::calc_crc(&line)?);
 
             if let Some(l) = lines.next() {
                 line = l
@@ -888,7 +881,8 @@ impl Cggtts {
         }
 
         Ok(Cggtts {
-            rev_date,
+            version,
+            release_date,
             nb_channels,
             rcvr,
             ims,
@@ -951,7 +945,7 @@ impl std::fmt::Display for Cggtts {
         }
 
         let delays = self.delay.delays.clone();
-        let constellation: Constellation = if self.tracks.len() > 0 {
+        let constellation = if self.tracks.len() > 0 {
             self.tracks[0].sv.constellation
         } else {
             Constellation::default()
@@ -962,17 +956,17 @@ impl std::fmt::Display for Cggtts {
             match value {
                 Delay::Internal(v) => {
                     content.push_str(&format!(
-                        "INT DLY = {:.1} ns ({} {})",
+                        "INT DLY = {:.1} ns ({:X} {})",
                         v,
-                        constellation.to_3_letter_code(),
+                        constellation,
                         code
                     ));
                 },
                 Delay::System(v) => {
                     content.push_str(&format!(
-                        "SYS DLY = {:.1} ns ({} {})",
+                        "SYS DLY = {:.1} ns ({:X} {})",
                         v,
-                        constellation.to_3_letter_code(),
+                        constellation,
                         code
                     ));
                 },
@@ -989,23 +983,23 @@ impl std::fmt::Display for Cggtts {
             match v1 {
                 Delay::Internal(_) => {
                     content.push_str(&format!(
-                        "INT DLY = {:.1} ns ({} {}), {:.1} ns ({} {})",
+                        "INT DLY = {:.1} ns ({:X} {}), {:.1} ns ({:X} {})",
                         v1.value(),
-                        constellation.to_3_letter_code(),
+                        constellation,
                         c1,
                         v2.value(),
-                        constellation.to_3_letter_code(),
+                        constellation,
                         c2
                     ));
                 },
                 Delay::System(_) => {
                     content.push_str(&format!(
-                        "SYS DLY = {:.1} ns ({} {}), {:.1} ns ({} {})",
+                        "SYS DLY = {:.1} ns ({:X} {}), {:.1} ns ({:X} {})",
                         v1.value(),
-                        constellation.to_3_letter_code(),
+                        constellation,
                         c1,
                         v2.value(),
-                        constellation.to_3_letter_code(),
+                        constellation,
                         c2
                     ));
                 },
@@ -1023,7 +1017,7 @@ impl std::fmt::Display for Cggtts {
 
         content.push_str(&format!("REF = {}\n", self.time_reference));
 
-        let crc = calc_crc(&content).unwrap();
+        let crc = crc::calc_crc(&content)?;
         content.push_str(&format!("CKSUM = {:2X}\n", crc));
         content.push_str("\n"); // blank
 
@@ -1090,12 +1084,5 @@ mod tests {
         assert_eq!(Code::from_str("P1").unwrap(), Code::P1);
         assert_eq!(Code::from_str("P2").unwrap(), Code::P2);
         assert_eq!(Code::from_str("E5a").unwrap(), Code::E5a);
-    }
-}
-
-impl Iterator for Cggtts {
-    type Item = Track;
-    fn iter() -> {
-        self.tracks.iter()
     }
 }
