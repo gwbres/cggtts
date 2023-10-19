@@ -88,20 +88,24 @@ pub mod scheduler;
 pub mod processing;
 pub mod ionospheric;
 
+use hifitime::{TimeScale, Epoch};
+
+extern crate gnss_rs as gnss;
+
 use thiserror::Error;
 use std::str::FromStr;
 use scan_fmt::scan_fmt;
 use strum_macros::{EnumString};
-use rinex::constellation::Constellation;
 
 use crate::track::Track;
 use crate::delay::{Delay, SystemDelay};
+use gnss::prelude::{Constellation, SV};
 
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 #[macro_use]
 extern crate serde;
 
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
 /// Supported `Cggtts` version,
@@ -150,7 +154,7 @@ pub fn helmert_transform (v: (f64,f64,f64), h: HelmertCoefs) -> (f64,f64,f64)  
 /// (hardware). Used to describe the
 /// GNSS receiver or hardware used to evaluate IMS parameters
 #[derive(Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Rcvr {
     /// Manufacturer of this hardware
     pub manufacturer: String,
@@ -166,7 +170,7 @@ pub struct Rcvr {
 
 /// Known Reference Time Systems
 #[derive(Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TimeSystem {
     /// TAI: International Atomic Time
     TAI,
@@ -208,6 +212,16 @@ impl TimeSystem {
     }
 }
 
+impl From<TimeScale> for TimeSystem {
+    pub fn from(ts: TimeScale) -> Self {
+        match ts {
+            TimeScale::UTC => Self::UTC,
+            TimeScale::TAI => Self::TAI,
+            _ => Self::TAI /* incorrect usage */ 
+        }
+    }
+}
+
 impl std::fmt::Display for TimeSystem {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -221,7 +235,7 @@ impl std::fmt::Display for TimeSystem {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[derive(EnumString)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Code {
     C1,
     C2,
@@ -293,7 +307,7 @@ impl std::fmt::Display for Rcvr {
     }
 }
 
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 mod point3d_formatter {
     pub fn serialize<S>(p: rust_3d::Point3D, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -304,7 +318,7 @@ mod point3d_formatter {
     }
 }
 
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 pub mod datetime_formatter {
     use serde::{Serializer};
     pub fn serialize<S>(datetime: &chrono::NaiveDateTime, serializer: S) -> Result<S::Ok, S::Error>
@@ -330,8 +344,8 @@ pub mod datetime_formatter {
 #[derive(Debug, Clone)]
 pub struct Cggtts {
     /// file revision release date 
-    //#[cfg_attr(feature = "with-serde", serde(with = "datetime_formatter"))]
-    pub rev_date: chrono::NaiveDate, 
+    //#[cfg_attr(feature = "serde", serde(with = "datetime_formatter"))]
+    pub rev_date: hifitime::Epoch,
     /// laboratory / agency where measurements were performed (if unknown)
     pub lab: Option<String>, 
     /// possible GNSS receiver infos
@@ -347,7 +361,7 @@ pub struct Cggtts {
     pub reference_frame: Option<String>,
     /// Antenna phase center coordinates [m]
     /// in `ITFR`, `ECEF` or other spatial systems
-    //#[cfg_attr(feature = "with-serde", serde(with = "point3d_formatter"))]
+    //#[cfg_attr(feature = "serde", serde(with = "point3d_formatter"))]
     pub coordinates: rust_3d::Point3D, 
     /// Comments (if any..)
     pub comments: Option<Vec<String>>, 
@@ -515,7 +529,7 @@ impl Cggtts {
     /// that were estimated with unique vehicules (not combination of several)
     pub fn unique_space_vehicule (&self) -> bool {
         for track in self.tracks.iter() {
-            if track.space_vehicule_combination() {
+            if track.sv_combination() {
                 return false
             }
         }
@@ -585,13 +599,12 @@ impl Cggtts {
     /// We replace by "__" otherwise.
     pub fn filename (&self) -> String {
         let mut res = String::new();
-        if let Some(first) = self.tracks.first() {
-            res.push_str(first.space_vehicule.constellation
-                .to_1_letter_code())
-        } else {
-            res.push_str(Constellation::default()
-                .to_1_letter_code())
+        let constellation = match self.tracks.first() {
+            Some(track) => track.space_vehicle.constellation,
+            None => Constellation::default(),
         }
+        res.push_str(format!("{:x}", constellation)); 
+        
         if self.has_ionospheric_data() {
             res.push_str("Z") // Dual Freq / Multi channel
         } else {
@@ -601,11 +614,13 @@ impl Cggtts {
                 res.push_str("M") // Single Freq / Multi Channel
             }
         }
+
         if let Some(lab) = &self.lab {
             res.push_str(&lab[0..2])
         } else {
             res.push_str("XX") // unknown lab
         }
+        
         if let Some(rcvr) = &self.rcvr {
             let sn = rcvr.serial_number.as_str();
             if let Ok(d0) = u16::from_str_radix(&sn[0..0], 10) {

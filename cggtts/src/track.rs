@@ -1,27 +1,28 @@
 use chrono::Timelike;
 use thiserror::Error;
 use format_num::NumberFormat;
-use rinex::{constellation::Constellation, sv::Sv};
 use crate::scheduler;
 use crate::{CrcError, calc_crc};
 use crate::ionospheric;
 
-#[cfg(feature = "with-serde")]
+use hifitime::{Epoch, Duration};
+use gnss::prelude::{Constellation, SV};
+
+#[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
 /// Describes whether this common view is based on a unique 
-/// Space Vehicule or a combination of several vehicules
+/// or a combination of SV
 #[derive(PartialEq, Clone, Copy, Debug)]
 #[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
 pub enum CommonViewClass {
-    /// Single Channel Observation file 
-    Single,
-    /// Multi Channel Observation
-    Multiple,
+    /// Single Channel
+    SingleChannel,
+    /// Multi Channel
+    MultiChannel,
 }
 
-
-impl std::fmt::Display for CommonViewClass {
+impl std::fmt::UpperHex for CommonViewClass {
     fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             CommonViewClass::Single => write!(fmt, "99"),
@@ -31,9 +32,9 @@ impl std::fmt::Display for CommonViewClass {
 }
 
 /// Describes Glonass Frequency channel,
-/// in case this `Track` was esimated using Glonass
+/// in case this `Track` was estimated using Glonass
 #[derive(Debug, Copy, Clone)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GlonassChannel {
     /// Default value when not using Glonass constellation
     Unknown,
@@ -78,8 +79,8 @@ impl Default for GlonassChannel {
     }
 }
 
-const TRACK_WITHOUT_IONOSPHERIC :usize = 21;
 const TRACK_WITH_IONOSPHERIC :usize = 24;
+const TRACK_WITHOUT_IONOSPHERIC :usize = 21;
 
 /// A `Track` is a `Cggtts` measurement
 #[derive(Debug, PartialEq, Clone)]
@@ -88,18 +89,16 @@ pub struct Track {
     /// Most of the time, `Tracks` are estimated
     /// using a combination of Spave Vehicules
     pub class: CommonViewClass,
-    /// Date Y/M/d this track was produced on
-    pub date: chrono::NaiveDate,
-    /// Tracking start date (hh:mm:ss)
-    pub trktime: chrono::NaiveTime, 
+    /// Epoch of this track 
+    pub epoch: Epoch,
     /// Tracking duration
-    pub duration: std::time::Duration, 
+    pub duration: Duration,
     /// Space vehicule against which this 
     /// measurement / track was realized.
     /// Is only relevant, as a whole, 
     /// if `class` is set to CommonViewClass::Single.
     /// Refer to [class]
-    pub space_vehicule: Sv,
+    pub sv: Sv,
     /// Elevation (angle) at Tracking midpoint [in degrees]
     pub elevation: f64, 
     /// Azimuth (angle) at Tracking midpoint in [degrees]
@@ -164,16 +163,29 @@ impl Track {
     /// To customize, use `with_` methods later on,
     /// for example to provide ionospheric parameters or use a different date
     pub fn new (class: CommonViewClass,
-            trktime: chrono::NaiveTime, duration: std::time::Duration,
-                space_vehicule: Sv,
-                elevation: f64, azimuth: f64, refsv: f64, srsv: f64,
-                    refsys: f64, srsys:f64, dsg: f64, ioe: u16, mdtr: f64,
-                        smdt: f64, mdio: f64, smdi: f64, fr: GlonassChannel,
-                            hc: u8, frc: &str) -> Self {
+        epoch: Epoch,
+        duration: Duration,
+        sv: Sv,
+        elevation: f64, 
+        azimuth: f64, 
+        refsv: f64, 
+        srsv: f64,
+        refsys: f64, 
+        srsys:f64, 
+        dsg: f64, 
+        ioe: u16, 
+        mdtr: f64,
+        smdt: f64, 
+        mdio: f64, 
+        smdi: f64, 
+        fr: GlonassChannel,
+        hc: u8, 
+        frc: &str,
+    ) -> Self {
         Self {
             date: chrono::Utc::today().naive_utc(),
             class,
-            space_vehicule,
+            sv,
             trktime,
             duration,
             elevation,
@@ -213,19 +225,19 @@ impl Track {
 
     /// Returns true if Self was estimated using a combination
     /// of Space Vehicules from the same constellation
-    pub fn space_vehicule_combination (&self) -> bool {
-        self.space_vehicule.prn == 99
+    pub fn sv_combination (&self) -> bool {
+        self.sv.prn == 99
     }
 
     /// Returns true if Self was measured against a unique
     /// Space Vehicule
-    pub fn unique_space_vehicule (&self) -> bool {
-        !self.space_vehicule_combination()
+    pub fn unique_sv (&self) -> bool {
+        !self.sv_combination()
     }
 
     /// Returns true if Self was measured against given `GNSS` Constellation 
     pub fn uses_constellation (&self, c: Constellation) -> bool {
-        self.space_vehicule.constellation == c
+        self.sv.constellation == c
     }
 
     /// Returns True if Self follows BIPM specifications / requirements,
@@ -235,9 +247,9 @@ impl Track {
     }
     
     /// Returns a `Track` with desired unique space vehicule
-    pub fn with_space_vehicule (&self, sv: Sv) -> Self {
+    pub fn with_sv (&self, sv: Sv) -> Self {
         let mut t = self.clone();
-        t.space_vehicule = sv.clone();
+        t.sv = sv.clone();
         t
     }
 
@@ -277,7 +289,7 @@ impl Default for Track {
     fn default() -> Track {
         let now = chrono::Utc::now();
         Track {
-            space_vehicule: {
+            sv: {
                 Sv {
                     constellation: Constellation::default(),
                     prn: 99,
@@ -316,7 +328,7 @@ impl std::fmt::Display for Track {
         let mut string = String::new();
         let num = NumberFormat::new();
         string.push_str(&format!("{} {} {} {} ",
-            self.space_vehicule,
+            self.sv,
             self.class,
             julianday::ModifiedJulianDay::from(self.date).inner(),
             self.trktime.format("%H%M%S")));
@@ -425,7 +437,7 @@ impl std::str::FromStr for Track {
                     CommonViewClass::Single
                 }
             },
-            space_vehicule: sv,
+            sv,
             date: julianday::ModifiedJulianDay::new(mjd).to_date(),
             trktime,
             duration: std::time::Duration::from_secs(duration_secs),
