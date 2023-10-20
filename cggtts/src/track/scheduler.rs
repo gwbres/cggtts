@@ -1,7 +1,8 @@
 //! CGGTTS Track scheduler
+use hifitime::{Duration, Epoch};
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, PartialOrd, Hash)]
-struct TrackScheduler {
+pub struct TrackScheduler {
     /*
      * time of previous realization
      */
@@ -24,21 +25,21 @@ impl TrackScheduler {
      * Returns Nth track offset, expressed in minutes
      */
     const fn time_ref(nth: u32) -> u32 {
-        2 * (nth - 1) * (BIPM_TRACK_DURATION_SECS / 60 + 3) // 3'(warmup/lock?) +13' track
+        2 * (nth - 1) * (Self::BIPM_TRACK_DURATION_SECS / 60 + 3) // 3'(warmup/lock?) +13' track
     }
-
     /// Returns true if we should publish a new realization "now"
     pub fn schedule(&mut self, now: Epoch) -> bool {
         // Returns nth track offset, in <!>minutes<!> within given MJD
         // time_ref(nth) - 4 * (mjd as u32 - REFERENCE_MJD);
         self.last = now;
+        true
     }
     /// Returns Epoch of next realization
     pub fn next(&self) -> Epoch {
-        self.epoch + BIPM_TRACK_DURATION
+        self.last + Self::BIPM_TRACK_DURATION
     }
     /// Returns Epoch of previous realization
     pub fn last(&self) -> Epoch {
-        self.epoch
+        self.last
     }
 }

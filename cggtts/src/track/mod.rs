@@ -15,7 +15,7 @@ mod class;
 pub use class::CommonViewClass;
 
 use gnss::prelude::{Constellation, SV};
-use hifitime::{Duration, Epoch};
+use hifitime::{Duration, Epoch, Unit};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub struct Track {
     pub iono: Option<IonosphericData>,
     /// Glonass Channel Frequency [1:24], O for other GNSS
     pub fr: GlonassChannel,
-    /// Optionnal receiver channel [0:99], 0 if Unknown
+    /// Hardware / receiver channel [0:99], 0 if Unknown
     pub hc: u8,
     /// Carrier frequency standard 3 letter code,
     /// refer to RINEX specifications for meaning
@@ -53,10 +53,14 @@ pub struct Track {
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("track data format mismatch")]
-    InvalidFormat(String),
+    #[error("invalid track format")]
+    InvalidFormat,
+    #[error("invalid sttime field format")]
+    InvalidTrkTimeFormat,
+    #[error("unknown common view class")]
+    UnknownClass,
     #[error("failed to parse sv")]
-    SvError(#[from] rinex::Error),
+    SVParsing(#[from] gnss::sv::ParsingError),
     #[error("crc calc() failed over non utf8 data: \"{0}\"")]
     NonAsciiData(#[from] CrcError),
     #[error("checksum error - expecting \"{0}\" - got \"{1}\"")]
@@ -111,7 +115,7 @@ impl Track {
         data: TrackData,
         iono: Option<IonosphericData>,
         rcvr_channel: u8,
-        frc: Carrier,
+        frc: &str,
     ) -> Self {
         Self {
             epoch,
@@ -122,9 +126,9 @@ impl Track {
             azimuth,
             data,
             iono,
-            fr: None,
-            hc,
-            frc,
+            fr: GlonassChannel::Unknown,
+            hc: rcvr_channel,
+            frc: frc.to_string(),
         }
     }
     /// Builds new CGGTTS track from single Glonass SV realization
@@ -137,9 +141,9 @@ impl Track {
         azimuth: f64,
         data: TrackData,
         iono: Option<IonosphericData>,
-        recvr_channel: Option<u8>,
-        glo_channel: u8,
-        frc: Carrier,
+        rcvr_channel: u8,
+        glo_channel: GlonassChannel,
+        frc: &str,
     ) -> Self {
         Self {
             sv,
@@ -150,9 +154,9 @@ impl Track {
             azimuth,
             data,
             iono,
-            recvr_channel,
-            glo_channel,
-            frc,
+            fr: glo_channel,
+            hc: rcvr_channel,
+            frc: frc.to_string(),
         }
     }
     /// Builds new CGGTTS track resulting from a melting pot realization
@@ -165,9 +169,14 @@ impl Track {
         data: TrackData,
         iono: Option<IonosphericData>,
         rcvr_channel: u8,
-        frc: Carrier,
+        glo_channel: GlonassChannel,
+        frc: &str,
     ) -> Self {
         Self {
+            sv: SV {
+                constellation: Constellation::GPS,
+                prn: 99,
+            },
             epoch,
             class,
             duration,
@@ -175,9 +184,9 @@ impl Track {
             azimuth,
             data,
             iono,
-            fr: glo_channel,
+            fr: GlonassChannel::Unknown,
             hc: rcvr_channel,
-            frc,
+            frc: frc.to_string(),
         }
     }
     /// Builds a new CGGTTS track from Glonass melting pot realization
@@ -189,9 +198,9 @@ impl Track {
         azimuth: f64,
         data: TrackData,
         iono: Option<IonosphericData>,
-        glo_channel: u16,
+        glo_channel: GlonassChannel,
         rcvr_channel: u8,
-        frc: Carrier,
+        frc: &str,
     ) -> Self {
         Self {
             epoch,
@@ -207,31 +216,13 @@ impl Track {
             iono,
             fr: glo_channel,
             hc: rcvr_channel,
-            frc,
+            frc: frc.to_string(),
         }
     }
-
-    /// Returns a new `Track` with given Ionospheric parameters,
-    /// if parameters were previously assigned, they get overwritten)
-    pub fn with_ionospheric_data(&self, data: IonosphericData) -> Self {
-        let mut t = self.clone();
-        t.class = CommonViewClass::MultiChannel; // always when Iono provided
-        t.ionospheric = Some(data);
-        t
-    }
-
-    /// Returns a `Track` with desired duration
-    pub fn with_duration(&self, duration: std::time::Duration) -> Self {
-        let mut t = self.clone();
-        t.duration = duration;
-        t
-    }
-
     /// Track is a melting pot is only one SV was tracked during its realization
     pub fn melting_pot(&self) -> bool {
         self.sv.prn == 99
     }
-
     /// Returns true if Self was measured against given `GNSS` Constellation
     pub fn uses_constellation(&self, c: Constellation) -> bool {
         self.sv.constellation == c
@@ -281,16 +272,20 @@ impl std::fmt::Display for Track {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
         let num = NumberFormat::new();
+        let mjd = self.epoch.to_mjd_utc_days();
+        let (_, _, _, h, m, s, _) = self.epoch.to_gregorian_utc();
         string.push_str(&format!(
-            "{} {} {} {} ",
+            "{} {:X} {} {:02}{:02}:{:02}",
             self.sv,
             self.class,
-            julianday::ModifiedJulianDay::from(self.date).inner(),
-            self.trktime.format("%H%M%S")
+            mjd.floor() as u32,
+            h,
+            m,
+            s
         ));
         string.push_str(&format!(
             "{} {} {} {} {} {} {} {} {} {} {} {} {} ",
-            num.format("04d", self.data.duration.as_secs() as f64),
+            num.format("04d", self.duration.to_seconds() as f64),
             num.format("03d", self.elevation * 10.0),
             num.format("04d", self.azimuth * 10.0),
             num.format("+11d", self.data.refsv * 1E10),
@@ -407,39 +402,39 @@ fn parse_data(items: std::str::Lines<'_>) -> Result<TrackData, Error> {
 }
 
 fn parse_without_iono(
-    lines: std::str::Lines<'_>,
+    items: std::str::Lines<'_>,
 ) -> Result<(TrackData, Option<IonosphericData>), Error> {
-    let data = parse_data(lines)?;
-    (data, None)
+    let data = parse_data(items)?;
+    Ok((data, None))
 }
 
 fn parse_with_iono(
-    lines: std::str::Lines<'_>,
+    items: std::str::Lines<'_>,
 ) -> Result<(TrackData, Option<IonosphericData>), Error> {
-    let data = parse_data(lines)?;
+    let data = parse_data(items)?;
 
     let msio = items
         .next()
-        .ok_or(Error::MSIOMissing)?
+        .ok_or(Error::MissingField(String::from("MSIO")))?
         .parse::<f64>()
-        .map_err(|_| Error::MSIOParsing)
+        .map_err(|_| Error::FieldParsing(String::from("MSIO")))?
         * 0.1E-9;
 
     let smsi = items
         .next()
-        .ok_or(Error::SMSIMissing)?
+        .ok_or(Error::MissingField(String::from("SMSI")))?
         .parse::<f64>()
-        .map_err(|_| Error::SMSIParsing)
+        .map_err(|_| Error::FieldParsing(String::from("SMSI")))?
         * 0.1E-12;
 
     let isg = items
         .next()
-        .ok_or(Error::ISGMissing)?
+        .ok_or(Error::MissingField(String::from("ISG")))?
         .parse::<f64>()
-        .map_err(|_| Error::ISGParsing)
+        .map_err(|_| Error::FieldParsing(String::from("ISG")))?
         * 0.1E-9;
 
-    (data, Some(IonosphericData { msio, smsi, isg }))
+    Ok((data, Some(IonosphericData { msio, smsi, isg })))
 }
 
 impl std::str::FromStr for Track {
@@ -458,6 +453,7 @@ impl std::str::FromStr for Track {
                 .next()
                 .ok_or(Error::MissingField(String::from("SV")))?,
         )?;
+
         let class = CommonViewClass::from_str(
             items
                 .next()
@@ -481,15 +477,15 @@ impl std::str::FromStr for Track {
 
         let h = trk_sttime[0..2]
             .parse::<u8>()
-            .map_err(|_| Error::FieldParsing(String::from("Hours")))?;
+            .map_err(|_| Error::FieldParsing(String::from("STTIME:%H")))?;
 
         let m = trk_sttime[2..4]
             .parse::<u8>()
-            .map_err(|_| Error::FieldParsing(String::from("Minutes")))?;
+            .map_err(|_| Error::FieldParsing(String::from("STTIME:%M")))?;
 
         let s = trk_sttime[4..6]
             .parse::<u8>()
-            .map_err(|_| Error::FieldParsing(String::from("Seconds")))?;
+            .map_err(|_| Error::FieldParsing(String::from("STTIME:%S")))?;
 
         let mut epoch = Epoch::from_mjd_utc(mjd as f64);
         epoch = epoch + (h as f64) * Unit::Hour;
@@ -539,9 +535,16 @@ impl std::str::FromStr for Track {
             .parse::<u8>()
             .map_err(|_| Error::FieldParsing(String::from("hc")))?;
 
+        let frc: String = items
+            .next()
+            .ok_or(Error::MissingField(String::from("frc")))?
+            .parse()
+            .map_err(|_| Error::FieldParsing(String::from("frc")))?;
+
         // checksum
         let end_pos = line.rfind(ck).unwrap(); // already matching
-        let _cksum = calc_crc(&line.split_at(end_pos - 1).0)?;
+        let cksum = calc_crc(&line.split_at(end_pos - 1).0)?;
+
         // verification
         /*if cksum != ck {
             println!("GOT {} EXPECT {}", ck, cksum);

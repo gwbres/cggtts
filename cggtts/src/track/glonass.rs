@@ -1,7 +1,7 @@
-use crate::track::Error;
-
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+use crate::track::Error;
 
 /// Describes Glonass Frequency channel,
 /// in case this `Track` was estimated using Glonass
@@ -29,7 +29,10 @@ impl std::str::FromStr for GlonassChannel {
         if s.eq("0") {
             Ok(Self::Unknown)
         } else {
-            let ch = s.trim().parse::<u8>().ok_or(Error::GlonassChannelParsing)?;
+            let ch = s
+                .trim()
+                .parse::<u8>()
+                .map_err(|_| Error::FieldParsing(String::from("FR")))?;
             Ok(Self::Channel(ch))
         }
     }

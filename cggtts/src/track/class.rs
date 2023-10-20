@@ -1,9 +1,12 @@
 /// Describes whether this common view is based on a unique
 /// or a combination of SV
-use crate::Error;
+use crate::track::Error;
+
+#[cfg_(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Clone, Copy, Debug)]
-#[cfg_attr(feature = "with-serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CommonViewClass {
     /// Single Channel
     SingleChannel,
@@ -28,7 +31,7 @@ impl std::str::FromStr for CommonViewClass {
         } else if s.eq("99") {
             Ok(Self::SingleChannel)
         } else {
-            Err(Error::BadCommonViewClass)
+            Err(Error::UnknownClass)
         }
     }
 }
