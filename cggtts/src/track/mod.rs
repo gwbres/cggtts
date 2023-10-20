@@ -72,7 +72,7 @@ pub enum Error {
 /// Track (clock) data
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-struct TrackData {
+pub struct TrackData {
     /// REFSV field
     pub refsv: f64,
     /// SRSV field
@@ -229,7 +229,7 @@ impl Track {
     /// Returns True if Self follows BIPM specifications / requirements,
     /// in terms of tracking pursuit
     pub fn follows_bipm_specs(&self) -> bool {
-        self.duration == TrackScheduler::BIPM_TRACKING_DURATION
+        self.duration == Duration::from_seconds(780.0)
     }
 
     /// Returns a `Track` with desired unique space vehicule
@@ -442,9 +442,8 @@ impl std::str::FromStr for Track {
      */
     fn from_str(line: &str) -> Result<Self, Self::Err> {
         let cleanedup = String::from(line.trim());
-        let items = cleanedup.split_ascii_whitespace();
-
         let mut epoch = Epoch::default();
+        let mut items = cleanedup.split_ascii_whitespace();
 
         let sv = SV::from_str(
             items
@@ -490,6 +489,8 @@ impl std::str::FromStr for Track {
         epoch = epoch + (m as f64) * Unit::Minute;
         epoch = epoch + (s as f64) * Unit::Second;
 
+        let nb_items = items.clone().count();
+
         let duration = Duration::from_seconds(
             items
                 .next()
@@ -513,7 +514,7 @@ impl std::str::FromStr for Track {
             * 0.1;
 
         //let (data, iono, hc, frc, ck) = match items.count() {
-        let (data, iono) = match items.count() {
+        let (data, iono) = match nb_items {
             TRACK_WITH_IONOSPHERIC => parse_with_iono(&mut items)?,
             TRACK_WITHOUT_IONOSPHERIC => parse_without_iono(&mut items)?,
             _ => {

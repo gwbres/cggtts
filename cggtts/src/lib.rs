@@ -603,7 +603,7 @@ impl Cggtts {
 
         line = lines.next().ok_or(Error::FormatError)?;
 
-        while let Some(line) = lines.next() {
+        while let Some(mut line) = lines.next() {
             if line.starts_with("REV DATE = ") {
                 match scan_fmt!(&line, "REV DATE = {d}-{d}-{d}", i32, u8, u8) {
                     (Some(y), Some(m), Some(d)) => {
@@ -1003,9 +1003,10 @@ impl std::fmt::Display for Cggtts {
 
         content.push_str(&format!("REF = {}\n", self.time_reference));
 
-        let crc = crc::calc_crc(&content)?;
-        content.push_str(&format!("CKSUM = {:2X}\n", crc));
-        content.push_str("\n"); // blank
+        let crc = crc::calc_crc(&content).map_err(|_| std::fmt::Error);
+
+        let crc = crc.unwrap();
+        content.push_str(&format!("CKSUM = {:2X}\n\n", crc)); /* CRC + BLANK */
 
         if self.has_ionospheric_data() {
             content.push_str(TRACK_LABELS_WITH_IONOSPHERIC_DATA);

@@ -1,5 +1,5 @@
 //! CGGTTS Track scheduler
-use hifitime::{Duration, Epoch};
+use hifitime::{Duration, Epoch, Unit};
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, PartialOrd, Hash)]
 pub struct TrackScheduler {
@@ -16,16 +16,17 @@ impl TrackScheduler {
      * is aligned to GPS sideral period
      */
     const REF_MJD: u32 = 50722; // used in calc
-    pub const BIPM_TRACKING_DURATION_SECS: u32 = 780; /* 13' */
-    pub const BIPM_TRACKING_DURATION: Duration = Duration {
-        centuries: 0,
-        nanoseconds: Self::BIPM_TRACKING_DURATION_SECS as u64 * 1_000_000_000,
-    };
-    /*
-     * Returns Nth track offset, expressed in minutes
-     */
+                                // pub const BIPM_TRACKING_DURATION_SECS: u32 = 780; /* 13' */
+                                // pub const BIPM_TRACKING_DURATION: Duration = Duration::from_seconds(780.0);
+                                //{
+                                //    centuries: 0,
+                                //    nanoseconds: Self::BIPM_TRACKING_DURATION_SECS as u64 * 1_000_000_000,
+                                //};
+                                /*
+                                 * Returns Nth track offset, expressed in minutes
+                                 */
     const fn time_ref(nth: u32) -> u32 {
-        2 * (nth - 1) * (Self::BIPM_TRACKING_DURATION_SECS / 60 + 3) // 3'(warmup/lock?) +13' track
+        2 * (nth - 1) * (780 / 60 + 3) // 3'(warmup/lock?) +13' track
     }
     /// Returns true if we should publish a new realization "now"
     pub fn schedule(&mut self, now: Epoch) -> bool {
@@ -36,7 +37,7 @@ impl TrackScheduler {
     }
     /// Returns Epoch of next realization
     pub fn next(&self) -> Epoch {
-        self.last + Self::BIPM_TRACKING_DURATION
+        self.last + 780 * Unit::Second
     }
     /// Returns Epoch of previous realization
     pub fn last(&self) -> Epoch {
