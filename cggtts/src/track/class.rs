@@ -2,7 +2,7 @@
 /// or a combination of SV
 use crate::track::Error;
 
-#[cfg_(feature = "serde")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Clone, Copy, Debug)]

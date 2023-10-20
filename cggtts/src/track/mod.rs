@@ -61,14 +61,12 @@ pub enum Error {
     UnknownClass,
     #[error("failed to parse sv")]
     SVParsing(#[from] gnss::sv::ParsingError),
-    #[error("crc calc() failed over non utf8 data: \"{0}\"")]
-    NonAsciiData(#[from] CrcError),
-    #[error("checksum error - expecting \"{0}\" - got \"{1}\"")]
-    ChecksumError(u8, u8),
     #[error("failed to parse \"{0}\" field")]
     FieldParsing(String),
     #[error("missing \"{0}\" field")]
     MissingField(String),
+    #[error("checksum error")]
+    CrcError(#[from] crate::crc::Error),
 }
 
 /// Track (clock) data
@@ -231,11 +229,11 @@ impl Track {
     /// Returns True if Self follows BIPM specifications / requirements,
     /// in terms of tracking pursuit
     pub fn follows_bipm_specs(&self) -> bool {
-        self.duration.to_seconds() == scheduler::BIPM_RECOMMENDED_TRACKING.as_secs()
+        self.duration == TrackScheduler::BIPM_TRACKING_DURATION
     }
 
     /// Returns a `Track` with desired unique space vehicule
-    pub fn with_sv(&self, sv: Sv) -> Self {
+    pub fn with_sv(&self, sv: SV) -> Self {
         let mut t = self.clone();
         t.sv = sv.clone();
         t
@@ -317,7 +315,7 @@ impl std::fmt::Display for Track {
     }
 }
 
-fn parse_data(items: std::str::Lines<'_>) -> Result<TrackData, Error> {
+fn parse_data(items: &mut std::str::SplitAsciiWhitespace<'_>) -> Result<TrackData, Error> {
     let refsv = items
         .next()
         .ok_or(Error::MissingField(String::from("REFSV")))?
@@ -402,14 +400,14 @@ fn parse_data(items: std::str::Lines<'_>) -> Result<TrackData, Error> {
 }
 
 fn parse_without_iono(
-    items: std::str::Lines<'_>,
+    items: &mut std::str::SplitAsciiWhitespace<'_>,
 ) -> Result<(TrackData, Option<IonosphericData>), Error> {
     let data = parse_data(items)?;
     Ok((data, None))
 }
 
 fn parse_with_iono(
-    items: std::str::Lines<'_>,
+    items: &mut std::str::SplitAsciiWhitespace<'_>,
 ) -> Result<(TrackData, Option<IonosphericData>), Error> {
     let data = parse_data(items)?;
 
@@ -516,8 +514,8 @@ impl std::str::FromStr for Track {
 
         //let (data, iono, hc, frc, ck) = match items.count() {
         let (data, iono) = match items.count() {
-            TRACK_WITH_IONOSPHERIC => parse_with_iono(&mut lines)?,
-            TRACK_WITHOUT_IONOSPHERIC => parse_without_iono(&mut lines)?,
+            TRACK_WITH_IONOSPHERIC => parse_with_iono(&mut items)?,
+            TRACK_WITHOUT_IONOSPHERIC => parse_without_iono(&mut items)?,
             _ => {
                 return Err(Error::InvalidFormat);
             },
@@ -542,8 +540,13 @@ impl std::str::FromStr for Track {
             .map_err(|_| Error::FieldParsing(String::from("frc")))?;
 
         // checksum
-        let end_pos = line.rfind(ck).unwrap(); // already matching
-        let cksum = calc_crc(&line.split_at(end_pos - 1).0)?;
+        let ck = items
+            .next()
+            .ok_or(Error::MissingField(String::from("ck")))?
+            .parse::<u8>()
+            .map_err(|_| Error::FieldParsing(String::from("ck")))?;
+
+        // let cksum = calc_crc(&line.split_at(end_pos - 1).0)?;
 
         // verification
         /*if cksum != ck {

@@ -1,4 +1,5 @@
 use hifitime::TimeScale;
+use scan_fmt::scan_fmt;
 
 /// Reference Time Systems
 #[derive(Clone, PartialEq, Debug)]

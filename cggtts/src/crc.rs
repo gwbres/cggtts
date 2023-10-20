@@ -9,7 +9,7 @@ pub enum Error {
 }
 
 /// computes crc for given str content
-pub(crate) fn calc_crc(content: &str) -> Result<u8, CrcError> {
+pub(crate) fn calc_crc(content: &str) -> Result<u8, Error> {
     match content.is_ascii() {
         true => {
             let mut ck: u8 = 0;

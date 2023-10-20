@@ -94,18 +94,18 @@ pub mod track;
 extern crate gnss_rs as gnss;
 
 use hifitime::{Duration, Epoch, TimeScale};
-
-use crate::track::CommonViewClass;
-use scan_fmt::scan_fmt;
 use std::str::FromStr;
 use strum_macros::EnumString;
 use thiserror::Error;
-use version::Version;
 
 use crate::delay::{Delay, SystemDelay};
+use crate::track::CommonViewClass;
 use crate::track::Track;
 use gnss::prelude::{Constellation, SV};
 use time_system::TimeSystem;
+use version::Version;
+
+use scan_fmt::scan_fmt;
 
 #[cfg(feature = "serde")]
 #[macro_use]
@@ -113,39 +113,21 @@ extern crate serde;
 
 pub mod prelude {
     pub use crate::track::CommonViewClass;
+    pub use crate::{track::Track, version::Version, Cggtts};
     pub use hifitime::prelude::Duration;
     pub use hifitime::prelude::Epoch;
     pub use hifitime::prelude::TimeScale;
     pub use rinex::prelude::Constellation;
     pub use rinex::prelude::SV;
-    pub use Cggtts;
-    pub use Track;
-    pub use Version;
 }
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-lazy_static! {
-    /// Supported `Cggtts` version,
-    /// non matching input files will be rejected
-    pub const CURRENT_RELEASE: &str = "2E";
+use lazy_static::lazy_static;
 
-    static const LATEST_REVISION_DATE : Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
-
-    /*
-     * Labels in case we provide Ionospheric parameters estimates
-     */
-    static const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
-    "SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
-
-    /*
-     * Labels in case Ionospheric compensation is not available
-     */
-    static const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
-"SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
-
-}
+/// Latest CGGTTS release : only version we truly support
+pub const CURRENT_RELEASE: &str = "2E";
 
 /*
 pub struct ITRF {
@@ -324,10 +306,12 @@ pub enum Error {
     ChecksumParsingError,
     #[error("file format error")]
     FormatError,
-    #[error("crc error")]
-    CrcError(#[from] crc::Error),
+    #[error("header crc error")]
+    ChecksumError(#[from] crc::Error),
     #[error("missing crc field")]
     CrcMissing,
+    #[error("track parsing error")]
+    TrackParsing(#[from] track::Error),
 }
 
 impl Default for Cggtts {
@@ -335,7 +319,7 @@ impl Default for Cggtts {
     fn default() -> Self {
         Self {
             version: Version::default(),
-            release_date: LATEST_REVISION_DATE,
+            release_date: Epoch::from_gregorian_utc_at_midnight(2014, 02, 20), /* latest rev. */
             lab: None,
             nb_channels: 0,
             coordinates: rust_3d::Point3D {
@@ -867,9 +851,9 @@ impl Cggtts {
                 // empty line
                 break; // we're done parsing
             }
-            if let Ok(track) = Track::from_str(&line) {
-                tracks.push(track)
-            }
+
+            let track = Track::from_str(&line)?;
+            tracks.push(track)
         }
 
         Ok(Cggtts {
@@ -898,6 +882,20 @@ impl Cggtts {
 impl std::fmt::Display for Cggtts {
     /// Writes self into a `Cggtts` file
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let LATEST_REVISION_DATE: Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
+
+        /*
+         * Labels in case we provide Ionospheric parameters estimates
+         */
+        let TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
+        "SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
+
+        /*
+         * Labels in case Ionospheric compensation is not available
+         */
+        let TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
+            "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
+
         let mut content = String::new();
         let line = format!("CGGTTS GENERIC DATA FORMAT VERSION = {}\n", CURRENT_RELEASE);
         content.push_str(&line);

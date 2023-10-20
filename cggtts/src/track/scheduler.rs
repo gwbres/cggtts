@@ -16,16 +16,16 @@ impl TrackScheduler {
      * is aligned to GPS sideral period
      */
     const REF_MJD: u32 = 50722; // used in calc
-    pub const BIPM_TRACK_DURATION_SECS: u32 = 780; /* 13' */
-    pub const BIPM_TRACK_DURATION: Duration = Duration {
+    pub const BIPM_TRACKING_DURATION_SECS: u32 = 780; /* 13' */
+    pub const BIPM_TRACKING_DURATION: Duration = Duration {
         centuries: 0,
-        nanoseconds: BIPM_TRACK_DURATION_SECS * 1_000_000_000,
+        nanoseconds: Self::BIPM_TRACKING_DURATION_SECS as u64 * 1_000_000_000,
     };
     /*
      * Returns Nth track offset, expressed in minutes
      */
     const fn time_ref(nth: u32) -> u32 {
-        2 * (nth - 1) * (Self::BIPM_TRACK_DURATION_SECS / 60 + 3) // 3'(warmup/lock?) +13' track
+        2 * (nth - 1) * (Self::BIPM_TRACKING_DURATION_SECS / 60 + 3) // 3'(warmup/lock?) +13' track
     }
     /// Returns true if we should publish a new realization "now"
     pub fn schedule(&mut self, now: Epoch) -> bool {
@@ -36,7 +36,7 @@ impl TrackScheduler {
     }
     /// Returns Epoch of next realization
     pub fn next(&self) -> Epoch {
-        self.last + Self::BIPM_TRACK_DURATION
+        self.last + Self::BIPM_TRACKING_DURATION
     }
     /// Returns Epoch of previous realization
     pub fn last(&self) -> Epoch {
