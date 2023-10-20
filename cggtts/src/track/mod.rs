@@ -51,7 +51,7 @@ pub struct Track {
     pub frc: String,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum Error {
     #[error("invalid track format")]
     InvalidFormat,

@@ -38,16 +38,18 @@ impl std::str::FromStr for CommonViewClass {
 
 #[cfg(test)]
 mod test {
+    use super::CommonViewClass;
+    use std::str::FromStr;
     #[test]
     fn cv_class() {
         assert_eq!(format!("{:X}", CommonViewClass::MultiChannel), "FF");
         assert_eq!(format!("{:X}", CommonViewClass::SingleChannel), "99");
         assert_eq!(
-            CommonViewClas::from_str("FF"),
+            CommonViewClass::from_str("FF"),
             Ok(CommonViewClass::MultiChannel)
         );
         assert_eq!(
-            CommonViewClas::from_str("FF"),
+            CommonViewClass::from_str("FF"),
             Ok(CommonViewClass::MultiChannel)
         );
     }

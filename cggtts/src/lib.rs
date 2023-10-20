@@ -21,7 +21,7 @@
 //!     assert_eq!(cggtts.follows_bipm_specs(), true);
 //!     if let Some(track) = cggtts.tracks.first() {
 //!         let duration = track.duration;
-//!         let (refsys, srsys) = (track.refsys, track.srsys);
+//!         let (refsys, srsys) = (track.data.refsys, track.data.srsys);
 //!         assert_eq!(track.has_ionospheric_data(), false);
 //!         assert_eq!(track.follows_bipm_specs(), true);
 //!     }
@@ -38,7 +38,7 @@
 //!         .unwrap();
 //!     if let Some(track) = cggtts.tracks.first() {
 //!         assert_eq!(track.has_ionospheric_data(), true);
-//!         if let Some(iono) = track.ionospheric {
+//!         if let Some(iono) = track.iono {
 //!             let (msio, smsi, isg) = (iono.msio, iono.smsi, iono.isg);
 //!         }
 //!     }
@@ -49,9 +49,10 @@
 //! Use `to_string` to dump CGGTTS data
 //!
 //! ```
+//! use gnss_rs as gnss;
 //! use cggtts::{Rcvr, Cggtts};
 //! use cggtts::track::Track;
-//! use rinex::constellation::Constellation;
+//! use gnss::prelude::{Constellation, SV};
 //! use std::io::Write;
 //! fn main() {
 //!     let nb_channels = 16;
@@ -62,11 +63,27 @@
 //!         year: 2022,
 //!         release: String::from("V1"),
 //!     };
+//!
+//!     let rcvr = Rcvr.default()
+//!         .manufacturer("SEPTENTRIO")  
+//!         .recv_type("POLARRx5")
+//!         .serial_number("#12345")
+//!         .year(2023)
+//!         .release("v1");
+//!     }
+//!
+//!     let cggtts = Cggtts::default()
+//!         .lab_agency("AJACFR")
+//!         .receiver(rcvr)
+//!         .antenna_coordinates()
+//!         .time_reference(ReferenceTime::UTCk("MyLab"))
+//!         .reference_frame("ITRF")
+//!         
 //!     let mut cggtts = Cggtts::new(Some("MyAgency"), nb_channels, Some(hardware));
 //!     // add some tracks
 //!     // CGGTTS says we should set "99" as PRN when data
 //!     // is estimated from several space vehicules
-//!     let sv = rinex::sv::Sv {
+//!     let sv = SV {
 //!         constellation: Constellation::GPS,
 //!         prn: 99,
 //!     };
@@ -84,8 +101,12 @@
 //! - specify carrier dependent delays [see Delay]
 
 mod crc;
-mod time_system;
+mod rcvr;
+mod reference_time;
 mod version;
+
+#[cfg(test)]
+mod tests;
 
 pub mod delay;
 pub mod processing;
@@ -102,7 +123,8 @@ use crate::delay::{Delay, SystemDelay};
 use crate::track::CommonViewClass;
 use crate::track::Track;
 use gnss::prelude::{Constellation, SV};
-use time_system::TimeSystem;
+use rcvr::Rcvr;
+use reference_time::ReferenceTime;
 use version::Version;
 
 use scan_fmt::scan_fmt;
@@ -112,6 +134,7 @@ use scan_fmt::scan_fmt;
 extern crate serde;
 
 pub mod prelude {
+    pub use crate::rcvr::Rcvr;
     pub use crate::track::CommonViewClass;
     pub use crate::{track::Track, version::Version, Cggtts};
     pub use hifitime::prelude::Duration;
@@ -157,24 +180,6 @@ pub fn helmert_transform (v: (f64,f64,f64), h: HelmertCoefs) -> (f64,f64,f64)  
     let z = cz + (1.0 * h.s*1E-9) * (-ry*x +rx*y + z);
 }*/
 
-/// `Rcvr` describes a GNSS receiver
-/// (hardware). Used to describe the
-/// GNSS receiver or hardware used to evaluate IMS parameters
-#[derive(Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Rcvr {
-    /// Manufacturer of this hardware
-    pub manufacturer: String,
-    /// Type of receiver
-    pub recv_type: String,
-    /// Receiver's serial number
-    pub serial_number: String,
-    /// Receiver manufacturing year
-    pub year: u16,
-    /// Receiver software revision number
-    pub release: String,
-}
-
 #[derive(Clone, Copy, PartialEq, Debug, EnumString)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Code {
@@ -209,21 +214,6 @@ impl std::fmt::Display for Code {
     }
 }
 
-impl std::fmt::Display for Rcvr {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.write_str(&self.manufacturer)?;
-        fmt.write_str(" ")?;
-        fmt.write_str(&self.recv_type)?;
-        fmt.write_str(" ")?;
-        fmt.write_str(&self.serial_number)?;
-        fmt.write_str(" ")?;
-        fmt.write_str(&self.year.to_string())?;
-        fmt.write_str(" ")?;
-        fmt.write_str(&self.release)?;
-        Ok(())
-    }
-}
-
 #[cfg(feature = "serde")]
 mod point3d_formatter {
     pub fn serialize<S>(p: rust_3d::Point3D, serializer: S) -> Result<S::Ok, S::Error>
@@ -254,7 +244,7 @@ pub struct Cggtts {
     /// IMS Ionospheric Measurement System (if any)
     pub ims: Option<Rcvr>,
     /// Description of Reference time system (if any)
-    pub time_reference: TimeSystem,
+    pub time_reference: ReferenceTime,
     /// Reference frame, coordinates system and conversions,
     /// used in `coordinates` field
     pub reference_frame: Option<String>,
@@ -331,7 +321,7 @@ impl Default for Cggtts {
             tracks: Vec::new(),
             ims: None,
             reference_frame: None,
-            time_reference: TimeSystem::default(),
+            time_reference: ReferenceTime::default(),
             comments: None,
             delay: SystemDelay::new(),
         }
@@ -372,7 +362,7 @@ impl Cggtts {
     }
 
     /// Returns `Cggtts` with desired reference time system description
-    pub fn time_reference(&self, reference: TimeSystem) -> Self {
+    pub fn time_reference(&self, reference: ReferenceTime) -> Self {
         let mut c = self.clone();
         c.time_reference = reference;
         c
@@ -580,9 +570,11 @@ impl Cggtts {
         // init variables
         let mut system_delay = SystemDelay::new();
 
-        let mut cksum: u8 = crc::calc_crc(lines.next().ok_or(Error::CrcMissing)?)?;
+        //let mut cksum: u8 = crc::calc_crc(lines.next().ok_or(Error::CrcMissing)?)?;
+        let mut cksum = 0_u8;
 
         let mut line = lines.next().ok_or(Error::VersionFormatError)?;
+
         let mut release_date = Epoch::default();
         let mut nb_channels: u16 = 0;
         let mut rcvr: Option<Rcvr> = None;
@@ -590,7 +582,7 @@ impl Cggtts {
         let mut lab: Option<String> = None;
         let mut comments: Vec<String> = Vec::new();
         let mut reference_frame: Option<String> = None;
-        let mut time_reference = TimeSystem::default();
+        let mut time_reference = ReferenceTime::default();
         let (mut x, mut y, mut z): (f64, f64, f64) = (0.0, 0.0, 0.0);
 
         // VERSION must come first
@@ -702,7 +694,7 @@ impl Cggtts {
                 }
             } else if line.starts_with("REF = ") {
                 if let Some(s) = scan_fmt!(&line, "REF = {}", String) {
-                    time_reference = TimeSystem::from_str(&s)
+                    time_reference = ReferenceTime::from_str(&s)
                 }
             } else if line.contains("DLY = ") {
                 let items: Vec<&str> = line.split_ascii_whitespace().collect();
@@ -852,8 +844,11 @@ impl Cggtts {
                 break; // we're done parsing
             }
 
-            let track = Track::from_str(&line)?;
-            tracks.push(track)
+            //let track = Track::from_str(&line)?;
+            //tracks.push(track)
+            if let Ok(trk) = Track::from_str(&line) {
+                tracks.push(trk);
+            }
         }
 
         Ok(Cggtts {
@@ -1027,8 +1022,9 @@ impl std::fmt::Display for Cggtts {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
+    use crate::crc::calc_crc;
     #[test]
     fn test_crc() {
         let content = vec![
@@ -1046,22 +1042,6 @@ mod tests {
             )
         }
     }
-
-    #[test]
-    fn test_time_system() {
-        assert_eq!(TimeSystem::default(), TimeSystem::UTC);
-        assert_eq!(TimeSystem::from_str("TAI"), TimeSystem::TAI);
-        assert_eq!(TimeSystem::from_str("UTC"), TimeSystem::UTC);
-        assert_eq!(
-            TimeSystem::from_str("UTC(LAB)"),
-            TimeSystem::UTCk(String::from("LAB"), None)
-        );
-        assert_eq!(
-            TimeSystem::from_str("UTC(LAB, 10.0)"),
-            TimeSystem::UTCk(String::from("LAB"), Some(10.0))
-        );
-    }
-
     #[test]
     fn test_code() {
         assert_eq!(Code::default(), Code::C1);
