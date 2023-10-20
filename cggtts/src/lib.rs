@@ -136,6 +136,8 @@ extern crate serde;
 pub mod prelude {
     pub use crate::rcvr::Rcvr;
     pub use crate::track::CommonViewClass;
+    pub use crate::track::IonosphericData;
+    pub use crate::track::TrackData;
     pub use crate::{track::Track, version::Version, Cggtts};
     pub use hifitime::prelude::Duration;
     pub use hifitime::prelude::Epoch;
@@ -527,23 +529,14 @@ impl Cggtts {
         }
 
         if let Some(lab) = &self.lab {
-            res.push_str(&lab[0..2])
+            let max_offset = std::cmp::min(lab.len(), 2);
+            res.push_str(&lab[0..max_offset])
         } else {
             res.push_str("XX") // unknown lab
         }
 
         if let Some(rcvr) = &self.rcvr {
-            let sn = rcvr.serial_number.as_str();
-            if let Ok(d0) = u16::from_str_radix(&sn[0..0], 10) {
-                res.push_str(&d0.to_string());
-                if let Ok(d1) = u16::from_str_radix(&sn[1..1], 10) {
-                    res.push_str(&d1.to_string())
-                } else {
-                    res.push_str("_")
-                }
-            } else {
-                res.push_str("__")
-            }
+            res.push_str(&format!("{:x}", rcvr));
         } else {
             res.push_str("__")
         }
@@ -610,7 +603,7 @@ impl Cggtts {
                     String,
                     String,
                     String,
-                    String,
+                    u16,
                     String
                 ) {
                     (
@@ -620,13 +613,14 @@ impl Cggtts {
                         Some(year),
                         Some(release),
                     ) => {
-                        rcvr = Some(Rcvr {
-                            manufacturer,
-                            recv_type,
-                            serial_number,
-                            year: u16::from_str_radix(&year, 10)?,
-                            release,
-                        })
+                        rcvr = Some(
+                            Rcvr::default()
+                                .manufacturer(&manufacturer)
+                                .receiver(&recv_type)
+                                .serial_number(&serial_number)
+                                .year(year)
+                                .release(&release),
+                        );
                     },
                     _ => {},
                 }
@@ -642,7 +636,7 @@ impl Cggtts {
                     String,
                     String,
                     String,
-                    String,
+                    u16,
                     String
                 ) {
                     (
@@ -652,13 +646,14 @@ impl Cggtts {
                         Some(year),
                         Some(release),
                     ) => {
-                        ims = Some(Rcvr {
-                            manufacturer,
-                            recv_type,
-                            serial_number,
-                            year: u16::from_str_radix(&year, 10)?,
-                            release,
-                        })
+                        ims = Some(
+                            Rcvr::default()
+                                .manufacturer(&manufacturer)
+                                .receiver(&recv_type)
+                                .serial_number(&serial_number)
+                                .year(year)
+                                .release(&release),
+                        );
                     },
                     _ => {},
                 }
@@ -898,7 +893,7 @@ impl std::fmt::Display for Cggtts {
         content.push_str(&line);
 
         if let Some(rcvr) = &self.rcvr {
-            content.push_str(&format!("RCVR = {}\n", rcvr));
+            content.push_str(&format!("RCVR = {:X}\n", rcvr));
         } else {
             content.push_str("RCVR = RRRRRRRR\n")
         }
@@ -907,7 +902,7 @@ impl std::fmt::Display for Cggtts {
         content.push_str(&line);
 
         if let Some(ims) = &self.ims {
-            content.push_str(&format!("RCVR = {}\n", ims));
+            content.push_str(&format!("RCVR = {:X}\n", ims));
         } else {
             content.push_str("IMS = 99999\n")
         }

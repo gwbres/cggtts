@@ -29,7 +29,7 @@ impl ReferenceTime {
         } else if lower.eq("utc") {
             Self::UTC
         } else if let Some(lab) = scan_fmt!(s, "UTC({})", String) {
-            Self::UTCk(lab)
+            Self::UTCk(lab.trim().to_string())
         } else {
             Self::Custom(s.to_string())
         }
@@ -39,8 +39,8 @@ impl ReferenceTime {
 impl From<TimeScale> for ReferenceTime {
     fn from(ts: TimeScale) -> Self {
         match ts {
-            Self::UTC => Self::UTC,
-            Self::TAI => Self::TAI,
+            TimeScale::UTC => Self::UTC,
+            TimeScale::TAI => Self::TAI,
             _ => Self::TAI, /* incorrect usage */
         }
     }
@@ -67,11 +67,7 @@ mod test {
         assert_eq!(ReferenceTime::from_str("TAI"), ReferenceTime::TAI);
         assert_eq!(ReferenceTime::from_str("UTC"), ReferenceTime::UTC);
         assert_eq!(
-            ReferenceTime::from_str("UTC(LAB)"),
-            ReferenceTime::UTCk(String::from("LAB"), None)
-        );
-        assert_eq!(
-            ReferenceTime::from_str("UTC(LAB, 10.0)"),
+            ReferenceTime::from_str("UTC(LAB )"),
             ReferenceTime::UTCk(String::from("LAB"))
         );
     }

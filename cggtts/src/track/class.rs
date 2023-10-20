@@ -5,10 +5,11 @@ use crate::track::Error;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Default, Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CommonViewClass {
     /// Single Channel
+    #[default]
     SingleChannel,
     /// Multi Channel
     MultiChannel,

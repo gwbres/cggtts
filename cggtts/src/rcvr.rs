@@ -1,5 +1,5 @@
 /// GNSS Receiver description
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Rcvr {
     /// Manufacturer of this hardware
@@ -42,17 +42,24 @@ impl Rcvr {
     }
 }
 
-impl std::fmt::Display for Rcvr {
+impl std::fmt::UpperHex for Rcvr {
+    /*
+     * Formats Self as in file Header
+     */
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.write_str(&self.manufacturer)?;
-        fmt.write_str(" ")?;
-        fmt.write_str(&self.recv_type)?;
-        fmt.write_str(" ")?;
-        fmt.write_str(&self.serial_number)?;
-        fmt.write_str(" ")?;
-        fmt.write_str(&self.year.to_string())?;
-        fmt.write_str(" ")?;
-        fmt.write_str(&self.release)?;
-        Ok(())
+        fmt.write_str(&format!(
+            "{} {} {} {} {}",
+            self.manufacturer, self.recv_type, self.serial_number, self.year, self.release
+        ))
+    }
+}
+
+impl std::fmt::LowerHex for Rcvr {
+    /*
+     * Formats Self as used in file name generation
+     */
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let max_offset = std::cmp::min(self.serial_number.len(), 2);
+        fmt.write_str(&self.serial_number[0..max_offset])
     }
 }

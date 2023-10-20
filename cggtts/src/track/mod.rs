@@ -6,7 +6,7 @@ mod glonass;
 use glonass::GlonassChannel;
 
 mod iono;
-use iono::IonosphericData;
+pub use iono::IonosphericData;
 
 mod scheduler;
 pub use scheduler::TrackScheduler;
@@ -24,7 +24,7 @@ const TRACK_WITH_IONOSPHERIC: usize = 24;
 const TRACK_WITHOUT_IONOSPHERIC: usize = 21;
 
 /// A `Track` is a `Cggtts` measurement
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Track {
     /// Common View Class (Single/Multi channel)
     pub class: CommonViewClass,
@@ -70,7 +70,7 @@ pub enum Error {
 }
 
 /// Track (clock) data
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TrackData {
     /// REFSV field
