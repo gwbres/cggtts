@@ -59,3 +59,24 @@ impl Default for GlonassChannel {
         Self::Unknown
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+    use crate::track::GlonassChannel;
+    use gnss::prelude::{Constellation, SV};
+    use hifitime::Duration;
+    use std::str::FromStr;
+    #[test]
+    fn glonass_test() {
+        let c = GlonassChannel::Unknown;
+        assert_eq!(c.to_string(), "00");
+        let c = GlonassChannel::Channel(1);
+        assert_eq!(c.to_string(), "01");
+        let c = GlonassChannel::Channel(10);
+        assert_eq!(c.to_string(), "0A");
+        assert_eq!(c, GlonassChannel::Channel(10));
+        assert_eq!(c != GlonassChannel::Unknown, true);
+        assert_eq!(GlonassChannel::default(), GlonassChannel::Unknown);
+    }
+}

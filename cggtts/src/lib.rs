@@ -70,24 +70,46 @@
 //!         .serial_number("#12345")
 //!         .year(2023)
 //!         .release("v1");
-//!     }
 //!
 //!     let cggtts = Cggtts::default()
 //!         .lab_agency("AJACFR")
 //!         .receiver(rcvr)
 //!         .antenna_coordinates()
-//!         .time_reference(ReferenceTime::UTCk("MyLab"))
-//!         .reference_frame("ITRF")
+//!         .time_reference(ReferenceTime::UTCk("LAB"))
+//!         .reference_frame("ITRF");
 //!         
-//!     let mut cggtts = Cggtts::new(Some("MyAgency"), nb_channels, Some(hardware));
 //!     // add some tracks
-//!     // CGGTTS says we should set "99" as PRN when data
-//!     // is estimated from several space vehicules
-//!     let sv = SV {
-//!         constellation: Constellation::GPS,
-//!         prn: 99,
+//!     // TrackData is mandatory
+//!     let data = TrackData {
+//!         refsv: 0.0_f64,
+//!         srsv: 0.0_f64,
+//!         refsys: 0.0_f64,
+//!         srsys: 0.0_f64,
+//!         dsg: 0.0_f64,
+//!         ioe: 0_u16,
+//!         dsg: 0.0_f64,
+//!         smdt: 0.0_f64,
+//!         mdtr: 0.0_f64,
+//!         mdio: 0.0_f64,
+//!         smdi: 0.0_f64,
 //!     };
-//!     let mut track = Track::default();
+//!     // receiver channel being used
+//!     let rcvr_channel = 0_u8;
+//!
+//!     // option 1: track resulting from a single SV observation
+//!     let track = Track::new_sv(
+//!         sv,
+//!         epoch,
+//!         duration,
+//!         CommonViewClass::SingleChannel,
+//!         elevation,
+//!         azimuth,
+//!         data,
+//!         None,
+//!         rcvr_channel,
+//!         frc,
+//!     );
+
 //!     cggtts.tracks.push(track);
 //!     let mut fd = std::fs::File::create("output.cggtts") // does not respect naming conventions
 //!         .unwrap();
@@ -135,6 +157,7 @@ extern crate serde;
 
 pub mod prelude {
     pub use crate::rcvr::Rcvr;
+    pub use crate::reference_time::ReferenceTime;
     pub use crate::track::CommonViewClass;
     pub use crate::track::IonosphericData;
     pub use crate::track::TrackData;

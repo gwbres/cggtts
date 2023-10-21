@@ -225,41 +225,35 @@ impl Track {
     pub fn uses_constellation(&self, c: Constellation) -> bool {
         self.sv.constellation == c
     }
-
     /// Returns True if Self follows BIPM specifications / requirements,
     /// in terms of tracking pursuit
     pub fn follows_bipm_specs(&self) -> bool {
         self.duration == Duration::from_seconds(780.0)
     }
-
     /// Returns a `Track` with desired unique space vehicule
     pub fn with_sv(&self, sv: SV) -> Self {
         let mut t = self.clone();
         t.sv = sv.clone();
         t
     }
-
     /// Returns a track with desired elevation angle in Degrees
     pub fn with_elevation(&self, elevation: f64) -> Self {
         let mut t = self.clone();
         t.elevation = elevation;
         t
     }
-
     /// Returns a `Track` with given azimuth angle in Degrees, at tracking midpoint
     pub fn with_azimuth(&self, azimuth: f64) -> Self {
         let mut t = self.clone();
         t.azimuth = azimuth;
         t
     }
-
     /// Returns a `Track` with desired Frequency carrier code
     pub fn with_carrier_code(&self, code: &str) -> Self {
         let mut t = self.clone();
         t.frc = code.to_string();
         t
     }
-
     /// Returns true if Self comes with Ionospheric parameter estimates
     pub fn has_ionospheric_data(&self) -> bool {
         self.iono.is_some()
@@ -573,7 +567,14 @@ impl std::str::FromStr for Track {
 
 #[cfg(test)]
 mod tests {
-    use super::GlonassChannel;
+    use crate::prelude::*;
+    use crate::track::GlonassChannel;
+    use gnss::prelude::{Constellation, SV};
+    use hifitime::Duration;
+    use std::str::FromStr;
+    //use cggtts::prelude::IonosphericData;
+    //use cggtts::prelude::CommonViewClass;
+    //use cggtts::prelude::Track;
     #[test]
     fn test_glonass_channel() {
         let c = GlonassChannel::Unknown;
@@ -585,5 +586,131 @@ mod tests {
         assert_eq!(c, GlonassChannel::Channel(10));
         assert_eq!(c != GlonassChannel::Unknown, true);
         assert_eq!(GlonassChannel::default(), GlonassChannel::Unknown);
+    }
+    #[test]
+    fn basic_parser() {
+        let content =
+"G99 99 59568 001000 0780 099 0099 +9999999999 +99999       +1536   +181   26 999 9999 +999 9999 +999 00 00 L1C D3";
+        let track = Track::from_str(content);
+        assert_eq!(track.is_ok(), true);
+        let track = track.unwrap();
+        assert_eq!(
+            track.sv,
+            SV {
+                constellation: Constellation::GPS,
+                prn: 99
+            }
+        );
+        assert_eq!(track.class, CommonViewClass::SingleChannel);
+        assert_eq!(track.follows_bipm_specs(), true);
+        assert_eq!(track.duration, Duration::from_seconds(780.0));
+        assert_eq!(track.has_ionospheric_data(), false);
+        assert_eq!(track.elevation, 9.9);
+        assert_eq!(track.azimuth, 9.9);
+        assert_eq!(track.fr, GlonassChannel::Unknown);
+        assert!((track.data.dsg - 2.5E-9).abs() < 1E-6);
+        assert!((track.data.srsys - 2.83E-11).abs() < 1E-6);
+        assert_eq!(track.hc, 0);
+        assert_eq!(track.frc, "L1C");
+        let dumped = track.to_string();
+        assert_eq!(content.to_owned(), dumped);
+
+        let content =
+"G99 99 59563 001400 0780 099 0099 +9999999999 +99999       +1588  +1027   27 999 9999 +999 9999 +999 00 00 L1C EA";
+        let track = Track::from_str(content);
+        assert_eq!(track.is_ok(), true);
+        let track = track.unwrap();
+        assert_eq!(
+            track.sv,
+            SV {
+                constellation: Constellation::GPS,
+                prn: 99
+            }
+        );
+        assert_eq!(track.class, CommonViewClass::SingleChannel);
+        assert_eq!(track.follows_bipm_specs(), true);
+        assert_eq!(track.duration, Duration::from_seconds(780.0));
+        assert_eq!(track.has_ionospheric_data(), false);
+        assert_eq!(track.elevation, 9.9);
+        assert_eq!(track.azimuth, 9.9);
+        assert_eq!(track.fr, GlonassChannel::Unknown);
+        assert_eq!(track.hc, 0);
+        assert_eq!(track.frc, "L1C");
+        let dumped = track.to_string();
+        assert_eq!(content.to_owned(), dumped);
+
+        let content =
+"G99 99 59563 232200 0780 099 0099 +9999999999 +99999       +1529   -507   23 999 9999 +999 9999 +999 00 00 L1C D9";
+        let track = Track::from_str(content);
+        assert_eq!(track.is_ok(), true);
+        let track = track.unwrap();
+        assert_eq!(track.class, CommonViewClass::SingleChannel);
+        assert_eq!(track.follows_bipm_specs(), true);
+        assert_eq!(track.duration, Duration::from_seconds(780.0));
+        assert_eq!(track.has_ionospheric_data(), false);
+        assert_eq!(track.elevation, 9.9);
+        assert_eq!(track.azimuth, 9.9);
+        assert_eq!(track.fr, GlonassChannel::Unknown);
+        assert_eq!(track.hc, 0);
+        assert_eq!(track.frc, "L1C");
+        let dumped = track.to_string();
+        assert_eq!(content.to_owned(), dumped);
+
+        let content =
+"G99 99 59567 001400 0780 099 0099 +9999999999 +99999       +1561   -151   27 999 9999 +999 9999 +999 00 00 L1C D4";
+        let track = Track::from_str(content);
+        assert_eq!(track.is_ok(), true);
+        let track = track.unwrap();
+        assert_eq!(
+            track.sv,
+            SV {
+                constellation: Constellation::GPS,
+                prn: 99
+            }
+        );
+        assert_eq!(track.class, CommonViewClass::SingleChannel);
+        //assert_eq!(track.trktime 043400)
+        assert_eq!(track.follows_bipm_specs(), true);
+        assert_eq!(track.duration, Duration::from_seconds(780.0));
+        assert_eq!(track.has_ionospheric_data(), false);
+        assert_eq!(track.elevation, 9.9);
+        assert_eq!(track.azimuth, 9.9);
+        assert_eq!(track.fr, GlonassChannel::Unknown);
+        assert_eq!(track.hc, 0);
+        assert_eq!(track.frc, "L1C");
+        let dumped = track.to_string();
+        assert_eq!(content.to_owned(), dumped);
+    }
+    #[test]
+    fn parser_ionospheric() {
+        let content =
+"R24 FF 57000 000600 0780 347 0394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P EF";
+        let track = Track::from_str(content);
+        assert_eq!(track.is_ok(), true);
+        let track = track.unwrap();
+        assert_eq!(track.class, CommonViewClass::MultiChannel);
+        assert_eq!(track.follows_bipm_specs(), true);
+        assert_eq!(track.duration, Duration::from_seconds(780.0));
+        assert_eq!(track.has_ionospheric_data(), true);
+        let iono = track.iono.unwrap();
+        assert_eq!(iono.msio, 23.0E-10);
+        assert_eq!(iono.smsi, -1.0E-13);
+        assert_eq!(iono.isg, 29.0E-10);
+        assert_eq!(track.elevation, 34.7);
+        assert!((track.azimuth - 39.4).abs() < 1E-6);
+        assert_eq!(track.fr, GlonassChannel::Channel(2));
+        assert_eq!(track.hc, 0);
+        assert_eq!(track.frc, "L3P");
+    }
+    #[test]
+    fn test_ionospheric_data() {
+        let data: IonosphericData = (1E-9, 1E-13, 1E-10).into();
+        assert_eq!(data.msio, 1E-9);
+        assert_eq!(data.smsi, 1E-13);
+        assert_eq!(data.isg, 1E-10);
+        let (msio, smsi, isg): (f64, f64, f64) = data.into();
+        assert_eq!(msio, data.msio);
+        assert_eq!(smsi, data.smsi);
+        assert_eq!(isg, data.isg);
     }
 }
