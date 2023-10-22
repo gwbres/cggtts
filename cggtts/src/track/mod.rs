@@ -25,6 +25,7 @@ const TRACK_WITHOUT_IONOSPHERIC: usize = 21;
 
 /// A `Track` is a `Cggtts` measurement
 #[derive(Debug, Default, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Track {
     /// Common View Class (Single/Multi channel)
     pub class: CommonViewClass,
@@ -267,7 +268,7 @@ impl std::fmt::Display for Track {
         let mjd = self.epoch.to_mjd_utc_days();
         let (_, _, _, h, m, s, _) = self.epoch.to_gregorian_utc();
         string.push_str(&format!(
-            "{} {:X} {} {:02}{:02}:{:02}",
+            "{} {:X} {} {:02}{:02}{:02} ",
             self.sv,
             self.class,
             mjd.floor() as u32,
@@ -439,6 +440,8 @@ impl std::str::FromStr for Track {
         let mut epoch = Epoch::default();
         let mut items = cleanedup.split_ascii_whitespace();
 
+        let nb_items = items.clone().count();
+
         let sv = SV::from_str(
             items
                 .next()
@@ -483,8 +486,6 @@ impl std::str::FromStr for Track {
         epoch = epoch + (m as f64) * Unit::Minute;
         epoch = epoch + (s as f64) * Unit::Second;
 
-        let nb_items = items.clone().count();
-
         let duration = Duration::from_seconds(
             items
                 .next()
@@ -507,7 +508,6 @@ impl std::str::FromStr for Track {
             .map_err(|_| Error::FieldParsing(String::from("AZTH")))?
             * 0.1;
 
-        //let (data, iono, hc, frc, ck) = match items.count() {
         let (data, iono) = match nb_items {
             TRACK_WITH_IONOSPHERIC => parse_with_iono(&mut items)?,
             TRACK_WITHOUT_IONOSPHERIC => parse_without_iono(&mut items)?,
@@ -537,9 +537,9 @@ impl std::str::FromStr for Track {
         // checksum
         let ck = items
             .next()
-            .ok_or(Error::MissingField(String::from("ck")))?
-            .parse::<u8>()
-            .map_err(|_| Error::FieldParsing(String::from("ck")))?;
+            .ok_or(Error::MissingField(String::from("ck")))?;
+
+        let ck = u8::from_str_radix(ck, 16).map_err(|_| Error::FieldParsing(String::from("ck")))?;
 
         // let cksum = calc_crc(&line.split_at(end_pos - 1).0)?;
 
@@ -579,11 +579,11 @@ mod tests {
     fn test_glonass_channel() {
         let c = GlonassChannel::Unknown;
         assert_eq!(c.to_string(), "00");
-        let c = GlonassChannel::Channel(1);
+        let c = GlonassChannel::ChanNum(1);
         assert_eq!(c.to_string(), "01");
-        let c = GlonassChannel::Channel(10);
+        let c = GlonassChannel::ChanNum(10);
         assert_eq!(c.to_string(), "0A");
-        assert_eq!(c, GlonassChannel::Channel(10));
+        assert_eq!(c, GlonassChannel::ChanNum(10));
         assert_eq!(c != GlonassChannel::Unknown, true);
         assert_eq!(GlonassChannel::default(), GlonassChannel::Unknown);
     }
@@ -636,6 +636,7 @@ mod tests {
         assert_eq!(track.fr, GlonassChannel::Unknown);
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
+
         let dumped = track.to_string();
         assert_eq!(content.to_owned(), dumped);
 
@@ -686,7 +687,7 @@ mod tests {
         let content =
 "R24 FF 57000 000600 0780 347 0394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P EF";
         let track = Track::from_str(content);
-        assert_eq!(track.is_ok(), true);
+        //assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
         assert_eq!(track.class, CommonViewClass::MultiChannel);
         assert_eq!(track.follows_bipm_specs(), true);
@@ -698,7 +699,7 @@ mod tests {
         assert_eq!(iono.isg, 29.0E-10);
         assert_eq!(track.elevation, 34.7);
         assert!((track.azimuth - 39.4).abs() < 1E-6);
-        assert_eq!(track.fr, GlonassChannel::Channel(2));
+        assert_eq!(track.fr, GlonassChannel::ChanNum(2));
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L3P");
     }

@@ -5,20 +5,21 @@ use crate::track::Error;
 
 /// Describes Glonass Frequency channel,
 /// in case this `Track` was estimated using Glonass
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, PartialEq, Copy, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GlonassChannel {
     /// Default value when not using Glonass constellation
+    #[default]
     Unknown,
     /// Glonass Frequency channel number
-    Channel(u8),
+    ChanNum(u8),
 }
 
 impl std::fmt::Display for GlonassChannel {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             GlonassChannel::Unknown => write!(fmt, "00"),
-            GlonassChannel::Channel(c) => write!(fmt, "{:02X}", c),
+            GlonassChannel::ChanNum(c) => write!(fmt, "{:02X}", c),
         }
     }
 }
@@ -26,37 +27,15 @@ impl std::fmt::Display for GlonassChannel {
 impl std::str::FromStr for GlonassChannel {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.eq("0") {
+        let ch = s
+            .trim()
+            .parse::<u8>()
+            .map_err(|_| Error::FieldParsing(String::from("FR")))?;
+        if ch == 0 {
             Ok(Self::Unknown)
         } else {
-            let ch = s
-                .trim()
-                .parse::<u8>()
-                .map_err(|_| Error::FieldParsing(String::from("FR")))?;
-            Ok(Self::Channel(ch))
+            Ok(Self::ChanNum(ch))
         }
-    }
-}
-
-impl PartialEq for GlonassChannel {
-    fn eq(&self, rhs: &Self) -> bool {
-        match self {
-            GlonassChannel::Unknown => match rhs {
-                GlonassChannel::Unknown => true,
-                _ => false,
-            },
-            GlonassChannel::Channel(c0) => match rhs {
-                GlonassChannel::Channel(c1) => c0 == c1,
-                _ => false,
-            },
-        }
-    }
-}
-
-impl Default for GlonassChannel {
-    /// Default Glonass Channel is `Unknown`
-    fn default() -> Self {
-        Self::Unknown
     }
 }
 
@@ -68,15 +47,15 @@ mod tests {
     use hifitime::Duration;
     use std::str::FromStr;
     #[test]
-    fn glonass_test() {
-        let c = GlonassChannel::Unknown;
-        assert_eq!(c.to_string(), "00");
-        let c = GlonassChannel::Channel(1);
-        assert_eq!(c.to_string(), "01");
-        let c = GlonassChannel::Channel(10);
-        assert_eq!(c.to_string(), "0A");
-        assert_eq!(c, GlonassChannel::Channel(10));
-        assert_eq!(c != GlonassChannel::Unknown, true);
-        assert_eq!(GlonassChannel::default(), GlonassChannel::Unknown);
+    fn glonass_chx() {
+        for (value, expected) in vec![
+            (GlonassChannel::Unknown, "00"),
+            (GlonassChannel::ChanNum(1), "01"),
+            (GlonassChannel::ChanNum(9), "09"),
+            (GlonassChannel::ChanNum(10), "0A"),
+            (GlonassChannel::ChanNum(11), "0B"),
+        ] {
+            assert_eq!(value.to_string(), expected);
+        }
     }
 }

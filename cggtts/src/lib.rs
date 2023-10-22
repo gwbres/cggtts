@@ -50,35 +50,32 @@
 //!
 //! ```
 //! use gnss_rs as gnss;
-//! use cggtts::{Rcvr, Cggtts};
+//! use cggtts::prelude::*;
+//! use cggtts::Coordinates;
 //! use cggtts::track::Track;
 //! use gnss::prelude::{Constellation, SV};
 //! use std::io::Write;
 //! fn main() {
-//!     let nb_channels = 16;
-//!     let hardware = Rcvr {
-//!         manufacturer: String::from("GoodManufacturer"),
-//!         recv_type: String::from("Unknown"),
-//!         serial_number: String::from("1234"),
-//!         year: 2022,
-//!         release: String::from("V1"),
-//!     };
-//!
-//!     let rcvr = Rcvr.default()
+//!     let rcvr = Rcvr::default()
 //!         .manufacturer("SEPTENTRIO")  
-//!         .recv_type("POLARRx5")
+//!         .receiver("POLARRx5")
 //!         .serial_number("#12345")
 //!         .year(2023)
 //!         .release("v1");
 //!
-//!     let cggtts = Cggtts::default()
+//!     let mut cggtts = Cggtts::default()
 //!         .lab_agency("AJACFR")
 //!         .receiver(rcvr)
-//!         .antenna_coordinates()
-//!         .time_reference(ReferenceTime::UTCk("LAB"))
+//!         .apc_coordinates(Coordinates {
+//!             x: 0.0_f64,
+//!             y: 0.0_f64,
+//!             z: 0.0_f64,
+//!         })
+//!         .time_reference(ReferenceTime::UTCk("LAB".to_string()))
 //!         .reference_frame("ITRF");
 //!         
 //!     // add some tracks
+//!
 //!     // TrackData is mandatory
 //!     let data = TrackData {
 //!         refsv: 0.0_f64,
@@ -87,12 +84,18 @@
 //!         srsys: 0.0_f64,
 //!         dsg: 0.0_f64,
 //!         ioe: 0_u16,
-//!         dsg: 0.0_f64,
 //!         smdt: 0.0_f64,
 //!         mdtr: 0.0_f64,
 //!         mdio: 0.0_f64,
 //!         smdi: 0.0_f64,
 //!     };
+//!
+//!     // tracking parameters
+//!     let epoch = Epoch::default();
+//!     let sv = SV::default();
+//!     let (elevation, azimuth) = (0.0_f64, 0.0_f64);
+//!     let duration = Duration::from_seconds(780.0);
+//!
 //!     // receiver channel being used
 //!     let rcvr_channel = 0_u8;
 //!
@@ -107,7 +110,7 @@
 //!         data,
 //!         None,
 //!         rcvr_channel,
-//!         frc,
+//!         "L1C",
 //!     );
 
 //!     cggtts.tracks.push(track);
@@ -154,6 +157,14 @@ use scan_fmt::scan_fmt;
 #[cfg(feature = "serde")]
 #[macro_use]
 extern crate serde;
+
+#[derive(PartialEq, Debug, Clone, Copy, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Coordinates {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
 
 pub mod prelude {
     pub use crate::rcvr::Rcvr;
@@ -239,21 +250,11 @@ impl std::fmt::Display for Code {
     }
 }
 
-#[cfg(feature = "serde")]
-mod point3d_formatter {
-    pub fn serialize<S>(p: rust_3d::Point3D, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let s = format!("{},{},{}", p.x, p.y, p.z);
-        serializer.serialize_str(&s)
-    }
-}
-
-/// `Cggtts` structure comprises
-/// a measurement system and
-/// and its Common View realizations (`tracks`)
+/// CGGTTS structure to store a list of comparison, between a
+/// local clock and a reference time. Common view time transfer is then achieved
+/// by exchanging CGGTTS data between two remote sites that used the same reference time.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Cggtts {
     /// CGGTTS release used in this file.
     /// We currently only support 2E (latest)
@@ -275,17 +276,14 @@ pub struct Cggtts {
     pub reference_frame: Option<String>,
     /// Antenna phase center coordinates [m]
     /// in `ITFR`, `ECEF` or other spatial systems
-    //#[cfg_attr(feature = "serde", serde(with = "point3d_formatter"))]
-    pub coordinates: rust_3d::Point3D,
+    pub apc_coordinates: Coordinates,
     /// Comments (if any..)
     pub comments: Option<Vec<String>>,
     /// Describes the measurement systems delay.
-    /// Refer to [Delay] enum,
-    /// to understand their meaning.
-    /// Refer to [SystemDelay] and [CalibratedDelay] to understand
+    /// Refer to [Delay] enum. Refer to [SystemDelay] and [CalibratedDelay] to understand
     /// how to specify the measurement systems delay.
     pub delay: SystemDelay,
-    /// Tracks: actual measurements / realizations
+    /// Tracks: list of successive measurements
     pub tracks: Vec<Track>,
 }
 
@@ -337,11 +335,7 @@ impl Default for Cggtts {
             release_date: Epoch::from_gregorian_utc_at_midnight(2014, 02, 20), /* latest rev. */
             lab: None,
             nb_channels: 0,
-            coordinates: rust_3d::Point3D {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
+            apc_coordinates: Coordinates::default(),
             rcvr: None,
             tracks: Vec::new(),
             ims: None,
@@ -378,14 +372,13 @@ impl Cggtts {
         c.ims = Some(ims);
         c
     }
-    /// Returns Self but with desired antenna phase center
-    /// coordinates, coordinates should be in IRTF meters.
-    pub fn antenna_coordinates(&self, coords: rust_3d::Point3D) -> Self {
+    /// Returns Self but with desired APC coordinates.
+    /// Coordinates should be expressed in ITRF [m].
+    pub fn apc_coordinates(&self, apc: Coordinates) -> Self {
         let mut c = self.clone();
-        c.coordinates = coords;
+        c.apc_coordinates = apc;
         c
     }
-
     /// Returns `Cggtts` with desired reference time system description
     pub fn time_reference(&self, reference: ReferenceTime) -> Self {
         let mut c = self.clone();
@@ -598,6 +591,7 @@ impl Cggtts {
         let mut lab: Option<String> = None;
         let mut comments: Vec<String> = Vec::new();
         let mut reference_frame: Option<String> = None;
+        let mut apc_coordinates = Coordinates::default();
         let mut time_reference = ReferenceTime::default();
         let (mut x, mut y, mut z): (f64, f64, f64) = (0.0, 0.0, 0.0);
 
@@ -687,17 +681,23 @@ impl Cggtts {
                 }
             } else if line.starts_with("X = ") {
                 match scan_fmt!(&line, "X = {f}", f64) {
-                    Some(f) => x = f,
+                    Some(f) => {
+                        apc_coordinates.x = f;
+                    },
                     _ => {},
                 }
             } else if line.starts_with("Y = ") {
                 match scan_fmt!(&line, "Y = {f}", f64) {
-                    Some(f) => y = f,
+                    Some(f) => {
+                        apc_coordinates.y = f;
+                    },
                     _ => {},
                 }
             } else if line.starts_with("Z = ") {
                 match scan_fmt!(&line, "Z = {f}", f64) {
-                    Some(f) => z = f,
+                    Some(f) => {
+                        apc_coordinates.z = f;
+                    },
                     _ => {},
                 }
             } else if line.starts_with("FRAME = ") {
@@ -877,7 +877,7 @@ impl Cggtts {
             ims,
             lab,
             reference_frame,
-            coordinates: rust_3d::Point3D { x, y, z },
+            apc_coordinates,
             comments: {
                 if comments.len() == 0 {
                     None
@@ -931,9 +931,9 @@ impl std::fmt::Display for Cggtts {
         }
 
         content.push_str(&format!("LAB = {}\n", self.nb_channels));
-        content.push_str(&format!("X = {}\n", self.coordinates.x));
-        content.push_str(&format!("Y = {}\n", self.coordinates.y));
-        content.push_str(&format!("Z = {}\n", self.coordinates.z));
+        content.push_str(&format!("X = {}\n", self.apc_coordinates.x));
+        content.push_str(&format!("Y = {}\n", self.apc_coordinates.y));
+        content.push_str(&format!("Z = {}\n", self.apc_coordinates.z));
 
         if let Some(r) = &self.reference_frame {
             content.push_str(&format!("FRAME = {}\n", r));
