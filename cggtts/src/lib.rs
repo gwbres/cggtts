@@ -352,6 +352,12 @@ impl Cggtts {
         c.lab = Some(lab.to_string());
         c
     }
+    /// Returns Self with desired "comments" field
+    pub fn comments(&self, comments: &str) -> Self {
+        let mut s = self.clone();
+        s.comments = Some(comments.to_string());
+        s
+    }
     /// Returns ̀Self with desired number of channels
     pub fn nb_channels(&self, ch: u16) -> Self {
         let mut c = self.clone();
