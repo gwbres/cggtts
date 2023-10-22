@@ -183,7 +183,7 @@ pub mod prelude {
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use lazy_static::lazy_static;
+// use lazy_static::lazy_static;
 
 /// Latest CGGTTS release : only version we truly support
 pub const CURRENT_RELEASE: &str = "2E";
@@ -278,7 +278,7 @@ pub struct Cggtts {
     /// in `ITFR`, `ECEF` or other spatial systems
     pub apc_coordinates: Coordinates,
     /// Comments (if any..)
-    pub comments: Option<Vec<String>>,
+    pub comments: Option<String>,
     /// Describes the measurement systems delay.
     /// Refer to [Delay] enum. Refer to [SystemDelay] and [CalibratedDelay] to understand
     /// how to specify the measurement systems delay.
@@ -300,9 +300,7 @@ pub enum Error {
     #[error("version format mismatch")]
     VersionFormatError,
     #[error("revision date format mismatch")]
-    RevisionDateFormatError,
-    #[error("failed to parse revision date")]
-    RevisionDateParsingError,
+    RevisionDateFormat,
     #[error("non supported revision \"{0}\"")]
     NonSupportedRevision(String),
     #[error("failed to parse \"{0}\" coordinates")]
@@ -559,11 +557,7 @@ impl Cggtts {
 
         if let Some(epoch) = self.epoch() {
             let mjd = epoch.to_mjd_utc_days();
-            res.push_str(&format!(
-                "{:02}.{:03}",
-                mjd.floor() as u32,
-                mjd.fract() as u32
-            ));
+            res.push_str(&format!("{:.3}", (mjd / 1000.0)));
         } else {
             res.push_str("YY.YYY")
         }
@@ -581,15 +575,14 @@ impl Cggtts {
 
         //let mut cksum: u8 = crc::calc_crc(lines.next().ok_or(Error::CrcMissing)?)?;
         let mut cksum = 0_u8;
-
-        let mut line = lines.next().ok_or(Error::VersionFormatError)?;
+        let mut header_ck = 0_u8;
 
         let mut release_date = Epoch::default();
         let mut nb_channels: u16 = 0;
         let mut rcvr: Option<Rcvr> = None;
         let mut ims: Option<Rcvr> = None;
         let mut lab: Option<String> = None;
-        let mut comments: Vec<String> = Vec::new();
+        let mut comments: Option<String> = None;
         let mut reference_frame: Option<String> = None;
         let mut apc_coordinates = Coordinates::default();
         let mut time_reference = ReferenceTime::default();
@@ -598,20 +591,21 @@ impl Cggtts {
         // VERSION must come first
         let version = lines.next().ok_or(Error::VersionFormatError)?;
 
-        let version = match scan_fmt!(&line, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
+        let version = match scan_fmt!(&version, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
             Some(version) => Version::from_str(&version)?,
             _ => return Err(Error::VersionFormatError),
         };
 
-        line = lines.next().ok_or(Error::FormatError)?;
-
         while let Some(mut line) = lines.next() {
+            println!("LINE : \"{}\"", line);
             if line.starts_with("REV DATE = ") {
                 match scan_fmt!(&line, "REV DATE = {d}-{d}-{d}", i32, u8, u8) {
                     (Some(y), Some(m), Some(d)) => {
                         release_date = Epoch::from_gregorian_utc_at_midnight(y, m, d);
                     },
-                    _ => {},
+                    _ => {
+                        return Err(Error::RevisionDateFormat);
+                    },
                 }
             } else if line.starts_with("RCVR = ") {
                 match scan_fmt!(
@@ -708,7 +702,7 @@ impl Cggtts {
             } else if line.starts_with("COMMENTS = ") {
                 let c = line.strip_prefix("COMMENTS =").unwrap().trim();
                 if !c.eq("NO COMMENTS") {
-                    comments.push(c.to_string())
+                    comments = Some(c.to_string());
                 }
             } else if line.starts_with("REF = ") {
                 if let Some(s) = scan_fmt!(&line, "REF = {}", String) {
@@ -818,7 +812,7 @@ impl Cggtts {
                     _ => {}, // non recognized delay type
                 };
             } else if line.starts_with("CKSUM = ") {
-                let _ck: u8 = match scan_fmt!(&line, "CKSUM = {x}", String) {
+                header_ck = match scan_fmt!(&line, "CKSUM = {x}", String) {
                     Some(s) => match u8::from_str_radix(&s, 16) {
                         Ok(hex) => hex,
                         _ => return Err(Error::ChecksumParsingError),
@@ -830,19 +824,15 @@ impl Cggtts {
                 let end_pos = line.find("= ").unwrap();
                 cksum = cksum.wrapping_add(crc::calc_crc(&line.split_at(end_pos + 2).0)?);
 
-                //if cksum != ck {
-                //    return Err(Error::ChecksumError(ck, cksum))
+                //if cksum != header_ck {
+                //    //return Err(Error::ChecksumError(crc::Error::ChecksumError(cksum, ck)));
                 //}
                 break;
             }
 
             // CRC
-            cksum = cksum.wrapping_add(crc::calc_crc(&line)?);
-
-            if let Some(l) = lines.next() {
-                line = l
-            } else {
-                break;
+            if !line.starts_with("COMMENTS = ") {
+                cksum = cksum.wrapping_add(crc::calc_crc(&line)?);
             }
         }
 
@@ -878,13 +868,7 @@ impl Cggtts {
             lab,
             reference_frame,
             apc_coordinates,
-            comments: {
-                if comments.len() == 0 {
-                    None
-                } else {
-                    Some(comments)
-                }
-            },
+            comments,
             delay: system_delay,
             time_reference,
             tracks,
@@ -942,7 +926,7 @@ impl std::fmt::Display for Cggtts {
         }
 
         if let Some(comments) = &self.comments {
-            content.push_str(&format!("COMMENTS = {}\n", comments[0].to_string()));
+            content.push_str(&format!("COMMENTS = {}\n", comments));
         } else {
             content.push_str("COMMENTS = NO COMMENTS\n")
         }
@@ -1042,24 +1026,7 @@ impl std::fmt::Display for Cggtts {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::crc::calc_crc;
-    #[test]
-    fn test_crc() {
-        let content = vec![
-            "R24 FF 57000 000600  780 347 394 +1186342 +0 163 +0 40 2 141 +22 23 -1 23 -1 29 +2 0 L3P",
-            "G99 99 59509 002200 0780 099 0099 +9999999999 +99999 +9999989831   -724    35 999 9999 +999 9999 +999 00 00 L1C"
-        ];
-        let expected = vec![0x0F, 0x71];
-        for i in 0..content.len() {
-            let ck = calc_crc(content[i]).unwrap();
-            let expect = expected[i];
-            assert_eq!(
-                ck, expect,
-                "Failed for \"{}\", expect \"{}\" but \"{}\" locally computed",
-                content[i], expect, ck
-            )
-        }
-    }
+    use std::path::Path;
     #[test]
     fn test_code() {
         assert_eq!(Code::default(), Code::C1);
@@ -1067,5 +1034,121 @@ mod test {
         assert_eq!(Code::from_str("P1").unwrap(), Code::P1);
         assert_eq!(Code::from_str("P2").unwrap(), Code::P2);
         assert_eq!(Code::from_str("E5a").unwrap(), Code::E5a);
+    }
+    #[test]
+    fn gzsy8259_568() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("data")
+            .join("standard")
+            .join("GZSY8259.568");
+
+        let fullpath = path.to_string_lossy().to_string();
+        let cggtts = Cggtts::from_file(&fullpath);
+        assert_eq!(cggtts.is_ok(), true);
+
+        let cggtts = cggtts.unwrap();
+
+        assert_eq!(
+            cggtts.release_date,
+            Epoch::from_gregorian_utc_at_midnight(2014, 02, 20),
+        );
+
+        assert_eq!(
+            cggtts.rcvr,
+            Some(
+                Rcvr::default()
+                    .manufacturer("GORGYTIMING")
+                    .receiver("SYREF25")
+                    .serial_number("18259999")
+                    .year(2018)
+                    .release("v00")
+            ),
+        );
+
+        assert_eq!(cggtts.lab, Some(String::from("SY82")));
+        assert_eq!(cggtts.nb_channels, 12);
+        assert_eq!(cggtts.ims, None);
+        assert_eq!(
+            cggtts.time_reference,
+            ReferenceTime::Custom(String::from("REF(SY82)"))
+        );
+        assert_eq!(cggtts.reference_frame, Some(String::from("ITRF")));
+        assert!((cggtts.apc_coordinates.x - 4314143.824).abs() < 1E-6);
+        assert!((cggtts.apc_coordinates.y - 452633.241).abs() < 1E-6);
+        assert!((cggtts.apc_coordinates.z - 4660711.385).abs() < 1E-6);
+        assert_eq!(cggtts.comments, None);
+        assert_eq!(cggtts.tracks.len(), 32);
+
+        let first = cggtts.tracks.first();
+        //assert_eq!(cggtts.delay.value(), 0.0);
+        assert_eq!(first.is_some(), true);
+        let first = first.unwrap();
+        assert_eq!(
+            first.sv,
+            SV {
+                constellation: Constellation::GPS,
+                prn: 99,
+            }
+        );
+
+        assert_eq!(cggtts.filename(), String::from("GSSY1859.568"));
+
+        let tracks: Vec<_> = cggtts.tracks().collect();
+        assert_eq!(tracks.len(), 32);
+
+        let _dumped = cggtts.to_string();
+        let _compare = std::fs::read_to_string(
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/standard/GZSY8259.568"),
+        )
+        .unwrap();
+    }
+    #[test]
+    fn rzsy8257_000() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("data")
+            .join("advanced")
+            .join("RZSY8257.000");
+
+        let fullpath = path.to_string_lossy().to_string();
+        let cggtts = Cggtts::from_file(&fullpath);
+        assert_eq!(cggtts.is_ok(), true);
+
+        let cggtts = cggtts.unwrap();
+        assert!(cggtts.rcvr.is_none());
+        assert!(cggtts.ims.is_none());
+        assert_eq!(
+            cggtts.apc_coordinates,
+            Coordinates {
+                x: 4027881.79,
+                y: 306998.67,
+                z: 4919499.36,
+            }
+        );
+        assert!(cggtts.comments.is_none());
+        assert_eq!(cggtts.lab, Some(String::from("ABC")));
+        assert_eq!(cggtts.nb_channels, 12);
+
+        assert_eq!(cggtts.delay.rf_cable_delay, 237.0);
+        assert_eq!(cggtts.delay.ref_delay, 149.6);
+        assert_eq!(cggtts.delay.delays.len(), 2);
+        assert_eq!(cggtts.delay.delays[0], (Code::C1, Delay::Internal(53.9)));
+
+        let total = cggtts.delay.total_delay(Code::C1);
+        assert_eq!(total.is_some(), true);
+        assert_eq!(total.unwrap(), 53.9 + 237.0 + 149.6);
+
+        assert_eq!(cggtts.delay.delays[1], (Code::C2, Delay::Internal(49.8)));
+        let total = cggtts.delay.total_delay(Code::C2);
+        assert_eq!(total.is_some(), true);
+        assert_eq!(total.unwrap(), 49.8 + 237.0 + 149.6);
+
+        let cal_id = cggtts.delay.cal_id.clone();
+        assert_eq!(cal_id.is_some(), true);
+        assert_eq!(cal_id.unwrap(), String::from("1nnn-yyyy"));
+
+        let tracks: Vec<_> = cggtts.tracks().collect();
+        assert_eq!(tracks.len(), 4);
     }
 }

@@ -1,4 +1,4 @@
-use crate::crc::{calc_crc, Error as CrcError};
+use crate::crc::calc_crc; //Error as CrcError};
 use format_num::NumberFormat;
 use thiserror::Error;
 

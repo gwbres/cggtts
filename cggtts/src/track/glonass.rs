@@ -41,11 +41,7 @@ impl std::str::FromStr for GlonassChannel {
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
     use crate::track::GlonassChannel;
-    use gnss::prelude::{Constellation, SV};
-    use hifitime::Duration;
-    use std::str::FromStr;
     #[test]
     fn glonass_chx() {
         for (value, expected) in vec![

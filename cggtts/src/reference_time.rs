@@ -60,7 +60,6 @@ impl std::fmt::Display for ReferenceTime {
 #[cfg(test)]
 mod test {
     use super::ReferenceTime;
-    use std::str::FromStr;
     #[test]
     fn from_str() {
         assert_eq!(ReferenceTime::default(), ReferenceTime::UTC);

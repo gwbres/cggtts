@@ -1,5 +1,9 @@
 //! CGGTTS Track scheduler
-use hifitime::{Duration, Epoch, Unit};
+use hifitime::{
+    //Duration,
+    Epoch,
+    Unit,
+};
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, PartialOrd, Hash)]
 pub struct TrackScheduler {
