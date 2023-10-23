@@ -40,9 +40,9 @@ pub struct TrackScheduler {
     /* gnss solver */
     solver: Solver,
     /// Tracking mode
-    pub mode: TrackingMode,
+    mode: TrackingMode,
     /// Tracking duration, by default we use TrackScheduler::BIPM_TRACKING_DURATION
-    pub mode: Duration, 
+    trk_duration: Duration, 
 }
 
 impl TrackScheduler {
@@ -108,17 +108,12 @@ impl TrackScheduler {
     /// Returns new Track if a new track can now be formed.
     /// A new CGGTTSTrack can be formed if SV was tracked for BIPM_TRACKING_DURATION without interruption.
     pub fn track(&mut self, t: Epoch, sv: SV, code: &Observable, pr: f64) -> Option<Track> {
-        if !self.solver.initialized() {
-            error!("cggtts bad op: solver should be initliazed first");
-            return None;
-        }
-
         if let Some((k, v)) = self.tracking(sv, code) {
             let (t_first, _, _) = k;
             let (n_avg, buff) = v;
             let tracking_duration = t - t_first;
             let sum += 
-            if tracking_duration >= Self::BIPM_TRACKING_DURATION {
+            if t - t_first > self.trk_duration {
                 /* forward this value to the solver */
                 if let Ok(estimate) = self.solver.resolve();
                 self.buffer.insert((t_first, sv, code), (pr, 0));

@@ -176,8 +176,8 @@ pub mod prelude {
     pub use hifitime::prelude::Duration;
     pub use hifitime::prelude::Epoch;
     pub use hifitime::prelude::TimeScale;
-    pub use rinex::prelude::Constellation;
-    pub use rinex::prelude::SV;
+    pub use gnss::prelude::Constellation;
+    pub use gnss::prelude::SV;
 }
 
 #[cfg(feature = "serde")]

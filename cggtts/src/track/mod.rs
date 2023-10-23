@@ -8,12 +8,12 @@ use glonass::GlonassChannel;
 mod iono;
 pub use iono::IonosphericData;
 
-#[cfg_attr(feature = "rinex")]
-#[cfg_attr(docrs, doc(cfg(feature = "rinex")))]
-mod scheduler;
-
-#[cfg_attr(feature = "rinex")]
-pub use scheduler::TrackScheduler;
+// #[cfg(feature = "rinex")]
+// #[cfg_attr(docrs, doc(cfg(feature = "rinex")))]
+// mod scheduler;
+// 
+// #[cfg(feature = "rinex")]
+// pub use scheduler::TrackScheduler;
 
 mod class;
 pub use class::CommonViewClass;
