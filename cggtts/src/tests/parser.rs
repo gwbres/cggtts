@@ -1,5 +1,5 @@
 mod test {
-    use crate::Cggtts;
+    use crate::CGGTTS;
     use std::path::PathBuf;
     #[test]
     fn test_standard_pool() {
@@ -16,7 +16,7 @@ mod test {
             }
             let fp = path.to_string_lossy().to_string();
             println!("parsing \"{}\"", fp);
-            let cggtts = Cggtts::from_file(&fp);
+            let cggtts = CGGTTS::from_file(&fp);
             assert!(
                 cggtts.is_ok(),
                 "failed to parse {} - {:?}",
@@ -40,7 +40,7 @@ mod test {
             }
             let fp = path.to_string_lossy().to_string();
             println!("parsing \"{}\"", fp);
-            let cggtts = Cggtts::from_file(&fp);
+            let cggtts = CGGTTS::from_file(&fp);
             assert!(
                 cggtts.is_ok(),
                 "failed to parse {} - {:?}",

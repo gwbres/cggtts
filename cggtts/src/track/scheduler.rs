@@ -1,4 +1,5 @@
-//! CGGTTS Track scheduler
+//! CGTTS Track scheduler
+#![cfg_attr(docrs, feature(doc_cfg))]
 
 #[derive(Debug, Copy, Clone, Default)]
 /// CGGTTS tracking mode : either focused on a single SV
@@ -15,12 +16,21 @@ use hifitime::{
     Unit,
 };
 
+use thiserror::Error;
+
+#[derive(Debug, Clone, Error)]
+pub enum Error {
+    // GNSSSolverError(#[from] solver::Error),
+}
+
 use gnss::prelude::SV;
 use crate::prelude::Track;
 use rinex::prelude::Observable;
 use rtk::solver as Solver;
 
 use std::collections::HashMap;
+
+use rinex::prelude::RnxContext;
 
 /// TrackScheduler is a structure to generate CGGTTS Tracks by tracking one or several SV
 #[derive(Debug, Clone)]
@@ -31,9 +41,34 @@ pub struct TrackScheduler {
     solver: Solver,
     /// Tracking mode
     pub mode: TrackingMode,
+    /// Tracking duration, by default we use TrackScheduler::BIPM_TRACKING_DURATION
+    pub mode: Duration, 
 }
 
 impl TrackScheduler {
+    /// Builds a new track Scheduler to resolve CGGTTS Tracks from given RINEX context.
+    /// "trk_duration": Tracking duration typically set to Self::BIPM_TRACKING_DURATION but that can be customized.
+    /// "mode": Tracking Mode, either focusing on a single SV or using a combination of SV to form the track.
+    pub fn new(mode: TrackingMode, trk_duration: Duration, context: &RnxContext) -> Result<Self, Error> {
+        Ok(Self {
+            buffer: HashMap::with_capacity(32), 
+            solver: Solver::from(context)?,
+            mode,
+            trk_duration,
+        })
+    }
+
+    #[cfg_attr(docrs, doc(cfg(feature = "rinex")))]
+    pub fn init(&mut self, ctx: &mut RnxContext) -> Result<(), Error> {
+        self.solver.init(ctx)?
+    }
+
+    /// BIPM Tracking duration specifications, is the prefered tracking duration 
+    pub const BIPM_TRACKING_DURATION : Duration  = Duration {
+        centuries: 0,     
+        nanoseconds: 780_000_000_000,
+    };
+
     /*
      * Modified Julian Day #50722 is taken as reference
      * for scheduling algorithm. Day 50722 is chosen so scheduling
@@ -41,16 +76,13 @@ impl TrackScheduler {
      */
     const REF_MJD: u32 = 50722; // used in calc
 
-    pub const BIPM_TRACKING_DURATION : Duration  = Duration {
-        centuries: 0,     
-        nanoseconds: 780_000_000_000,
-    };
     /*
      * Returns Nth track offset, expressed in minutes
      */
     const fn time_ref(nth: u32) -> u32 {
         2 * (nth - 1) * (780 / 60 + 3) // 3'(warmup/lock?) +13' track
     }
+
     /*
      * Returns currently tracked data for given SV and CODE
      */
@@ -69,6 +101,7 @@ impl TrackScheduler {
         let value = self.buffer.remove(key)?;
         Some((key, value))
     }
+    
     /// Track provided Pseudo range (raw value) from given SV at "t" Epoch 
     /// and try a resolve a CGGTTS Track. Prior running this method,
     /// self.solver must be initialized first.
@@ -96,5 +129,13 @@ impl TrackScheduler {
             self.buffer.insert(t, sv, code.clone(), (pr, 1));
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test() {
+        let mut scheduler = TrackScheduler::new();
     }
 }
