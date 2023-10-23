@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 const TRACK_WITH_IONOSPHERIC: usize = 24;
 const TRACK_WITHOUT_IONOSPHERIC: usize = 21;
 
-/// A `Track` is a `Cggtts` measurement
+/// A Track is a CGGTTS measurement
 #[derive(Debug, Default, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Track {

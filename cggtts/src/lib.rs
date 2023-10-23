@@ -2,7 +2,7 @@
 //! CGGTTS data files are dedicated to common view (two way satellite)
 //! time transfer.
 //!
-//! Official BIPM `Cggtts` specifications:  
+//! Official BIPM `CGGTTS` specifications:  
 //! <https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf>
 //!
 //! Only "2E" Version (latest to date) is supported by this parser
@@ -13,9 +13,9 @@
 //!
 //! # Example
 //! ```
-//! use cggtts::Cggtts;
+//! use cggtts::CGGTTS;
 //! fn main() {
-//!     let cggtts = Cggtts::from_file("../data/standard/GZSY8259.506")
+//!     let cggtts = CGGTTS::from_file("../data/standard/GZSY8259.506")
 //!         .unwrap();
 //!     assert_eq!(cggtts.lab, Some(String::from("SY82")));
 //!     assert_eq!(cggtts.follows_bipm_specs(), true);
@@ -32,9 +32,9 @@
 //! Comes with ionospheric parameters estimates
 //!
 //!```
-//! use cggtts::Cggtts;
+//! use cggtts::CGGTTS;
 //! fn main() {
-//!     let cggtts = Cggtts::from_file("../data/advanced/RZSY8257.000")
+//!     let cggtts = CGGTTS::from_file("../data/advanced/RZSY8257.000")
 //!         .unwrap();
 //!     if let Some(track) = cggtts.tracks.first() {
 //!         assert_eq!(track.has_ionospheric_data(), true);
@@ -63,7 +63,7 @@
 //!         .year(2023)
 //!         .release("v1");
 //!
-//!     let mut cggtts = Cggtts::default()
+//!     let mut cggtts = CGGTTS::default()
 //!         .lab_agency("AJACFR")
 //!         .receiver(rcvr)
 //!         .apc_coordinates(Coordinates {
@@ -172,7 +172,7 @@ pub mod prelude {
     pub use crate::track::CommonViewClass;
     pub use crate::track::IonosphericData;
     pub use crate::track::TrackData;
-    pub use crate::{track::Track, version::Version, Cggtts};
+    pub use crate::{track::Track, version::Version, CGGTTS};
     pub use hifitime::prelude::Duration;
     pub use hifitime::prelude::Epoch;
     pub use hifitime::prelude::TimeScale;
@@ -255,7 +255,7 @@ impl std::fmt::Display for Code {
 /// by exchanging CGGTTS data between two remote sites that used the same reference time.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Cggtts {
+pub struct CGGTTS {
     /// CGGTTS release used in this file.
     /// We currently only support 2E (latest)
     pub version: Version,
@@ -325,8 +325,8 @@ pub enum Error {
     TrackParsing(#[from] track::Error),
 }
 
-impl Default for Cggtts {
-    /// Buils default `Cggtts` structure,
+impl Default for CGGTTS {
+    /// Buils default `CGGTTS` structure,
     fn default() -> Self {
         Self {
             version: Version::default(),
@@ -345,7 +345,7 @@ impl Default for Cggtts {
     }
 }
 
-impl Cggtts {
+impl CGGTTS {
     /// Returns Self with desired "lab" agency
     pub fn lab_agency(&self, lab: &str) -> Self {
         let mut c = self.clone();
@@ -383,14 +383,14 @@ impl Cggtts {
         c.apc_coordinates = apc;
         c
     }
-    /// Returns `Cggtts` with desired reference time system description
+    /// Returns `CGGTTS` with desired reference time system description
     pub fn time_reference(&self, reference: ReferenceTime) -> Self {
         let mut c = self.clone();
         c.time_reference = reference;
         c
     }
 
-    /// Returns `Cggtts` with desired Reference Frame
+    /// Returns `CGGTTS` with desired Reference Frame
     pub fn reference_frame(&self, reference: &str) -> Self {
         let mut c = self.clone();
         c.reference_frame = Some(reference.to_string());
@@ -571,7 +571,7 @@ impl Cggtts {
         res
     }
 
-    /// Builds Self from given `Cggtts` file.
+    /// Builds Self from given `CGGTTS` file.
     pub fn from_file(fp: &str) -> Result<Self, Error> {
         let file_content = std::fs::read_to_string(fp)?;
         let mut lines = file_content.lines().into_iter();
@@ -865,7 +865,7 @@ impl Cggtts {
             }
         }
 
-        Ok(Cggtts {
+        Ok(CGGTTS {
             version,
             release_date,
             nb_channels,
@@ -882,8 +882,8 @@ impl Cggtts {
     }
 }
 
-impl std::fmt::Display for Cggtts {
-    /// Writes self into a `Cggtts` file
+impl std::fmt::Display for CGGTTS {
+    /// Writes self into a `CGGTTS` file
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let LATEST_REVISION_DATE: Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
 
@@ -1050,7 +1050,7 @@ mod test {
             .join("GZSY8259.568");
 
         let fullpath = path.to_string_lossy().to_string();
-        let cggtts = Cggtts::from_file(&fullpath);
+        let cggtts = CGGTTS::from_file(&fullpath);
         assert_eq!(cggtts.is_ok(), true);
 
         let cggtts = cggtts.unwrap();
@@ -1118,7 +1118,7 @@ mod test {
             .join("RZSY8257.000");
 
         let fullpath = path.to_string_lossy().to_string();
-        let cggtts = Cggtts::from_file(&fullpath);
+        let cggtts = CGGTTS::from_file(&fullpath);
         assert_eq!(cggtts.is_ok(), true);
 
         let cggtts = cggtts.unwrap();

@@ -1,16 +1,36 @@
 //! CGGTTS Track scheduler
+
+#[derive(Debug, Copy, Clone, Default)]
+/// CGGTTS tracking mode : either focused on a single SV
+/// or a combination of SV
+pub enum TrackingMode {
+    #[default]
+    Single,
+    MeltingPot,
+}
+
 use hifitime::{
-    //Duration,
+    Duration,
     Epoch,
     Unit,
 };
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, PartialOrd, Hash)]
+use gnss::prelude::SV;
+use crate::prelude::Track;
+use rinex::prelude::Observable;
+use rtk::solver as Solver;
+
+use std::collections::HashMap;
+
+/// TrackScheduler is a structure to generate CGGTTS Tracks by tracking one or several SV
+#[derive(Debug, Clone)]
 pub struct TrackScheduler {
-    /*
-     * time of previous realization
-     */
-    last: Epoch,
+    /* internal data */
+    buffer: HashMap<(Epoch, SV, Observable), (u16, f64)>,
+    /* gnss solver */
+    solver: Solver,
+    /// Tracking mode
+    pub mode: TrackingMode,
 }
 
 impl TrackScheduler {
@@ -20,31 +40,61 @@ impl TrackScheduler {
      * is aligned to GPS sideral period
      */
     const REF_MJD: u32 = 50722; // used in calc
-                                // pub const BIPM_TRACKING_DURATION_SECS: u32 = 780; /* 13' */
-                                // pub const BIPM_TRACKING_DURATION: Duration = Duration::from_seconds(780.0);
-                                //{
-                                //    centuries: 0,
-                                //    nanoseconds: Self::BIPM_TRACKING_DURATION_SECS as u64 * 1_000_000_000,
-                                //};
-                                /*
-                                 * Returns Nth track offset, expressed in minutes
-                                 */
+
+    pub const BIPM_TRACKING_DURATION : Duration  = Duration {
+        centuries: 0,     
+        nanoseconds: 780_000_000_000,
+    };
+    /*
+     * Returns Nth track offset, expressed in minutes
+     */
     const fn time_ref(nth: u32) -> u32 {
         2 * (nth - 1) * (780 / 60 + 3) // 3'(warmup/lock?) +13' track
     }
-    /// Returns true if we should publish a new realization "now"
-    pub fn schedule(&mut self, now: Epoch) -> bool {
-        // Returns nth track offset, in <!>minutes<!> within given MJD
-        // time_ref(nth) - 4 * (mjd as u32 - REFERENCE_MJD);
-        self.last = now;
-        true
+    /*
+     * Returns currently tracked data for given SV and CODE
+     */
+    fn tracking(&mut self, sv: &SV, code: &Observable) -> Option<((Epoch, SV, Observable), (u16, f64))> {
+        let key = self.buffer
+            .keys()
+            .filter_map(|(t, svnn, codenn)| {
+                if svnn == sv && code == codenn {
+                    Some((t, svnn, codenn))
+                } else {
+                    None
+                }
+            })
+            .reduce(|data, _| data);
+        let key = key?;
+        let value = self.buffer.remove(key)?;
+        Some((key, value))
     }
-    /// Returns Epoch of next realization
-    pub fn next(&self) -> Epoch {
-        self.last + 780 * Unit::Second
-    }
-    /// Returns Epoch of previous realization
-    pub fn last(&self) -> Epoch {
-        self.last
+    /// Track provided Pseudo range (raw value) from given SV at "t" Epoch 
+    /// and try a resolve a CGGTTS Track. Prior running this method,
+    /// self.solver must be initialized first.
+    /// Returns new Track if a new track can now be formed.
+    /// A new CGGTTSTrack can be formed if SV was tracked for BIPM_TRACKING_DURATION without interruption.
+    pub fn track(&mut self, t: Epoch, sv: SV, code: &Observable, pr: f64) -> Option<Track> {
+        if !self.solver.initialized() {
+            error!("cggtts bad op: solver should be initliazed first");
+            return None;
+        }
+
+        if let Some((k, v)) = self.tracking(sv, code) {
+            let (t_first, _, _) = k;
+            let (n_avg, buff) = v;
+            let tracking_duration = t - t_first;
+            let sum += 
+            if tracking_duration >= Self::BIPM_TRACKING_DURATION {
+                /* forward this value to the solver */
+                if let Ok(estimate) = self.solver.resolve();
+                self.buffer.insert((t_first, sv, code), (pr, 0));
+            } else {
+                self.buffer.insert((t_first, sv, code), (pr, n_avg +1));
+            }
+        } else {
+            self.buffer.insert(t, sv, code.clone(), (pr, 1));
+            None
+        }
     }
 }
