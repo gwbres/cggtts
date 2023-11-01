@@ -167,17 +167,13 @@ pub struct Coordinates {
 }
 
 pub mod prelude {
+    pub use crate::CGGTTS;
     pub use crate::rcvr::Rcvr;
     pub use crate::reference_time::ReferenceTime;
-    pub use crate::track::CommonViewClass;
-    pub use crate::track::IonosphericData;
-    pub use crate::track::TrackData;
-    pub use crate::{track::Track, version::Version, CGGTTS};
-    pub use hifitime::prelude::Duration;
-    pub use hifitime::prelude::Epoch;
-    pub use hifitime::prelude::TimeScale;
-    pub use gnss::prelude::Constellation;
-    pub use gnss::prelude::SV;
+    pub use crate::track::{CommonViewClass, IonosphericData, Track, TrackData};
+    pub use crate::version::Version;
+    pub use gnss::prelude::{Constellation, SV};
+    pub use hifitime::prelude::{Duration, Epoch, TimeScale};
 }
 
 #[cfg(feature = "serde")]
