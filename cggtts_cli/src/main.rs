@@ -11,7 +11,6 @@ use gnuplot::{PointSize, AxesCommon, LineWidth};*/
 
 use cggtts::track::CommonViewClass;
 use cggtts::{Cggtts, Track};
-use rinex::constellation::Constellation;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let yaml = load_yaml!("cli.yml");

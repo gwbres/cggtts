@@ -167,11 +167,11 @@ pub struct Coordinates {
 }
 
 pub mod prelude {
-    pub use crate::CGGTTS;
     pub use crate::rcvr::Rcvr;
     pub use crate::reference_time::ReferenceTime;
     pub use crate::track::{CommonViewClass, IonosphericData, Track, TrackData};
     pub use crate::version::Version;
+    pub use crate::CGGTTS;
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::prelude::{Duration, Epoch, TimeScale};
 }
