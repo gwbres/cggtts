@@ -1,11 +1,3 @@
-// use thiserror::Error;
-//
-// #[derive(Debug, Error)]
-// pub enum Error {
-//     #[error("bad operation: not synchronized yet")]
-//     NotSynchronized,
-// }
-
 use crate::{Duration, Epoch, TimeScale};
 use gnss::prelude::SV;
 use std::collections::HashMap;
@@ -21,15 +13,15 @@ pub enum TrackingMode {
 
 // Single SV tracker
 #[derive(Debug, Clone, Default)]
-pub(crate) struct SVTracker {
+pub struct SVTracker {
     /// Averaged pseudo range
-    pub(crate) pseudo_range: f64,
+    pub pseudo_range: f64,
     /// number of averages
-    pub(crate) n_avg: u32,
+    pub n_avg: u32,
 }
 
 impl SVTracker {
-    fn new_data(&mut self, pr: f64) {
+    fn latch_data(&mut self, pr: f64) {
         let n = (self.n_avg + 1) as f64;
         self.pseudo_range += (pr - self.pseudo_range) / n;
         self.n_avg += 1;
@@ -40,38 +32,45 @@ impl SVTracker {
     }
 }
 
-/// Synchronous Sky Tracker. The tracker
-/// will not considerate data unless it is synchronized.
+/// Sky Tracker is used to track a Sky View
+/// synchronously according to a predefined scheduling method.
 #[derive(Debug, Clone)]
 pub struct SkyTracker {
-    // internal trackers (real time updated)
-    trackers: HashMap<SV, SVTracker>,
-    // tracking duration: fixed to BIPM specs at the moment
-    trk_duration: Duration,
-    /// Tracking starting point: until then, nothing to be produced.
-    /// First production is t0 + tracking_duration.
-    pub t0: Epoch,
-    /// true when we're aligned to the first track (ever)
-    /// that means we're in position to produce data
-    pub synchronized: bool,
-    /// tracking mode
-    pub mode: TrackingMode,
+    /// internal trackers (real time updated)
+    pub pool: HashMap<SV, SVTracker>,
+    /// Tracking duration in use. It is not recommended
+    /// to modify this duration when actively tracking.
+    /// The CGGTTS data you compare should use identical tracking specifications.
+    /// Therefore it is not recommended to modify this value unless
+    /// you have means to adapt the two remote sites accordingly.
+    pub trk_duration: Duration,
 }
 
 impl Default for SkyTracker {
     fn default() -> Self {
         Self {
-            synchronized: false,
-            t0: Epoch::default(),
-            trackers: HashMap::new(),
+            pool: HashMap::new(),
             trk_duration: Duration::from_seconds(Self::BIPM_TRACKING_DURATION_SECONDS as f64),
-            mode: TrackingMode::default(),
         }
     }
 }
 
 impl SkyTracker {
-    pub(crate) const BIPM_TRACKING_DURATION_SECONDS: u32 = 960;
+    pub const BIPM_TRACKING_DURATION_SECONDS: u32 = 960;
+
+    /// Builds a Sky view tracker with specified tracking duration
+    pub fn tracking_duration(&self, trk_duration: Duration) -> Self {
+        let mut s = self.clone();
+        s.trk_duration = trk_duration;
+        s
+    }
+
+    /// Reset the sky tracker
+    pub fn reset(&mut self) {
+        for (_, trk) in self.pool.iter_mut() {
+            trk.reset();
+        }
+    }
 
     /* track 0 offset within any MJD, expressed in nanos */
     pub(crate) fn t0_offset_nanos(mjd: u32, trk_duration: Duration) -> i128 {
@@ -89,8 +88,9 @@ impl SkyTracker {
         }
     }
 
-    /* Next track start time, compared to current "t" */
-    pub(crate) fn next_track_start(t: Epoch, trk_duration: Duration) -> Epoch {
+    /// Next track start time, compared to current "t"
+    pub fn next_track_start(&self, t: Epoch) -> Epoch {
+        let trk_duration = self.trk_duration;
         let mjd = t.to_mjd_utc_days();
         let mjd_u = mjd.floor() as u32;
 
@@ -113,9 +113,7 @@ impl SkyTracker {
                 // determine track number this "t" contributes to
                 let day_offset_nanos =
                     (t - Epoch::from_mjd_utc(mjd_u as f64)).total_nanoseconds() - offset_nanos;
-                println!("{:?} : day offset {} ns", t, day_offset_nanos);
                 let i = (day_offset_nanos as f64 / trk_duration.total_nanoseconds() as f64).ceil();
-                println!("{:?} : i(th) track: {}", t, i);
 
                 let mut e = Epoch::from_mjd_utc(mjd_u as f64)
                     + Duration::from_nanoseconds(offset_nanos as f64);
@@ -130,33 +128,23 @@ impl SkyTracker {
         }
     }
 
-    /* Time to next track and potential next data production */
+    /// Time remaining before next track production
     pub fn time_to_next_track(&self, t: Epoch) -> Duration {
-        Self::next_track_start(t, self.trk_duration) - t
+        self.next_track_start(t) - t
     }
 
-    /// Synchronization method. This should be called until Self.synchronized is true.
-    pub fn synchronize(&mut self, t: Epoch) {
-        self.t0 = Self::next_track_start(t, self.trk_duration);
-        self.synchronized = t >= self.t0;
-    }
-
-    fn new_data(&mut self, t: Epoch, sv: SV, pr: f64) {
-        // synchronize, if need be
-        if !self.synchronized {
-            self.synchronize(t);
-        }
-
+    /// Latch a new observation
+    pub fn latch_data(&mut self, t: Epoch, sv: SV, pr: f64) {
         let mut found = false;
-        for (svnn, tracker) in self.trackers.iter_mut() {
+        for (svnn, tracker) in self.pool.iter_mut() {
             if *svnn == sv {
                 found = true;
-                tracker.new_data(pr);
+                tracker.latch_data(pr);
                 break;
             }
         }
         if !found {
-            self.trackers.insert(
+            self.pool.insert(
                 sv,
                 SVTracker {
                     n_avg: 0_u32,
@@ -189,7 +177,7 @@ mod test {
     }
     #[test]
     fn next_track_scheduler() {
-        let duration = Duration::from_seconds(SkyTracker::BIPM_TRACKING_DURATION_SECONDS as f64);
+        let tracker = SkyTracker::default();
         for (t, expected) in vec![
             // reference MJD
             (
@@ -270,7 +258,7 @@ mod test {
                 Epoch::from_mjd_utc(59509.0) + Duration::from_seconds(6.0 * 60.0),
             ),
         ] {
-            let next_track_start = SkyTracker::next_track_start(t, duration);
+            let next_track_start = tracker.next_track_start(t);
             println!("next track start: {:?}", next_track_start);
             let error_nanos = (next_track_start - expected).abs().total_nanoseconds();
             assert!(

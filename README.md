@@ -58,6 +58,9 @@ tracking duration (faster tracking = tighter clock comparison).
 By default the Tracking duration is 16' (13' Ephemerides + 3' historical warmup) so you can only get 90 
 track from a typical Observation RINEX spanning 24 h.
 
+`SkyTracker` allows real time modification of the tracking duration, although that is not recommended,
+unless you have means to change the tracking duration on the remote site at the same time.
+
 ## CGGTTS-CLI
 
 [A command line application](gnss_cli/README.md) is developed to process one or two CGGTTS file for clock comparison.
