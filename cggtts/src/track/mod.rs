@@ -8,15 +8,10 @@ use glonass::GlonassChannel;
 mod iono;
 pub use iono::IonosphericData;
 
-// #[cfg(feature = "rinex")]
-// #[cfg_attr(docrs, doc(cfg(feature = "rinex")))]
-// mod scheduler;
-//
-// #[cfg(feature = "rinex")]
-// pub use scheduler::TrackScheduler;
-
 mod class;
 pub use class::CommonViewClass;
+
+mod sky_tracker;
 
 use gnss::prelude::{Constellation, SV};
 use hifitime::{Duration, Epoch, Unit};

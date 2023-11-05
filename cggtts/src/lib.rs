@@ -134,7 +134,6 @@ mod version;
 mod tests;
 
 pub mod delay;
-pub mod processing;
 pub mod track;
 
 extern crate gnss_rs as gnss;
