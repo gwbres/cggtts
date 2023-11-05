@@ -12,6 +12,7 @@ mod class;
 pub use class::CommonViewClass;
 
 mod sky_tracker;
+pub use sky_tracker::SkyTracker;
 
 use gnss::prelude::{Constellation, SV};
 use hifitime::{Duration, Epoch, Unit};
