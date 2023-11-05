@@ -275,7 +275,7 @@ mod test {
             let error_nanos = (next_track_start - expected).abs().total_nanoseconds();
             assert!(
                 error_nanos < 10,
-                "next_track_start failed for {} with {} ns of error",
+                "failed for {} with {} ns of error",
                 t,
                 error_nanos
             );

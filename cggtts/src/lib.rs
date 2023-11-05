@@ -1,17 +1,8 @@
-//! Rust package to parse, analyze and generate CGGTTS data.   
-//! CGGTTS data files are dedicated to common view (two way satellite)
-//! time transfer.
-//!
-//! Official BIPM `CGGTTS` specifications:  
-//! <https://www.bipm.org/wg/CCTF/WGGNSS/Allowed/Format_CGGTTS-V2E/CGTTS-V2E-article_versionfinale_cor.pdf>
-//!
-//! Only "2E" Version (latest to date) is supported by this parser
-//!
-//!
+#![doc = include_str!("../../README.md")]
+#![cfg_attr(docrs, feature(doc_cfg))]
+
 //! CGGTTS is the core structure, it comprises
 //! the list of tracks (measurements) and some header information.
-//!
-//! # Example
 //! ```
 //! use cggtts::CGGTTS;
 //! fn main() {
