@@ -168,7 +168,6 @@ impl Track {
         data: TrackData,
         iono: Option<IonosphericData>,
         rcvr_channel: u8,
-        glo_channel: GlonassChannel,
         frc: &str,
     ) -> Self {
         Self {

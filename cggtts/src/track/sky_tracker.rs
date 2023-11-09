@@ -23,7 +23,8 @@ pub struct SVTracker {
 impl SVTracker {
     fn latch_data(&mut self, pr: f64) {
         let n = (self.n_avg + 1) as f64;
-        self.pseudo_range += (pr - self.pseudo_range) / n;
+        // self.pseudo_range += (pr - self.pseudo_range) / n;
+        self.pseudo_range = pr;
         self.n_avg += 1;
     }
     fn reset(&mut self) {

@@ -8,7 +8,7 @@
 //! fn main() {
 //!     let cggtts = CGGTTS::from_file("../data/standard/GZSY8259.506")
 //!         .unwrap();
-//!     assert_eq!(cggtts.lab, Some(String::from("SY82")));
+//!     assert_eq!(cggtts.lab, "SY82"));
 //!     assert_eq!(cggtts.follows_bipm_specs(), true);
 //!     if let Some(track) = cggtts.tracks.first() {
 //!         let duration = track.duration;
@@ -55,14 +55,14 @@
 //!         .release("v1");
 //!
 //!     let mut cggtts = CGGTTS::default()
-//!         .lab_agency("AJACFR")
+//!         .station("AJACFR")
 //!         .receiver(rcvr)
 //!         .apc_coordinates(Coordinates {
 //!             x: 0.0_f64,
 //!             y: 0.0_f64,
 //!             z: 0.0_f64,
 //!         })
-//!         .time_reference(ReferenceTime::UTCk("LAB".to_string()))
+//!         .reference_time(ReferenceTime::UTCk("LAB".to_string()))
 //!         .reference_frame("ITRF");
 //!         
 //!     // add some tracks
@@ -247,8 +247,8 @@ pub struct CGGTTS {
     pub version: Version,
     /// Release date of this file revision.
     pub release_date: hifitime::Epoch,
-    /// Laboratory / agency (data producer)
-    pub lab: Option<String>,
+    /// Station name (data producer: laboratory, agency..)
+    pub station: String,
     /// Possible GNSS receiver infos
     pub rcvr: Option<Rcvr>,
     /// # of GNSS receiver channels
@@ -256,7 +256,7 @@ pub struct CGGTTS {
     /// IMS Ionospheric Measurement System (if any)
     pub ims: Option<Rcvr>,
     /// Description of Reference time system (if any)
-    pub time_reference: ReferenceTime,
+    pub reference_time: ReferenceTime,
     /// Reference frame, coordinates system and conversions,
     /// used in `coordinates` field
     pub reference_frame: Option<String>,
@@ -317,14 +317,14 @@ impl Default for CGGTTS {
         Self {
             version: Version::default(),
             release_date: Epoch::from_gregorian_utc_at_midnight(2014, 02, 20), /* latest rev. */
-            lab: None,
+            station: String::from("LAB"),
             nb_channels: 0,
             apc_coordinates: Coordinates::default(),
             rcvr: None,
             tracks: Vec::new(),
             ims: None,
             reference_frame: None,
-            time_reference: ReferenceTime::default(),
+            reference_time: ReferenceTime::default(),
             comments: None,
             delay: SystemDelay::new(),
         }
@@ -332,10 +332,10 @@ impl Default for CGGTTS {
 }
 
 impl CGGTTS {
-    /// Returns Self with desired "lab" agency
-    pub fn lab_agency(&self, lab: &str) -> Self {
+    /// Returns Self with desired station name
+    pub fn station(&self, station: &str) -> Self {
         let mut c = self.clone();
-        c.lab = Some(lab.to_string());
+        c.station = station.to_string();
         c
     }
     /// Returns Self with desired "comments" field
@@ -370,9 +370,9 @@ impl CGGTTS {
         c
     }
     /// Returns `CGGTTS` with desired reference time system description
-    pub fn time_reference(&self, reference: ReferenceTime) -> Self {
+    pub fn reference_time(&self, reference: ReferenceTime) -> Self {
         let mut c = self.clone();
-        c.time_reference = reference;
+        c.reference_time = reference;
         c
     }
 
@@ -511,7 +511,6 @@ impl CGGTTS {
     /// Returns a filename that would match
     /// specifications / standard requirements
     /// to represent self.
-    /// If lab is not known, we set XX.   
     /// We use the first two characters for the Rcvr hardware
     /// info as identification number (only if they are digits).
     /// We replace by "__" otherwise.
@@ -534,12 +533,8 @@ impl CGGTTS {
             }
         }
 
-        if let Some(lab) = &self.lab {
-            let max_offset = std::cmp::min(lab.len(), 2);
-            res.push_str(&lab[0..max_offset])
-        } else {
-            res.push_str("XX") // unknown lab
-        }
+        let max_offset = std::cmp::min(self.station.len(), 2);
+        res.push_str(&self.station[0..max_offset]);
 
         if let Some(rcvr) = &self.rcvr {
             res.push_str(&format!("{:x}", rcvr));
@@ -573,11 +568,11 @@ impl CGGTTS {
         let mut nb_channels: u16 = 0;
         let mut rcvr: Option<Rcvr> = None;
         let mut ims: Option<Rcvr> = None;
-        let mut lab: Option<String> = None;
+        let mut station = String::from("LAB");
         let mut comments: Option<String> = None;
         let mut reference_frame: Option<String> = None;
         let mut apc_coordinates = Coordinates::default();
-        let mut time_reference = ReferenceTime::default();
+        let mut reference_time = ReferenceTime::default();
         let (mut x, mut y, mut z): (f64, f64, f64) = (0.0, 0.0, 0.0);
 
         // VERSION must come first
@@ -662,7 +657,9 @@ impl CGGTTS {
                 }
             } else if line.starts_with("LAB = ") {
                 match line.strip_prefix("LAB = ") {
-                    Some(s) => lab = Some(String::from(s.trim())),
+                    Some(s) => {
+                        station = s.trim().to_string();
+                    },
                     _ => {},
                 }
             } else if line.starts_with("X = ") {
@@ -698,7 +695,7 @@ impl CGGTTS {
                 }
             } else if line.starts_with("REF = ") {
                 if let Some(s) = scan_fmt!(&line, "REF = {}", String) {
-                    time_reference = ReferenceTime::from_str(&s)
+                    reference_time = ReferenceTime::from_str(&s)
                 }
             } else if line.contains("DLY = ") {
                 let items: Vec<&str> = line.split_ascii_whitespace().collect();
@@ -857,12 +854,12 @@ impl CGGTTS {
             nb_channels,
             rcvr,
             ims,
-            lab,
+            station,
             reference_frame,
             apc_coordinates,
             comments,
             delay: system_delay,
-            time_reference,
+            reference_time,
             tracks,
         })
     }
@@ -990,7 +987,7 @@ impl std::fmt::Display for CGGTTS {
 
         content.push_str(&format!("REF DLY = {:.1} ns\n", self.delay.ref_delay));
 
-        content.push_str(&format!("REF = {}\n", self.time_reference));
+        content.push_str(&format!("REF = {}\n", self.reference_time));
 
         let crc = crc::calc_crc(&content).map_err(|_| std::fmt::Error);
 
@@ -1058,11 +1055,11 @@ mod test {
             ),
         );
 
-        assert_eq!(cggtts.lab, Some(String::from("SY82")));
+        assert_eq!(cggtts.station, "SY82");
         assert_eq!(cggtts.nb_channels, 12);
         assert_eq!(cggtts.ims, None);
         assert_eq!(
-            cggtts.time_reference,
+            cggtts.reference_time,
             ReferenceTime::Custom(String::from("REF(SY82)"))
         );
         assert_eq!(cggtts.reference_frame, Some(String::from("ITRF")));
@@ -1119,7 +1116,7 @@ mod test {
             }
         );
         assert!(cggtts.comments.is_none());
-        assert_eq!(cggtts.lab, Some(String::from("ABC")));
+        assert_eq!(cggtts.lab, "ABC");
         assert_eq!(cggtts.nb_channels, 12);
 
         assert_eq!(cggtts.delay.rf_cable_delay, 237.0);
