@@ -12,10 +12,10 @@ mod class;
 pub use class::CommonViewClass;
 
 mod sky_tracker;
-pub use sky_tracker::SkyTracker;
+pub use sky_tracker::Scheduler;
 
-use gnss::prelude::{Constellation, SV};
 use hifitime::{Duration, Epoch, Unit};
+use gnss::prelude::{Constellation, SV};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

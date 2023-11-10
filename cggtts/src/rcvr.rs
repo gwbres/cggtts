@@ -3,15 +3,15 @@
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Rcvr {
     /// Manufacturer of this hardware
-    manufacturer: String,
+    pub manufacturer: String,
     /// Type of receiver
-    recv_type: String,
+    pub recv_type: String,
     /// Receiver's serial number
-    serial_number: String,
+    pub serial_number: String,
     /// Receiver manufacturing year
-    year: u16,
+    pub year: u16,
     /// Receiver software revision number
-    release: String,
+    pub release: String,
 }
 
 impl Rcvr {

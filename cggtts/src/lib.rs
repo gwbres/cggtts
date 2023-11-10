@@ -539,14 +539,14 @@ impl CGGTTS {
         if let Some(rcvr) = &self.rcvr {
             res.push_str(&format!("{:x}", rcvr));
         } else {
-            res.push_str("__")
+            res.push_str("__");
         }
 
         if let Some(epoch) = self.epoch() {
             let mjd = epoch.to_mjd_utc_days();
             res.push_str(&format!("{:.3}", (mjd / 1000.0)));
         } else {
-            res.push_str("YY.YYY")
+            res.push_str("YY.YYY");
         }
 
         res
