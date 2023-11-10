@@ -11,11 +11,16 @@ pub use iono::IonosphericData;
 mod class;
 pub use class::CommonViewClass;
 
+#[cfg(feature = "scheduler")]
+#[cfg_attr(docrs, doc(cfg(feature = "scheduler")))]
 mod scheduler;
-pub use scheduler::Scheduler;
 
-use hifitime::{Duration, Epoch, Unit};
+#[cfg(feature = "scheduler")]
+#[cfg_attr(docrs, doc(cfg(feature = "scheduler")))]
+pub use scheduler::{FitData, Scheduler};
+
 use gnss::prelude::{Constellation, SV};
+use hifitime::{Duration, Epoch, Unit};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

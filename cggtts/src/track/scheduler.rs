@@ -1,35 +1,80 @@
-use crate::{Duration, Epoch, TimeScale};
+use crate::prelude::{Duration, Epoch, TimeScale, TrackData};
 use gnss::prelude::SV;
-use std::collections::HashMap;
+use hifitime::SECONDS_PER_DAY_I64;
+use linreg::{linear_regression as linreg, Error as LinregError};
+use std::collections::BTreeMap;
+use thiserror::Error;
+
+/// CGGTTS track formation errors
+#[derive(Debug, Clone, Error)]
+pub enum FitError {
+    /// CGGTTS track fitting requires the track midpoint
+    /// to be evaluated. For that, you need at least three measurements
+    /// to be latched, {t_0, t_k, t_n} where t_k is the measurement
+    /// at trk_duration /2
+    #[error("failed to determine track midpoint")]
+    UndeterminedTrackMidpoint,
+    /// Linear regression failure
+    #[error("linear regression failure")]
+    LinearRegressionFailure,
+}
 
 /// CGGTTS track scheduler used to generate synchronous CGTTTS files.
 #[derive(Debug, Clone)]
 pub struct Scheduler {
-    /// Tracking duration in use. It is not recommended
-    /// to modify this duration when actively tracking.
-    /// The CGGTTS data you compare should be produced by stations that
-    /// use identical schedulers.
-    /// Therefore it is not recommended to modify this value unless
-    /// you have means to adapt the two remote sites accordingly.
+    /// Tracking duration in use. Although our API allows it,
+    /// you can only modify the tracking duration if you have
+    /// complete access to both remote clocks, so they follow
+    /// the same tracking procedure.
     pub trk_duration: Duration,
+    /* date of creation */
+    pub(crate) t0: Epoch,
+    /* internal buffer */
+    buffer: BTreeMap<Epoch, FitData>,
 }
 
-impl Default for Scheduler {
-    fn default() -> Self {
-        Self {
-            trk_duration: Duration::from_seconds(Self::BIPM_TRACKING_DURATION_SECONDS as f64),
-        }
-    }
+/// CGGTTS track generation helper
+#[derive(Debug, Default, Clone)]
+pub struct FitData {
+    /// REFSV [s]
+    pub refsv: f64,
+    /// REFSYS [s]
+    pub refsys: f64,
+    /// MDTR Modeled Tropospheric Delay [s]
+    pub mdtr: f64,
+    /// SV elevation [°]
+    pub elevation: f64,
+    /// SV azimuth [°]
+    pub azimuth: f64,
+    /// MDIO Modeled Ionospheric Delay [s]
+    pub mdio: Option<f64>,
+    /// MSIO Measured Ionospheric Delay [s]
+    pub msio: Option<f64>,
 }
 
 impl Scheduler {
+    /// Standard tracking duration [s]
     pub const BIPM_TRACKING_DURATION_SECONDS: u32 = 960;
-    /// Builds a Sky view tracker with specified tracking duration
+
+    /// Initialize a Track Scheduler from a random (usually "now") datetime
+    /// expressed as an Epoch.
+    pub fn new(t0: Epoch, trk_duration: Duration) -> Self {
+        (trk_duration.total_nanoseconds() / 1_000_000_000) as i64;
+
+        Self {
+            t0,
+            trk_duration,
+            buffer: BTreeMap::new(),
+        }
+    }
+
+    /// Builds a CGGTTS scheduler with desired tracking duration
     pub fn tracking_duration(&self, trk_duration: Duration) -> Self {
         let mut s = self.clone();
         s.trk_duration = trk_duration;
         s
     }
+
     /* track 0 offset within any MJD, expressed in nanos */
     pub(crate) fn t0_offset_nanos(mjd: u32, trk_duration: Duration) -> i128 {
         let tracking_nanos = trk_duration.total_nanoseconds();
@@ -45,6 +90,18 @@ impl Scheduler {
             offset_nanos
         }
     }
+
+    /* returns midpoint Epoch */
+    pub(crate) fn track_midpoint(&self) -> Option<Epoch> {
+        let (t0, _) = self.buffer.first_key_value()?;
+        for (t, data) in self.buffer.iter() {
+            if *t >= *t0 + self.trk_duration / 2 {
+                return Some(*t);
+            }
+        }
+        None
+    }
+
     /// Next track start time, compared to current "t"
     pub fn next_track_start(&self, t: Epoch) -> Epoch {
         let trk_duration = self.trk_duration;
@@ -84,9 +141,72 @@ impl Scheduler {
             },
         }
     }
+
     /// Time remaining before next track production
-    pub fn time_to_next_track(&self, t: Epoch) -> Duration {
-        self.next_track_start(t) - t
+    pub fn time_to_next_track(&self, now: Epoch) -> Duration {
+        self.next_track_start(now) - now
+    }
+
+    /// Fit: Track generation procedure. You should prefer the
+    /// "latch_measurement" procedure to generate synchronous CGGTTS.
+    /// You must provide the ongoing Issue of Ephemeris when fitting your data.
+    pub fn fit(&self, ioe: u16) -> Result<TrackData, FitError> {
+        let t_mid = self
+            .track_midpoint()
+            .ok_or(FitError::UndeterminedTrackMidpoint)?;
+
+        let t_xs: Vec<_> = self
+            .buffer
+            .keys()
+            .map(|t| t.to_duration().total_nanoseconds() as f64 * 1.0E-9)
+            .collect();
+
+        // let (srsv, srsv_b) = linreg(&t_xs, self.buffer.values().map(|f| f.refsv).as_slice())?;
+        // let (srsys, srsys_b) = linreg(&t_xs, self.buffer.values().map(|f| f.refsys).as_slice())?;
+        // let (smdt, smdt_b) = linreg(&t_xs, self.buffer.values().map(|f| f.mdtr).as_slice())?;
+        // let (smdi, smdi_b) = linreg(&t_xs, self.buffer.values().map(|f| f.mdtr).as_slice())?;
+
+        //TODO
+        // interpolate ax + b @ midpoint
+        let refsv = 0.0_f64;
+        let srsv = 0.0_f64;
+        let refsys = 0.0_f64;
+        let srsys = 0.0_f64;
+        let dsg = 0.0_f64;
+        let mdtr = 0.0_f64;
+        let smdt = 0.0_f64;
+        let mdio = 0.0_f64;
+        let smdi = 0.0_f64;
+
+        Ok(TrackData {
+            refsv,
+            srsv,
+            refsys,
+            srsys,
+            dsg,
+            ioe,
+            mdtr,
+            smdt,
+            mdio,
+            smdi,
+        })
+    }
+
+    /// Latch new measurements and we may form a new track,
+    /// if the new track generation Epoch has been reached.
+    /// "ioe": ongoing Issue of Ephemeris.
+    pub fn latch_measurements(&mut self, t: Epoch, data: FitData, ioe: u16) -> Option<TrackData> {
+        self.buffer.insert(t, data);
+
+        // reset for next time
+        self.reset();
+
+        None
+    }
+
+    /// Reset and flush previous measurements
+    pub fn reset(&mut self) {
+        self.buffer.clear();
     }
 }
 
