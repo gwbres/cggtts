@@ -10,7 +10,7 @@ use gnuplot::{Color, PointSymbol, LineStyle, DashType};
 use gnuplot::{PointSize, AxesCommon, LineWidth};*/
 
 use cggtts::track::CommonViewClass;
-use cggtts::{Cggtts, Track};
+use cggtts::Cggtts;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let yaml = load_yaml!("cli.yml");
@@ -18,17 +18,17 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = app.get_matches();
 
     // General
-    let filepaths: Vec<&str> = matches.value_of("filepath").unwrap().split(",").collect();
+    let filepaths: Vec<&str> = matches.value_of("filepath").unwrap().split(',').collect();
 
     let header = matches.is_present("header");
     let tracks = matches.is_present("tracks");
-    let bipm = matches.is_present("bipm");
+    let _bipm = matches.is_present("bipm");
     let bipm_compliance = matches.is_present("bipm-compliant");
     let single = matches.is_present("single");
     let dual = matches.is_present("dual");
     let iono = matches.is_present("ionospheric");
-    let sv = matches.is_present("sv");
-    let unique = matches.is_present("unique");
+    let _sv = matches.is_present("sv");
+    let _unique = matches.is_present("unique");
 
     for fp in filepaths.iter() {
         let cggtts = Cggtts::from_file(fp);
@@ -63,8 +63,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .tracks
                 .iter()
                 .filter(|t| t.has_ionospheric_data())
-                .map(|t| t.ionospheric)
-                .flatten()
+                .filter_map(|t| t.ionospheric)
                 .collect();
             println!("{:#?}", data);
         }
@@ -72,14 +71,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(t) = cggtts.tracks.first() {
                 println!("{}", t.class == CommonViewClass::Single)
             } else {
-                println!("{}", false);
+                println!("false");
             }
         }
         if dual {
             if let Some(t) = cggtts.tracks.first() {
                 println!("{}", t.class == CommonViewClass::Multiple)
             } else {
-                println!("{}", false);
+                println!("false");
             }
         }
     }

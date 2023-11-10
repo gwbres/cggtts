@@ -129,7 +129,7 @@ pub mod track;
 
 extern crate gnss_rs as gnss;
 
-use hifitime::{Duration, Epoch, TimeScale};
+use hifitime::{Duration, Epoch};
 use std::str::FromStr;
 use strum_macros::EnumString;
 use thiserror::Error;
@@ -204,7 +204,9 @@ pub fn helmert_transform (v: (f64,f64,f64), h: HelmertCoefs) -> (f64,f64,f64)  
 
 #[derive(Clone, Copy, PartialEq, Debug, EnumString)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Default)]
 pub enum Code {
+    #[default]
     C1,
     C2,
     P1,
@@ -213,12 +215,6 @@ pub enum Code {
     E5a,
     B1,
     B2,
-}
-
-impl Default for Code {
-    fn default() -> Code {
-        Code::C1
-    }
 }
 
 impl std::fmt::Display for Code {
@@ -524,13 +520,11 @@ impl CGGTTS {
         res.push_str(&format!("{:x}", constellation));
 
         if self.has_ionospheric_data() {
-            res.push_str("Z") // Dual Freq / Multi channel
+            res.push('Z') // Dual Freq / Multi channel
+        } else if self.single_channel() {
+            res.push('S') // Single Freq / Channel
         } else {
-            if self.single_channel() {
-                res.push_str("S") // Single Freq / Channel
-            } else {
-                res.push_str("M") // Single Freq / Multi Channel
-            }
+            res.push('M') // Single Freq / Multi Channel
         }
 
         let max_offset = std::cmp::min(self.station.len(), 2);
@@ -555,7 +549,7 @@ impl CGGTTS {
     /// Builds Self from given `CGGTTS` file.
     pub fn from_file(fp: &str) -> Result<Self, Error> {
         let file_content = std::fs::read_to_string(fp)?;
-        let mut lines = file_content.lines().into_iter();
+        let mut lines = file_content.lines();
 
         // init variables
         let mut system_delay = SystemDelay::new();
@@ -573,20 +567,20 @@ impl CGGTTS {
         let mut reference_frame: Option<String> = None;
         let mut apc_coordinates = Coordinates::default();
         let mut reference_time = ReferenceTime::default();
-        let (mut x, mut y, mut z): (f64, f64, f64) = (0.0, 0.0, 0.0);
+        let (_x, _y, _z): (f64, f64, f64) = (0.0, 0.0, 0.0);
 
         // VERSION must come first
         let version = lines.next().ok_or(Error::VersionFormatError)?;
 
-        let version = match scan_fmt!(&version, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
+        let version = match scan_fmt!(version, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
             Some(version) => Version::from_str(&version)?,
             _ => return Err(Error::VersionFormatError),
         };
 
-        while let Some(mut line) = lines.next() {
+        for line in lines.by_ref() {
             println!("LINE : \"{}\"", line);
             if line.starts_with("REV DATE = ") {
-                match scan_fmt!(&line, "REV DATE = {d}-{d}-{d}", i32, u8, u8) {
+                match scan_fmt!(line, "REV DATE = {d}-{d}-{d}", i32, u8, u8) {
                     (Some(y), Some(m), Some(d)) => {
                         release_date = Epoch::from_gregorian_utc_at_midnight(y, m, d);
                     },
@@ -596,7 +590,7 @@ impl CGGTTS {
                 }
             } else if line.starts_with("RCVR = ") {
                 match scan_fmt!(
-                    &line,
+                    line,
                     "RCVR = {} {} {} {d} {}",
                     String,
                     String,
@@ -623,13 +617,13 @@ impl CGGTTS {
                     _ => {},
                 }
             } else if line.starts_with("CH = ") {
-                match scan_fmt!(&line, "CH = {d}", u16) {
+                match scan_fmt!(line, "CH = {d}", u16) {
                     Some(n) => nb_channels = n,
                     _ => {},
                 };
             } else if line.starts_with("IMS = ") {
                 match scan_fmt!(
-                    &line,
+                    line,
                     "IMS = {} {} {} {d} {}",
                     String,
                     String,
@@ -663,21 +657,21 @@ impl CGGTTS {
                     _ => {},
                 }
             } else if line.starts_with("X = ") {
-                match scan_fmt!(&line, "X = {f}", f64) {
+                match scan_fmt!(line, "X = {f}", f64) {
                     Some(f) => {
                         apc_coordinates.x = f;
                     },
                     _ => {},
                 }
             } else if line.starts_with("Y = ") {
-                match scan_fmt!(&line, "Y = {f}", f64) {
+                match scan_fmt!(line, "Y = {f}", f64) {
                     Some(f) => {
                         apc_coordinates.y = f;
                     },
                     _ => {},
                 }
             } else if line.starts_with("Z = ") {
-                match scan_fmt!(&line, "Z = {f}", f64) {
+                match scan_fmt!(line, "Z = {f}", f64) {
                     Some(f) => {
                         apc_coordinates.z = f;
                     },
@@ -694,13 +688,13 @@ impl CGGTTS {
                     comments = Some(c.to_string());
                 }
             } else if line.starts_with("REF = ") {
-                if let Some(s) = scan_fmt!(&line, "REF = {}", String) {
+                if let Some(s) = scan_fmt!(line, "REF = {}", String) {
                     reference_time = ReferenceTime::from_str(&s)
                 }
             } else if line.contains("DLY = ") {
                 let items: Vec<&str> = line.split_ascii_whitespace().collect();
 
-                let dual_carrier = line.contains(",");
+                let dual_carrier = line.contains(',');
 
                 if items.len() < 4 {
                     continue; // format mismatch
@@ -711,7 +705,7 @@ impl CGGTTS {
                     "REF" => system_delay.ref_delay = f64::from_str(items[3])?,
                     "SYS" => {
                         if line.contains("CAL_ID") {
-                            let offset = line.rfind("=").unwrap();
+                            let offset = line.rfind('=').unwrap();
                             let cal_id = line[offset + 1..].trim();
                             if !cal_id.eq("NA") {
                                 system_delay = system_delay.with_calibration_id(cal_id)
@@ -725,14 +719,14 @@ impl CGGTTS {
                                 }
                             }
                             if let Ok(value) = f64::from_str(items[7]) {
-                                let code = items[9].replace(")", "");
+                                let code = items[9].replace(')', "");
                                 if let Ok(code) = Code::from_str(&code) {
                                     system_delay.delays.push((code, Delay::System(value)));
                                 }
                             }
                         } else {
                             let value = f64::from_str(items[3]).unwrap();
-                            let code = items[6].replace(")", "");
+                            let code = items[6].replace(')', "");
                             if let Ok(code) = Code::from_str(&code) {
                                 system_delay.delays.push((code, Delay::System(value)));
                             }
@@ -740,7 +734,7 @@ impl CGGTTS {
                     },
                     "INT" => {
                         if line.contains("CAL_ID") {
-                            let offset = line.rfind("=").unwrap();
+                            let offset = line.rfind('=').unwrap();
                             let cal_id = line[offset + 1..].trim();
                             if !cal_id.eq("NA") {
                                 system_delay = system_delay.with_calibration_id(cal_id)
@@ -754,23 +748,21 @@ impl CGGTTS {
                                 }
                             }
                             if let Ok(value) = f64::from_str(items[7]) {
-                                let code = items[10].replace(")", "");
+                                let code = items[10].replace(')', "");
                                 if let Ok(code) = Code::from_str(&code) {
                                     system_delay.delays.push((code, Delay::Internal(value)));
                                 }
                             }
-                        } else {
-                            if let Ok(value) = f64::from_str(items[3]) {
-                                let code = items[6].replace(")", "");
-                                if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::Internal(value)));
-                                }
+                        } else if let Ok(value) = f64::from_str(items[3]) {
+                            let code = items[6].replace(')', "");
+                            if let Ok(code) = Code::from_str(&code) {
+                                system_delay.delays.push((code, Delay::Internal(value)));
                             }
                         }
                     },
                     "TOT" => {
                         if line.contains("CAL_ID") {
-                            let offset = line.rfind("=").unwrap();
+                            let offset = line.rfind('=').unwrap();
                             let cal_id = line[offset + 1..].trim();
                             if !cal_id.eq("NA") {
                                 system_delay = system_delay.with_calibration_id(cal_id)
@@ -784,24 +776,22 @@ impl CGGTTS {
                                 }
                             }
                             if let Ok(value) = f64::from_str(items[7]) {
-                                let code = items[9].replace(")", "");
+                                let code = items[9].replace(')', "");
                                 if let Ok(code) = Code::from_str(&code) {
                                     system_delay.delays.push((code, Delay::System(value)));
                                 }
                             }
-                        } else {
-                            if let Ok(value) = f64::from_str(items[3]) {
-                                let code = items[6].replace(")", "");
-                                if let Ok(code) = Code::from_str(&code) {
-                                    system_delay.delays.push((code, Delay::System(value)));
-                                }
+                        } else if let Ok(value) = f64::from_str(items[3]) {
+                            let code = items[6].replace(')', "");
+                            if let Ok(code) = Code::from_str(&code) {
+                                system_delay.delays.push((code, Delay::System(value)));
                             }
                         }
                     },
                     _ => {}, // non recognized delay type
                 };
             } else if line.starts_with("CKSUM = ") {
-                header_ck = match scan_fmt!(&line, "CKSUM = {x}", String) {
+                header_ck = match scan_fmt!(line, "CKSUM = {x}", String) {
                     Some(s) => match u8::from_str_radix(&s, 16) {
                         Ok(hex) => hex,
                         _ => return Err(Error::ChecksumParsingError),
@@ -811,7 +801,7 @@ impl CGGTTS {
 
                 // check CRC
                 let end_pos = line.find("= ").unwrap();
-                cksum = cksum.wrapping_add(crc::calc_crc(&line.split_at(end_pos + 2).0)?);
+                cksum = cksum.wrapping_add(crc::calc_crc(line.split_at(end_pos + 2).0)?);
 
                 //if cksum != header_ck {
                 //    //return Err(Error::ChecksumError(crc::Error::ChecksumError(cksum, ck)));
@@ -821,7 +811,7 @@ impl CGGTTS {
 
             // CRC
             if !line.starts_with("COMMENTS = ") {
-                cksum = cksum.wrapping_add(crc::calc_crc(&line)?);
+                cksum = cksum.wrapping_add(crc::calc_crc(line)?);
             }
         }
 
@@ -836,14 +826,14 @@ impl CGGTTS {
                 Some(s) => s,
                 _ => break, // we're done parsing
             };
-            if line.len() == 0 {
+            if line.is_empty() {
                 // empty line
                 break; // we're done parsing
             }
 
             //let track = Track::from_str(&line)?;
             //tracks.push(track)
-            if let Ok(trk) = Track::from_str(&line) {
+            if let Ok(trk) = Track::from_str(line) {
                 tracks.push(trk);
             }
         }
@@ -868,24 +858,24 @@ impl CGGTTS {
 impl std::fmt::Display for CGGTTS {
     /// Writes self into a `CGGTTS` file
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let LATEST_REVISION_DATE: Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
+        let latest_rev_date: Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
 
         /*
          * Labels in case we provide Ionospheric parameters estimates
          */
-        let TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
+        const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
         "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
 
         /*
          * Labels in case Ionospheric compensation is not available
          */
-        let TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
+        const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
             "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
 
         let mut content = String::new();
         let line = format!("CGGTTS GENERIC DATA FORMAT VERSION = {}\n", CURRENT_RELEASE);
         content.push_str(&line);
-        let line = format!("REV DATE = {}\n", LATEST_REVISION_DATE);
+        let line = format!("REV DATE = {}\n", latest_rev_date);
         content.push_str(&line);
 
         if let Some(rcvr) = &self.rcvr {
@@ -911,7 +901,7 @@ impl std::fmt::Display for CGGTTS {
         if let Some(r) = &self.reference_frame {
             content.push_str(&format!("FRAME = {}\n", r));
         } else {
-            content.push_str(&format!("FRAME = ITRF\n"));
+            content.push_str("FRAME = ITRF\n");
         }
 
         if let Some(comments) = &self.comments {
@@ -921,7 +911,7 @@ impl std::fmt::Display for CGGTTS {
         }
 
         let delays = self.delay.delays.clone();
-        let constellation = if self.tracks.len() > 0 {
+        let constellation = if !self.tracks.is_empty() {
             self.tracks[0].sv.constellation
         } else {
             Constellation::default()
@@ -996,17 +986,17 @@ impl std::fmt::Display for CGGTTS {
 
         if self.has_ionospheric_data() {
             content.push_str(TRACK_LABELS_WITH_IONOSPHERIC_DATA);
-            content.push_str("\n");
+            content.push('\n');
             content.push_str("             hhmmss s  .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns\n")
         } else {
             content.push_str(TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA);
-            content.push_str("\n");
+            content.push('\n');
             content.push_str("            hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s\n")
         }
 
         for i in 0..self.tracks.len() {
             content.push_str(&self.tracks[i].to_string());
-            content.push_str("\n")
+            content.push('\n')
         }
         fmt.write_str(&content)
     }

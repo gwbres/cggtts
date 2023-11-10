@@ -5,9 +5,6 @@ use thiserror::Error;
 mod glonass;
 use glonass::GlonassChannel;
 
-mod iono;
-pub use iono::IonosphericData;
-
 mod class;
 pub use class::CommonViewClass;
 
@@ -75,7 +72,7 @@ pub enum Error {
     CrcError(#[from] crate::crc::Error),
 }
 
-/// Track (clock) data
+/// Track data
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TrackData {
@@ -104,6 +101,22 @@ pub struct TrackData {
     pub mdio: f64,
     /// Slope of the modeled ionospheric delay
     pub smdi: f64,
+}
+
+/// Ionospheric Data are attached to a CGGTTS track
+/// when generated in dual frequency contexts.
+#[derive(Copy, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct IonosphericData {
+    /// Measured ionospheric delay
+    /// corresponding to the solution E in section 2.3.3.
+    pub msio: f64,
+    /// Slope of the measured ionospheric delay
+    /// corresponding to the solution E in section 2.3.3.
+    pub smsi: f64,
+    /// Root-mean-square of the residuals
+    /// corresponding to the solution E in section2.3.3
+    pub isg: f64,
 }
 
 impl Track {
@@ -238,7 +251,7 @@ impl Track {
     /// Returns a `Track` with desired unique space vehicule
     pub fn with_sv(&self, sv: SV) -> Self {
         let mut t = self.clone();
-        t.sv = sv.clone();
+        t.sv = sv;
         t
     }
     /// Returns a track with desired elevation angle in Degrees
@@ -283,55 +296,55 @@ impl std::fmt::Display for Track {
 
         let duration = std::cmp::min(self.duration.to_seconds() as u16, 9999);
         string.push_str(&num.format("04d", duration));
-        string.push_str(" ");
+        string.push(' ');
 
         let elevation = std::cmp::min((self.elevation * 10.0) as u16, 999);
         string.push_str(&num.format("03d", elevation));
-        string.push_str(" ");
+        string.push(' ');
 
         let azimuth = std::cmp::min((self.azimuth * 10.0) as u16, 9999);
         string.push_str(&num.format("04d", azimuth));
-        string.push_str(" ");
+        string.push(' ');
 
         let refsv = std::cmp::min((self.data.refsv * 1E10) as u32, 999_999_999);
         string.push_str(&num.format("+11d", refsv));
-        string.push_str(" ");
+        string.push(' ');
 
         let srsv = std::cmp::min((self.data.srsv * 1E13) as u32, 99_999);
         string.push_str(&num.format("+4d", srsv));
-        string.push_str(" ");
+        string.push(' ');
 
         let refsys = std::cmp::min((self.data.refsys * 1E10) as u32, 999_999_999);
         string.push_str(&num.format("+11d", refsys));
-        string.push_str(" ");
+        string.push(' ');
 
-        let srsys = std::cmp::min((self.data.srsys * 1E13) as u32, 999_999);
+        let _srsys = std::cmp::min((self.data.srsys * 1E13) as u32, 999_999);
         string.push_str(&num.format("+6d", self.data.srsys * 1E13));
-        string.push_str(" ");
+        string.push(' ');
 
         let dsg = std::cmp::min((self.data.dsg * 1E10) as u32, 99_999);
         string.push_str(&num.format("4d", dsg));
-        string.push_str(" ");
+        string.push(' ');
 
         let ioe = std::cmp::min(self.data.ioe, 999);
         string.push_str(&num.format("03d", ioe));
-        string.push_str(" ");
+        string.push(' ');
 
         let mdtr = std::cmp::min((self.data.mdtr * 1E10) as u32, 9_999);
         string.push_str(&num.format("04d", mdtr));
-        string.push_str(" ");
+        string.push(' ');
 
         let smdt = std::cmp::min((self.data.smdt * 1E13) as u32, 9_999);
         string.push_str(&num.format("+04d", smdt));
-        string.push_str(" ");
+        string.push(' ');
 
         let mdio = std::cmp::min((self.data.mdio * 1E10) as u32, 9_999);
         string.push_str(&num.format("04d", mdio));
-        string.push_str(" ");
+        string.push(' ');
 
         let smdi = std::cmp::min((self.data.smdi * 1E13) as u32, 9_999);
         string.push_str(&num.format("+04d", smdi));
-        string.push_str(" ");
+        string.push(' ');
 
         if let Some(iono) = self.iono {
             string.push_str(&format!(
@@ -478,7 +491,7 @@ impl std::str::FromStr for Track {
      */
     fn from_str(line: &str) -> Result<Self, Self::Err> {
         let cleanedup = String::from(line.trim());
-        let mut epoch = Epoch::default();
+        let _epoch = Epoch::default();
         let mut items = cleanedup.split_ascii_whitespace();
 
         let nb_items = items.clone().count();
@@ -523,9 +536,9 @@ impl std::str::FromStr for Track {
             .map_err(|_| Error::FieldParsing(String::from("STTIME:%S")))?;
 
         let mut epoch = Epoch::from_mjd_utc(mjd as f64);
-        epoch = epoch + (h as f64) * Unit::Hour;
-        epoch = epoch + (m as f64) * Unit::Minute;
-        epoch = epoch + (s as f64) * Unit::Second;
+        epoch += (h as f64) * Unit::Hour;
+        epoch += (m as f64) * Unit::Minute;
+        epoch += (s as f64) * Unit::Second;
 
         let duration = Duration::from_seconds(
             items
@@ -580,7 +593,8 @@ impl std::str::FromStr for Track {
             .next()
             .ok_or(Error::MissingField(String::from("ck")))?;
 
-        let ck = u8::from_str_radix(ck, 16).map_err(|_| Error::FieldParsing(String::from("ck")))?;
+        let _ck =
+            u8::from_str_radix(ck, 16).map_err(|_| Error::FieldParsing(String::from("ck")))?;
 
         // let cksum = calc_crc(&line.split_at(end_pos - 1).0)?;
 
