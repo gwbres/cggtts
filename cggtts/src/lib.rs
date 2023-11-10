@@ -874,7 +874,7 @@ impl std::fmt::Display for CGGTTS {
          * Labels in case we provide Ionospheric parameters estimates
          */
         let TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
-        "SAT CL MJD STTIME TRKL ELV AZTH REFSV SRSV REFSYS SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
+        "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
 
         /*
          * Labels in case Ionospheric compensation is not available
@@ -997,11 +997,11 @@ impl std::fmt::Display for CGGTTS {
         if self.has_ionospheric_data() {
             content.push_str(TRACK_LABELS_WITH_IONOSPHERIC_DATA);
             content.push_str("\n");
-            content.push_str("              hhmmss s .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns\n")
+            content.push_str("             hhmmss s  .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns\n")
         } else {
             content.push_str(TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA);
             content.push_str("\n");
-            content.push_str("             hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s\n")
+            content.push_str("            hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s\n")
         }
 
         for i in 0..self.tracks.len() {

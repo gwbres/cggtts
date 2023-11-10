@@ -79,15 +79,15 @@ pub enum Error {
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TrackData {
-    /// REFSV field
+    /// REFSV
     pub refsv: f64,
-    /// SRSV field
+    /// SRSV
     pub srsv: f64,
-    /// REFSYS field
+    /// REFSYS
     pub refsys: f64,
-    /// SRSYS field
+    /// SRSYS
     pub srsys: f64,
-    /// Data signma (`DSG`) : RMS residuals to linear fit from solution B in section 2.3.3
+    /// Data signma (`DSG`) : RMS residuals to linear fit
     pub dsg: f64,
     /// Issue of Ephemeris (`IOE`),
     /// Three-digit decimal code indicating the ephemeris used for the computation.
@@ -96,13 +96,13 @@ pub struct TrackData {
     /// the day, starting at 1=00h00m00s.
     /// For BeiDou, IOE will report the integer hour in the date of the ephemeris (Time of Clock).
     pub ioe: u16,
-    /// Modeled tropospheric delay corresponding to the solution C in section 2.3.3
+    /// Modeled tropospheric delay
     pub mdtr: f64,
-    /// Slope of the modeled tropospheric delay corresponding to the solution C in section 2.3.3
+    /// Slope of the modeled tropospheric delay
     pub smdt: f64,
-    /// Modelled ionospheric delay corresponding to the solution D in section 2.3.3.
+    /// Modeled ionospheric delay
     pub mdio: f64,
-    /// Slope of the modeled ionospheric delay corresponding to the solution D in section 2.3.3.
+    /// Slope of the modeled ionospheric delay
     pub smdi: f64,
 }
 
@@ -280,22 +280,59 @@ impl std::fmt::Display for Track {
             m,
             s
         ));
-        string.push_str(&format!(
-            "{} {} {} {} {} {} {} {} {} {} {} {} {} ",
-            num.format("04d", self.duration.to_seconds() as f64),
-            num.format("03d", self.elevation * 10.0),
-            num.format("04d", self.azimuth * 10.0),
-            num.format("+11d", self.data.refsv * 1E10),
-            num.format("+4d", self.data.srsv * 1E13),
-            num.format("+11d", self.data.refsys * 1E10),
-            num.format("+6d", self.data.srsys * 1E13),
-            num.format("4d", self.data.dsg * 1E10),
-            num.format("03d", self.data.ioe),
-            num.format("04d", self.data.mdtr * 1E10),
-            num.format("+04d", self.data.smdt * 1E13),
-            num.format("04d", self.data.mdio * 1E10),
-            num.format("+04d", self.data.smdi * 1E13),
-        ));
+
+        let duration = std::cmp::min(self.duration.to_seconds() as u16, 9999);
+        string.push_str(&num.format("04d", duration));
+        string.push_str(" ");
+
+        let elevation = std::cmp::min((self.elevation * 10.0) as u16, 999);
+        string.push_str(&num.format("03d", elevation));
+        string.push_str(" ");
+
+        let azimuth = std::cmp::min((self.azimuth * 10.0) as u16, 9999);
+        string.push_str(&num.format("04d", azimuth));
+        string.push_str(" ");
+
+        let refsv = std::cmp::min((self.data.refsv * 1E10) as u32, 999_999_999);
+        string.push_str(&num.format("+11d", refsv));
+        string.push_str(" ");
+
+        let srsv = std::cmp::min((self.data.srsv * 1E13) as u32, 99_999);
+        string.push_str(&num.format("+4d", srsv));
+        string.push_str(" ");
+
+        let refsys = std::cmp::min((self.data.refsys * 1E10) as u32, 999_999_999);
+        string.push_str(&num.format("+11d", refsys));
+        string.push_str(" ");
+
+        let srsys = std::cmp::min((self.data.srsys * 1E13) as u32, 999_999);
+        string.push_str(&num.format("+6d", self.data.srsys * 1E13));
+        string.push_str(" ");
+
+        let dsg = std::cmp::min((self.data.dsg * 1E10) as u32, 99_999);
+        string.push_str(&num.format("4d", dsg));
+        string.push_str(" ");
+
+        let ioe = std::cmp::min(self.data.ioe, 999);
+        string.push_str(&num.format("03d", ioe));
+        string.push_str(" ");
+
+        let mdtr = std::cmp::min((self.data.mdtr * 1E10) as u32, 9_999);
+        string.push_str(&num.format("04d", mdtr));
+        string.push_str(" ");
+
+        let smdt = std::cmp::min((self.data.smdt * 1E13) as u32, 9_999);
+        string.push_str(&num.format("+04d", smdt));
+        string.push_str(" ");
+
+        let mdio = std::cmp::min((self.data.mdio * 1E10) as u32, 9_999);
+        string.push_str(&num.format("04d", mdio));
+        string.push_str(" ");
+
+        let smdi = std::cmp::min((self.data.smdi * 1E13) as u32, 9_999);
+        string.push_str(&num.format("+04d", smdi));
+        string.push_str(" ");
+
         if let Some(iono) = self.iono {
             string.push_str(&format!(
                 "{} {} {} ",
