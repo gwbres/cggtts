@@ -1,9 +1,10 @@
 use crate::prelude::{Duration, Epoch, TimeScale, TrackData};
 use gnss::prelude::SV;
 use hifitime::SECONDS_PER_DAY_I64;
-use linreg::{linear_regression as linreg, Error as LinregError};
 use std::collections::BTreeMap;
 use thiserror::Error;
+// use enterpolation::linear::{LinearBuilder, error::LinearError};
+use linreg::{linear_regression as linreg, Error as LinregError};
 
 /// CGGTTS track formation errors
 #[derive(Debug, Clone, Error)]
@@ -17,6 +18,9 @@ pub enum FitError {
     /// Linear regression failure
     #[error("linear regression failure")]
     LinearRegressionFailure,
+    // /// Linear interpolation failure
+    // #[error("interpolation failure")]
+    // InterpolationFailure(#[from] LinearError),
 }
 
 /// CGGTTS track scheduler used to generate synchronous CGTTTS files.
@@ -162,10 +166,7 @@ impl Scheduler {
             .map(|t| t.to_duration().total_nanoseconds() as f64 * 1.0E-9)
             .collect();
 
-        // let (srsv, srsv_b) = linreg(&t_xs, self.buffer.values().map(|f| f.refsv).as_slice())?;
-        // let (srsys, srsys_b) = linreg(&t_xs, self.buffer.values().map(|f| f.refsys).as_slice())?;
-        // let (smdt, smdt_b) = linreg(&t_xs, self.buffer.values().map(|f| f.mdtr).as_slice())?;
-        // let (smdi, smdi_b) = linreg(&t_xs, self.buffer.values().map(|f| f.mdtr).as_slice())?;
+        let t_mid_s = t_mid.to_duration().total_nanoseconds() as f64 * 1.0E-9;
 
         let elev = self
             .buffer
@@ -183,17 +184,73 @@ impl Scheduler {
             .1
             .azimuth;
 
-        //TODO
-        // interpolate ax + b @ midpoint
-        let refsv = 0.0_f64;
-        let srsv = 0.0_f64;
-        let refsys = 0.0_f64;
-        let srsys = 0.0_f64;
+        let (srsv, srsv_b): (f64, f64) = linreg(
+            &t_xs,
+            &self
+                .buffer
+                .values()
+                .map(|f| f.refsv)
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
+        .map_err(|_| FitError::LinearRegressionFailure)?;
+
+        let (srsys, srsys_b): (f64, f64) = linreg(
+            &t_xs,
+            &self
+                .buffer
+                .values()
+                .map(|f| f.refsys)
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
+        .map_err(|_| FitError::LinearRegressionFailure)?;
+
+        let (smdt, smdt_b): (f64, f64) = linreg(
+            &t_xs,
+            &self
+                .buffer
+                .values()
+                .map(|f| f.mdtr)
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
+        .map_err(|_| FitError::LinearRegressionFailure)?;
+
+        let (smdi, smdi_b): (f64, f64) = linreg(
+            &t_xs,
+            &self
+                .buffer
+                .values()
+                .map(|f| f.mdio.unwrap_or(0.0_f64))
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
+        .map_err(|_| FitError::LinearRegressionFailure)?;
+
+        let (smsi, smsi_b): (f64, f64) = linreg(
+            &t_xs,
+            &self
+                .buffer
+                .values()
+                .map(|f| f.msio.unwrap_or(0.0_f64))
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
+        .map_err(|_| FitError::LinearRegressionFailure)?;
+
+        let refsv = srsv * t_mid_s + srsv_b;
+
+        //TODO: REFSYS needs dt_sat
+        let refsys = srsys * t_mid_s + srsys_b;
+
+        // TODO
+        // dsg is RMS(refsys) @ tmid
         let dsg = 0.0_f64;
-        let mdtr = 0.0_f64;
-        let smdt = 0.0_f64;
-        let mdio = 0.0_f64;
-        let smdi = 0.0_f64;
+
+        let mdtr = smdt * t_mid_s + smdt_b;
+        let mdio = smdi * t_mid_s + smdi_b;
+        let msio = smsi * t_mid_s + smsi_b;
 
         let trk_data = TrackData {
             refsv,
