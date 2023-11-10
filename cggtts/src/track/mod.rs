@@ -11,8 +11,8 @@ pub use iono::IonosphericData;
 mod class;
 pub use class::CommonViewClass;
 
-mod sky_tracker;
-pub use sky_tracker::Scheduler;
+mod scheduler;
+pub use scheduler::Scheduler;
 
 use hifitime::{Duration, Epoch, Unit};
 use gnss::prelude::{Constellation, SV};
