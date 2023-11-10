@@ -27,8 +27,8 @@ pub struct Scheduler {
     /// complete access to both remote clocks, so they follow
     /// the same tracking procedure.
     pub trk_duration: Duration,
-    /* date of creation */
-    pub(crate) t0: Epoch,
+    /* next release */
+    pub(crate) next_release: Epoch,
     /* internal buffer */
     buffer: BTreeMap<Epoch, FitData>,
 }
@@ -60,12 +60,13 @@ impl Scheduler {
     /// expressed as an Epoch.
     pub fn new(t0: Epoch, trk_duration: Duration) -> Self {
         (trk_duration.total_nanoseconds() / 1_000_000_000) as i64;
-
-        Self {
-            t0,
+        let mut s = Self {
             trk_duration,
             buffer: BTreeMap::new(),
-        }
+            next_release: Epoch::default(),
+        };
+        s.next_release = s.next_track_start(t0);
+        s
     }
 
     /// Builds a CGGTTS scheduler with desired tracking duration
@@ -150,7 +151,7 @@ impl Scheduler {
     /// Fit: Track generation procedure. You should prefer the
     /// "latch_measurement" procedure to generate synchronous CGGTTS.
     /// You must provide the ongoing Issue of Ephemeris when fitting your data.
-    pub fn fit(&self, ioe: u16) -> Result<TrackData, FitError> {
+    pub fn fit(&self, ioe: u16) -> Result<((f64, f64), TrackData), FitError> {
         let t_mid = self
             .track_midpoint()
             .ok_or(FitError::UndeterminedTrackMidpoint)?;
@@ -166,6 +167,22 @@ impl Scheduler {
         // let (smdt, smdt_b) = linreg(&t_xs, self.buffer.values().map(|f| f.mdtr).as_slice())?;
         // let (smdi, smdi_b) = linreg(&t_xs, self.buffer.values().map(|f| f.mdtr).as_slice())?;
 
+        let elev = self
+            .buffer
+            .iter()
+            .find(|(t, fitdata)| **t == t_mid)
+            .unwrap() // unfaillible @ this point
+            .1
+            .elevation;
+
+        let azi = self
+            .buffer
+            .iter()
+            .find(|(t, fitdata)| **t == t_mid)
+            .unwrap() // unfaillible @ this point
+            .1
+            .azimuth;
+
         //TODO
         // interpolate ax + b @ midpoint
         let refsv = 0.0_f64;
@@ -178,7 +195,7 @@ impl Scheduler {
         let mdio = 0.0_f64;
         let smdi = 0.0_f64;
 
-        Ok(TrackData {
+        let trk_data = TrackData {
             refsv,
             srsv,
             refsys,
@@ -189,24 +206,37 @@ impl Scheduler {
             smdt,
             mdio,
             smdi,
-        })
+        };
+
+        Ok(((elev, azi), trk_data))
     }
 
     /// Latch new measurements and we may form a new track,
     /// if the new track generation Epoch has been reached.
     /// "ioe": ongoing Issue of Ephemeris.
-    pub fn latch_measurements(&mut self, t: Epoch, data: FitData, ioe: u16) -> Option<TrackData> {
-        self.buffer.insert(t, data);
-
-        // reset for next time
-        self.reset();
-
-        None
+    pub fn latch_measurements(
+        &mut self,
+        t: Epoch,
+        data: FitData,
+        ioe: u16,
+    ) -> Result<Option<((f64, f64), TrackData)>, FitError> {
+        if t >= self.next_release {
+            let trk_data = self.fit(ioe)?;
+            // reset buffer
+            self.reset(t);
+            // insert new data
+            self.buffer.insert(t, data);
+            Ok(Some(trk_data))
+        } else {
+            self.buffer.insert(t, data);
+            Ok(None)
+        }
     }
 
     /// Reset and flush previous measurements
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self, t: Epoch) {
         self.buffer.clear();
+        self.next_release = self.next_track_start(t);
     }
 }
 
