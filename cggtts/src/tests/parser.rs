@@ -1,12 +1,12 @@
 mod test {
-    use std::fs::File;
-    use std::io::Write;
-    use std::path::{Path, PathBuf};
     use crate::{
         prelude::{Constellation, Epoch, Rcvr, ReferenceTime, CGGTTS, SV},
         tests::toolkit::{cmp_dut_model, random_name},
         Code, Coordinates, Delay,
     };
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
     #[test]
     fn single_frequency_files() {
         let resources = PathBuf::new()
@@ -140,7 +140,7 @@ mod test {
             }
         );
 
-        assert_eq!(cggtts.filename(), String::from("GSSY1859.568"));
+        assert_eq!(cggtts.filename(), String::from("GSSY8259.568"));
 
         let tracks: Vec<_> = cggtts.tracks().collect();
         assert_eq!(tracks.len(), 32);

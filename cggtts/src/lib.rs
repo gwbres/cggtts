@@ -859,7 +859,7 @@ impl std::fmt::Display for CGGTTS {
             writeln!(fmt, "IMS = 99999")?;
         }
 
-        writeln!(fmt, "LAB = {}", self.nb_channels)?;
+        writeln!(fmt, "LAB = {}", self.station)?;
         writeln!(fmt, "X = {}", self.apc_coordinates.x)?;
         writeln!(fmt, "Y = {}", self.apc_coordinates.y)?;
         writeln!(fmt, "Z = {}", self.apc_coordinates.z)?;
