@@ -24,7 +24,7 @@ pub enum FitError {
 }
 
 /// CGGTTS track scheduler used to generate synchronous CGTTTS files.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Scheduler {
     /// Tracking duration in use. Although our API allows it,
     /// you can only modify the tracking duration if you have
@@ -59,6 +59,11 @@ pub struct FitData {
 impl Scheduler {
     /// Standard tracking duration [s]
     pub const BIPM_TRACKING_DURATION_SECONDS: u32 = 960;
+
+    /// Standard tracking duration
+    pub fn bipm_tracking_duration() -> Duration {
+        Duration::from_seconds(Self::BIPM_TRACKING_DURATION_SECONDS as f64)
+    }
 
     /// Initialize a Track Scheduler from a random (usually "now") datetime
     /// expressed as an Epoch.
@@ -319,7 +324,6 @@ mod test {
     }
     #[test]
     fn next_track_scheduler() {
-        let tracker = Scheduler::default();
         for (t, expected) in vec![
             // reference MJD
             (
@@ -400,6 +404,7 @@ mod test {
                 Epoch::from_mjd_utc(59509.0) + Duration::from_seconds(6.0 * 60.0),
             ),
         ] {
+            let tracker = Scheduler::new(t, Scheduler::bipm_tracking_duration());
             let next_track_start = tracker.next_track_start(t);
             println!("next track start: {:?}", next_track_start);
             let error_nanos = (next_track_start - expected).abs().total_nanoseconds();
@@ -410,5 +415,12 @@ mod test {
                 error_nanos
             );
         }
+    }
+    #[test]
+    fn verify_bipm_track_definition() {
+        assert_eq!(
+            Scheduler::bipm_tracking_duration(),
+            Duration::from_seconds(Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64)
+        );
     }
 }

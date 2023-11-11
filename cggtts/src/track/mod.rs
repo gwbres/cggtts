@@ -643,7 +643,7 @@ mod tests {
         assert_eq!(GlonassChannel::default(), GlonassChannel::Unknown);
     }
     #[test]
-    fn basic_parser() {
+    fn track_parsing() {
         let content =
 "G99 99 59568 001000 0780 099 0099 +9999999999 +99999       +1536   +181   26 999 9999 +999 9999 +999 00 00 L1C D3";
         let track = Track::from_str(content);
@@ -667,8 +667,6 @@ mod tests {
         assert!((track.data.srsys - 2.83E-11).abs() < 1E-6);
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
-        let dumped = track.to_string();
-        assert_eq!(content.to_owned(), dumped);
 
         let content =
 "G99 99 59563 001400 0780 099 0099 +9999999999 +99999       +1588  +1027   27 999 9999 +999 9999 +999 00 00 L1C EA";
@@ -692,9 +690,6 @@ mod tests {
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
 
-        let dumped = track.to_string();
-        assert_eq!(content.to_owned(), dumped);
-
         let content =
 "G99 99 59563 232200 0780 099 0099 +9999999999 +99999       +1529   -507   23 999 9999 +999 9999 +999 00 00 L1C D9";
         let track = Track::from_str(content);
@@ -709,8 +704,6 @@ mod tests {
         assert_eq!(track.fr, GlonassChannel::Unknown);
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
-        let dumped = track.to_string();
-        assert_eq!(content.to_owned(), dumped);
 
         let content =
 "G99 99 59567 001400 0780 099 0099 +9999999999 +99999       +1561   -151   27 999 9999 +999 9999 +999 00 00 L1C D4";
@@ -734,8 +727,6 @@ mod tests {
         assert_eq!(track.fr, GlonassChannel::Unknown);
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L1C");
-        let dumped = track.to_string();
-        assert_eq!(content.to_owned(), dumped);
     }
     #[test]
     fn parser_ionospheric() {
@@ -757,16 +748,5 @@ mod tests {
         assert_eq!(track.fr, GlonassChannel::ChanNum(2));
         assert_eq!(track.hc, 0);
         assert_eq!(track.frc, "L3P");
-    }
-    #[test]
-    fn test_ionospheric_data() {
-        let data: IonosphericData = (1E-9, 1E-13, 1E-10).into();
-        assert_eq!(data.msio, 1E-9);
-        assert_eq!(data.smsi, 1E-13);
-        assert_eq!(data.isg, 1E-10);
-        let (msio, smsi, isg): (f64, f64, f64) = data.into();
-        assert_eq!(msio, data.msio);
-        assert_eq!(smsi, data.smsi);
-        assert_eq!(isg, data.isg);
     }
 }

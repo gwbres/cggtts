@@ -8,7 +8,7 @@
 //! fn main() {
 //!     let cggtts = CGGTTS::from_file("../data/standard/GZSY8259.506")
 //!         .unwrap();
-//!     assert_eq!(cggtts.lab, "SY82"));
+//!     assert_eq!(cggtts.station, "SY82");
 //!     assert_eq!(cggtts.follows_bipm_specs(), true);
 //!     if let Some(track) = cggtts.tracks.first() {
 //!         let duration = track.duration;
@@ -1106,7 +1106,7 @@ mod test {
             }
         );
         assert!(cggtts.comments.is_none());
-        assert_eq!(cggtts.lab, "ABC");
+        assert_eq!(cggtts.station, "ABC");
         assert_eq!(cggtts.nb_channels, 12);
 
         assert_eq!(cggtts.delay.rf_cable_delay, 237.0);
