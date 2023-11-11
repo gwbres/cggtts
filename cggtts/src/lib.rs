@@ -105,7 +105,7 @@
 //!     );
 
 //!     cggtts.tracks.push(track);
-//!     let mut fd = std::fs::File::create("output.cggtts") // does not respect naming conventions
+//!     let mut fd = std::fs::File::create("test.txt") // does not respect naming conventions
 //!         .unwrap();
 //!     write!(fd, "{}", cggtts).unwrap();
 //! }
