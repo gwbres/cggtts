@@ -318,8 +318,8 @@ impl std::fmt::Display for Track {
         string.push_str(&num.format("+11d", refsys));
         string.push(' ');
 
-        let _srsys = std::cmp::min((self.data.srsys * 1E13) as u32, 999_999);
-        string.push_str(&num.format("+6d", self.data.srsys * 1E13));
+        let srsys = std::cmp::min((self.data.srsys * 1E13) as u32, 999_999);
+        string.push_str(&num.format("+6d", srsys));
         string.push(' ');
 
         let dsg = std::cmp::min((self.data.dsg * 1E10) as u32, 99_999);
@@ -375,35 +375,35 @@ fn parse_data(items: &mut std::str::SplitAsciiWhitespace<'_>) -> Result<TrackDat
         .ok_or(Error::MissingField(String::from("REFSV")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("REFSV")))?
-        * 0.1E-9;
+        * 1E-10;
 
     let srsv = items
         .next()
         .ok_or(Error::MissingField(String::from("SRSV")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("SRSV")))?
-        * 0.1E-12;
+        * 1E-13;
 
     let refsys = items
         .next()
         .ok_or(Error::MissingField(String::from("REFSYS")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("REFSYS")))?
-        * 0.1E-9;
+        * 1E-10;
 
     let srsys = items
         .next()
         .ok_or(Error::MissingField(String::from("SRSYS")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("SRSYS")))?
-        * 0.1E-12;
+        * 1E-13;
 
     let dsg = items
         .next()
         .ok_or(Error::MissingField(String::from("DSG")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("DSG")))?
-        * 0.1E-9;
+        * 1E-10;
 
     let ioe = items
         .next()
@@ -416,28 +416,28 @@ fn parse_data(items: &mut std::str::SplitAsciiWhitespace<'_>) -> Result<TrackDat
         .ok_or(Error::MissingField(String::from("MDTR")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("MDTR")))?
-        * 0.1E-9;
+        * 1E-10;
 
     let smdt = items
         .next()
         .ok_or(Error::MissingField(String::from("SMDT")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("SMDT")))?
-        * 0.1E-12;
+        * 1E-13;
 
     let mdio = items
         .next()
         .ok_or(Error::MissingField(String::from("MDIO")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("MDIO")))?
-        * 0.1E-9;
+        * 1E-10;
 
     let smdi = items
         .next()
         .ok_or(Error::MissingField(String::from("SMDI")))?
         .parse::<f64>()
         .map_err(|_| Error::FieldParsing(String::from("SMDI")))?
-        * 0.1E-12;
+        * 1E-13;
 
     Ok(TrackData {
         refsv,
