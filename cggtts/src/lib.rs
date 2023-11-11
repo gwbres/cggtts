@@ -578,7 +578,6 @@ impl CGGTTS {
         };
 
         for line in lines.by_ref() {
-            println!("LINE : \"{}\"", line);
             if line.starts_with("REV DATE = ") {
                 match scan_fmt!(line, "REV DATE = {d}-{d}-{d}", i32, u8, u8) {
                     (Some(y), Some(m), Some(d)) => {
@@ -872,42 +871,43 @@ impl std::fmt::Display for CGGTTS {
         const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
             "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
 
-        let mut content = String::new();
-        let line = format!("CGGTTS GENERIC DATA FORMAT VERSION = {}\n", CURRENT_RELEASE);
-        content.push_str(&line);
-        let line = format!("REV DATE = {}\n", latest_rev_date);
-        content.push_str(&line);
+        writeln!(
+            fmt,
+            "CGGTTS GENERIC DATA FORMAT VERSION = {}",
+            CURRENT_RELEASE
+        )?;
+
+        writeln!(fmt, "REV DATE = {}", latest_rev_date)?;
 
         if let Some(rcvr) = &self.rcvr {
-            content.push_str(&format!("RCVR = {:X}\n", rcvr));
+            writeln!(fmt, "RCVR = {:X}", rcvr)?;
         } else {
-            content.push_str("RCVR = RRRRRRRR\n")
+            writeln!(fmt, "RCVR = RRRRRRRR")?;
         }
 
-        let line = format!("CH = {}\n", self.nb_channels);
-        content.push_str(&line);
+        writeln!(fmt, "CH = {}", self.nb_channels)?;
 
         if let Some(ims) = &self.ims {
-            content.push_str(&format!("RCVR = {:X}\n", ims));
+            writeln!(fmt, "RCVR = {:X}", ims)?;
         } else {
-            content.push_str("IMS = 99999\n")
+            writeln!(fmt, "IMS = 99999")?;
         }
 
-        content.push_str(&format!("LAB = {}\n", self.nb_channels));
-        content.push_str(&format!("X = {}\n", self.apc_coordinates.x));
-        content.push_str(&format!("Y = {}\n", self.apc_coordinates.y));
-        content.push_str(&format!("Z = {}\n", self.apc_coordinates.z));
+        writeln!(fmt, "LAB = {}", self.nb_channels)?;
+        writeln!(fmt, "X = {}", self.apc_coordinates.x)?;
+        writeln!(fmt, "Y = {}", self.apc_coordinates.y)?;
+        writeln!(fmt, "Z = {}", self.apc_coordinates.z)?;
 
         if let Some(r) = &self.reference_frame {
-            content.push_str(&format!("FRAME = {}\n", r));
+            writeln!(fmt, "FRAME = {}", r)?;
         } else {
-            content.push_str("FRAME = ITRF\n");
+            writeln!(fmt, "FRAME = ITRF")?;
         }
 
         if let Some(comments) = &self.comments {
-            content.push_str(&format!("COMMENTS = {}\n", comments));
+            writeln!(fmt, "COMMENTS = {}", comments)?;
         } else {
-            content.push_str("COMMENTS = NO COMMENTS\n")
+            writeln!(fmt, "COMMENTS = NO COMMENTS")?;
         }
 
         let delays = self.delay.delays.clone();
@@ -916,6 +916,8 @@ impl std::fmt::Display for CGGTTS {
         } else {
             Constellation::default()
         };
+
+        let mut content = String::new();
         if delays.len() == 1 {
             // Single frequency
             let (code, value) = delays[0];
@@ -934,9 +936,9 @@ impl std::fmt::Display for CGGTTS {
                 },
             }
             if let Some(cal_id) = &self.delay.cal_id {
-                content.push_str(&format!("       CAL_ID = {}\n", cal_id));
+                content.push_str(&format!("       CAL_ID = {}", cal_id));
             } else {
-                content.push_str("       CAL_ID = NA\n");
+                content.push_str("       CAL_ID = NA");
             }
         } else if delays.len() == 2 {
             // Dual frequency
@@ -967,38 +969,35 @@ impl std::fmt::Display for CGGTTS {
                 },
             }
             if let Some(cal_id) = &self.delay.cal_id {
-                content.push_str(&format!("     CAL_ID = {}\n", cal_id));
+                content.push_str(&format!("     CAL_ID = {}", cal_id));
             } else {
-                content.push_str("     CAL_ID = NA\n");
+                content.push_str("     CAL_ID = NA");
             }
         }
 
-        content.push_str(&format!("CAB DLY = {:.1} ns\n", self.delay.rf_cable_delay));
+        writeln!(fmt, "{}", content)?;
+        writeln!(fmt, "CAB DLY = {:.1} ns", self.delay.rf_cable_delay)?;
+        writeln!(fmt, "REF DLY = {:.1} ns", self.delay.ref_delay)?;
+        writeln!(fmt, "REF = {}", self.reference_time)?;
 
-        content.push_str(&format!("REF DLY = {:.1} ns\n", self.delay.ref_delay));
+        let crc = crc::calc_crc(&content).map_err(|_| std::fmt::Error)?;
 
-        content.push_str(&format!("REF = {}\n", self.reference_time));
-
-        let crc = crc::calc_crc(&content).map_err(|_| std::fmt::Error);
-
-        let crc = crc.unwrap();
-        content.push_str(&format!("CKSUM = {:2X}\n\n", crc)); /* CRC + BLANK */
+        writeln!(fmt, "CKSUM = {:2X}", crc)?;
+        writeln!(fmt, "{}", "")?; // BLANK
 
         if self.has_ionospheric_data() {
-            content.push_str(TRACK_LABELS_WITH_IONOSPHERIC_DATA);
-            content.push('\n');
-            content.push_str("             hhmmss s  .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns\n")
+            writeln!(fmt, "{}\n", TRACK_LABELS_WITH_IONOSPHERIC_DATA)?; // LABELS + BLANK
+            writeln!(fmt, "             hhmmss s  .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns")?;
         } else {
-            content.push_str(TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA);
-            content.push('\n');
-            content.push_str("            hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s\n")
+            writeln!(fmt, "{}\n", TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA)?; // LABELS + BLANK
+            writeln!(fmt, "            hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s")?;
         }
 
-        for i in 0..self.tracks.len() {
-            content.push_str(&self.tracks[i].to_string());
-            content.push('\n')
+        for track in self.tracks.iter() {
+            writeln!(fmt, "{}", track)?;
         }
-        fmt.write_str(&content)
+
+        Ok(())
     }
 }
 

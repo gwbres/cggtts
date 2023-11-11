@@ -1,4 +1,5 @@
 use crate::prelude::CGGTTS;
+use rand::{distributions::Alphanumeric, Rng};
 
 pub fn cmp_dut_model(dut: &CGGTTS, model: &CGGTTS) {
     assert_eq!(dut.version, model.version);
@@ -10,4 +11,15 @@ pub fn cmp_dut_model(dut: &CGGTTS, model: &CGGTTS) {
     assert_eq!(dut.apc_coordinates, model.apc_coordinates);
     assert_eq!(dut.comments, model.comments);
     assert_eq!(dut.delay, model.delay);
+}
+
+/*
+ * Tool to generate random names when we need to produce a file
+ */
+pub fn random_name(size: usize) -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(size)
+        .map(char::from)
+        .collect()
 }

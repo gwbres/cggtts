@@ -1,9 +1,11 @@
 mod test {
-    use crate::tests::toolkit::cmp_dut_model;
+    use crate::tests::toolkit::{cmp_dut_model, random_name};
     use crate::CGGTTS;
+    use std::fs::File;
+    use std::io::Write;
     use std::path::PathBuf;
     #[test]
-    fn test_standard_pool() {
+    fn single_frequency_files() {
         let resources = PathBuf::new()
             .join(env!("CARGO_MANIFEST_DIR"))
             .join("../data")
@@ -17,6 +19,7 @@ mod test {
             }
             let fp = path.to_string_lossy().to_string();
             println!("parsing \"{}\"", fp);
+
             let cggtts = CGGTTS::from_file(&fp);
             assert!(
                 cggtts.is_ok(),
@@ -25,11 +28,19 @@ mod test {
                 cggtts.err()
             );
 
+            let cggtts = cggtts.unwrap();
+
             // dump into file
+            let filename = random_name(8);
+            let mut fd = File::create(&filename).unwrap();
+            write!(fd, "{}", cggtts).unwrap();
+
+            // remove generated file
+            let _ = std::fs::remove_file(&filename);
         }
     }
     #[test]
-    fn test_advanced_pool() {
+    fn dual_frequency_files() {
         let resources = PathBuf::new()
             .join(env!("CARGO_MANIFEST_DIR"))
             .join("../data")

@@ -357,9 +357,14 @@ impl std::fmt::Display for Track {
 
         string.push_str(&format!("{:02} {:02X} {}", self.fr, self.hc, self.frc));
 
-        if let Ok(crc) = calc_crc(&string) {
-            string.push_str(&format!(" {:2X}", crc + 32))
+        let crc = calc_crc(&string);
+        if crc.is_err() {
+            panic!("failed to calculate line CRC: {}", crc.err().unwrap());
         }
+
+        let crc = crc.unwrap();
+        string.push_str(&format!(" {:2X}", crc.wrapping_add(32)));
+
         fmt.write_str(&string)
     }
 }
