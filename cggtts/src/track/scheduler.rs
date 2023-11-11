@@ -59,7 +59,7 @@ impl Scheduler {
     /// Standard tracking duration [s]
     pub const BIPM_TRACKING_DURATION_SECONDS: u32 = 960;
 
-    /// Standard tracking duration
+    /// Returns standard tracking duration
     pub fn bipm_tracking_duration() -> Duration {
         Duration::from_seconds(Self::BIPM_TRACKING_DURATION_SECONDS as f64)
     }
