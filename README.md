@@ -38,28 +38,22 @@ information and measurement data. It is a file parser (reader) and producer
 * CGGTTS requires accurate [delay](doc/delay.md) specifications and compensation,
 because it targets 0.1 ns residual errors. 
 
-## Synchronous / Asynchronous CGGTTS
+## CGGTTS track scheduling
 
-Usually CGGTTS files are synchronous and use the scheduling table
-defined by BIPM. Originaly, the scheduler was defined from the GPS ephemerides 
-and hardware (GNSS signal trackers) limitations.  
+If you compiled the crate with the _scheduler_ feature, you can take advantage of the
+`Scheduler` structure that will help you generate your synchronous CGGTTS.
 
-Nowadays the scheduling is kept and serves as an easy method to have synchronous CGGTTS.
-Also note that _Epochs_ are expressed in UTC in CGGTTS. The combination of both has a lot of benefits,
-synchronous CGGTTS files can be directly compared to one another (remote clock comparison).
+Synchronous CGGTTS is convenient because it allows direct exchange of CGGTTS files
+and therefore, direct remote clocks comparison.
 
-## CGGTTS track production
+The `Scheduler` structure works according to the BIPM definitions but we allow for a different
+tracking duration. The default being 980s, you can use shorter tracking duration and faster
+CGGTTS generation. You can only modify the tracking duration if you can do so on both remote clocks,
+so they share the same production parameters at all times.
 
-The `SkyTracker` object is there to help generate `CGGTTS Tracks` from GNSS observations.  
+## System Time delays
 
-The SkyTracker only implements the BIPM reference point at the moment, but the API allows using a different
-tracking duration (faster tracking = tighter clock comparison).
-
-By default the Tracking duration is 16' (13' Ephemerides + 3' historical warmup) so you can only get 90 
-track from a typical Observation RINEX spanning 24 h.
-
-`SkyTracker` allows real time modification of the tracking duration, although that is not recommended,
-unless you have means to change the tracking duration on the remote site at the same time.
+A built in API allows accurate system delay description as defined in CGGTTS.
 
 ## CGGTTS-CLI
 
