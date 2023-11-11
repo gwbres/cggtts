@@ -1,12 +1,12 @@
 mod test {
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
     use crate::{
         prelude::{Constellation, Epoch, Rcvr, ReferenceTime, CGGTTS, SV},
         tests::toolkit::{cmp_dut_model, random_name},
         Code, Coordinates, Delay,
     };
-    use std::fs::File;
-    use std::io::Write;
-    use std::path::{Path, PathBuf};
     #[test]
     fn single_frequency_files() {
         let resources = PathBuf::new()
@@ -32,6 +32,11 @@ mod test {
             );
 
             let cggtts = cggtts.unwrap();
+
+            // test filename convention
+            let stem = path.file_name().unwrap();
+            let stem = stem.to_string_lossy();
+            // assert_eq!(cggtts.filename(), stem, "bad filename convention");
 
             // dump into file
             let filename = random_name(8);

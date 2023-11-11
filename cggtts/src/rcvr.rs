@@ -5,7 +5,7 @@ pub struct Rcvr {
     /// Manufacturer of this hardware
     pub manufacturer: String,
     /// Type of receiver
-    pub recv_type: String,
+    pub model: String,
     /// Receiver's serial number
     pub serial_number: String,
     /// Receiver manufacturing year
@@ -22,7 +22,7 @@ impl Rcvr {
     }
     pub fn receiver(&self, rcvr: &str) -> Self {
         let mut s = self.clone();
-        s.recv_type = rcvr.to_string();
+        s.model = rcvr.to_string();
         s
     }
     pub fn serial_number(&self, sn: &str) -> Self {
@@ -49,17 +49,7 @@ impl std::fmt::UpperHex for Rcvr {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.write_str(&format!(
             "{} {} {} {} {}",
-            self.manufacturer, self.recv_type, self.serial_number, self.year, self.release
+            self.manufacturer, self.model, self.serial_number, self.year, self.release
         ))
-    }
-}
-
-impl std::fmt::LowerHex for Rcvr {
-    /*
-     * Formats Self as used in file name generation
-     */
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let max_offset = std::cmp::min(self.serial_number.len(), 2);
-        fmt.write_str(&self.serial_number[0..max_offset])
     }
 }

@@ -499,14 +499,8 @@ impl CGGTTS {
             res.push('M') // Single Freq / Multi Channel
         }
 
-        let max_offset = std::cmp::min(self.station.len(), 2);
+        let max_offset = std::cmp::min(self.station.len(), 4);
         res.push_str(&self.station[0..max_offset]);
-
-        if let Some(rcvr) = &self.rcvr {
-            res.push_str(&format!("{:x}", rcvr));
-        } else {
-            res.push_str("__");
-        }
 
         if let Some(epoch) = self.epoch() {
             let mjd = epoch.to_mjd_utc_days();
