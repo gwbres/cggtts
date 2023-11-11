@@ -1,10 +1,9 @@
-use crate::prelude::{Duration, Epoch, TimeScale, TrackData};
+use crate::prelude::{Duration, Epoch, TrackData};
 use gnss::prelude::SV;
 use hifitime::SECONDS_PER_DAY_I64;
+use linreg::{linear_regression as linreg, Error as LinregError};
 use std::collections::BTreeMap;
 use thiserror::Error;
-// use enterpolation::linear::{LinearBuilder, error::LinearError};
-use linreg::{linear_regression as linreg, Error as LinregError};
 
 /// CGGTTS track formation errors
 #[derive(Debug, Clone, Error)]
@@ -104,7 +103,7 @@ impl Scheduler {
     /* returns midpoint Epoch */
     pub(crate) fn track_midpoint(&self) -> Option<Epoch> {
         let (t0, _) = self.buffer.first_key_value()?;
-        for (t, data) in self.buffer.iter() {
+        for (t, _) in self.buffer.iter() {
             if *t >= *t0 + self.trk_duration / 2 {
                 return Some(*t);
             }
@@ -176,7 +175,7 @@ impl Scheduler {
         let elev = self
             .buffer
             .iter()
-            .find(|(t, fitdata)| **t == t_mid)
+            .find(|(t, _)| **t == t_mid)
             .unwrap() // unfaillible @ this point
             .1
             .elevation;
@@ -184,7 +183,7 @@ impl Scheduler {
         let azi = self
             .buffer
             .iter()
-            .find(|(t, fitdata)| **t == t_mid)
+            .find(|(t, _)| **t == t_mid)
             .unwrap() // unfaillible @ this point
             .1
             .azimuth;
