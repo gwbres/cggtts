@@ -1,9 +1,9 @@
-use thiserror::Error;
+use crate::prelude::{Duration, Epoch, TrackData};
 use gnss::prelude::SV;
 use hifitime::SECONDS_PER_DAY_I64;
-use std::collections::BTreeMap;
 use linreg::linear_regression as linreg;
-use crate::prelude::{Duration, Epoch, TrackData};
+use std::collections::BTreeMap;
+use thiserror::Error;
 
 /// CGGTTS track formation errors
 #[derive(Debug, Clone, Error)]
@@ -248,9 +248,11 @@ impl Scheduler {
         //TODO: REFSYS needs dt_sat
         let refsys = srsys * t_mid_s + srsys_b;
 
-        // TODO
-        // dsg is RMS(refsys) @ tmid
-        let dsg = 0.0_f64;
+        let mut dsg = t_xs
+            .iter()
+            .fold(0.0_f64, |acc, t_xs| acc + (srsys * t_xs + srsys_b).powi(2));
+        dsg /= t_xs.len() as f64;
+        dsg = dsg.sqrt();
 
         let mdtr = smdt * t_mid_s + smdt_b;
         let mdio = smdi * t_mid_s + smdi_b;

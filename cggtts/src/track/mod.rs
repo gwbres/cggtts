@@ -1,8 +1,8 @@
-use thiserror::Error;
-use crate::crc::calc_crc; //Error as CrcError};
+use crate::crc::calc_crc;
+use thiserror::Error; //Error as CrcError};
 
 mod glonass;
-use glonass::GlonassChannel;
+pub use glonass::GlonassChannel;
 
 mod class;
 pub use class::CommonViewClass;
@@ -119,8 +119,8 @@ pub struct IonosphericData {
 }
 
 impl Track {
-    /// Builds new CGGTTS track from single SV realization.
-    /// For Glonass vehicles, prefer [Self::new_glonass_sv]
+    /// Builds a new CGGTTS track.
+    /// For Glonass SV: prefer [Self::new_glonass_sv]
     pub fn new_sv(
         sv: SV,
         epoch: Epoch,
@@ -134,9 +134,9 @@ impl Track {
         frc: &str,
     ) -> Self {
         Self {
+            sv,
             epoch,
             class,
-            sv,
             duration,
             elevation,
             azimuth,
@@ -174,69 +174,6 @@ impl Track {
             hc: rcvr_channel,
             frc: frc.to_string(),
         }
-    }
-    /// Builds new CGGTTS track resulting from a melting pot realization
-    pub fn new_melting_pot(
-        epoch: Epoch,
-        duration: Duration,
-        class: CommonViewClass,
-        elevation: f64,
-        azimuth: f64,
-        data: TrackData,
-        iono: Option<IonosphericData>,
-        rcvr_channel: u8,
-        frc: &str,
-    ) -> Self {
-        Self {
-            sv: SV {
-                constellation: Constellation::GPS,
-                prn: 99,
-            },
-            epoch,
-            class,
-            duration,
-            elevation,
-            azimuth,
-            data,
-            iono,
-            fr: GlonassChannel::Unknown,
-            hc: rcvr_channel,
-            frc: frc.to_string(),
-        }
-    }
-    /// Builds a new CGGTTS track from Glonass melting pot realization
-    pub fn new_glonass_melting_pot(
-        epoch: Epoch,
-        duration: Duration,
-        class: CommonViewClass,
-        elevation: f64,
-        azimuth: f64,
-        data: TrackData,
-        iono: Option<IonosphericData>,
-        glo_channel: GlonassChannel,
-        rcvr_channel: u8,
-        frc: &str,
-    ) -> Self {
-        Self {
-            epoch,
-            class,
-            duration,
-            sv: SV {
-                constellation: Constellation::Glonass,
-                prn: 99,
-            },
-            elevation,
-            azimuth,
-            data,
-            iono,
-            fr: glo_channel,
-            hc: rcvr_channel,
-            frc: frc.to_string(),
-        }
-    }
-    /// Track is a melting pot is only one SV was tracked during its realization
-    pub fn melting_pot(&self) -> bool {
-        self.sv.prn == 99
     }
     /// Returns true if Self was measured against given `GNSS` Constellation
     pub fn uses_constellation(&self, c: Constellation) -> bool {
@@ -289,63 +226,74 @@ fn cggtts_fmt_f64(nb: f64, scaling: f64, sat: u64, padding: usize) -> String {
 impl std::fmt::Display for Track {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
+        string.push_str(&format!("{} {:X} ", self.sv, self.class));
+
         string.push_str(&format!(
-            "{} {:X} ",
-            self.sv,
-            self.class));
-        
-        string.push_str(&format!("{} ", cggtts_fmt_f64(
-            self.epoch.to_mjd_utc_days().floor(),
-            1.0, 
-            99999,
-            5)));
-        
-        let (_, _, _, h, m, s, _) = self.epoch.to_gregorian_utc();
-        string.push_str(&format!(
-            "{:02}{:02}{:02} ",
-            h,
-            m,
-            s
+            "{} ",
+            cggtts_fmt_f64(self.epoch.to_mjd_utc_days().floor(), 1.0, 99999, 5)
         ));
 
-        string.push_str(
-            &format!("{} ", cggtts_fmt(self.duration.to_seconds() as u64, 9999, 4)));
+        let (_, _, _, h, m, s, _) = self.epoch.to_gregorian_utc();
+        string.push_str(&format!("{:02}{:02}{:02} ", h, m, s));
 
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.elevation, 10.0, 999, 3)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.azimuth, 10.0, 9999, 4)));
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt(self.duration.to_seconds() as u64, 9999, 4)
+        ));
 
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.refsv, 1E10, 9_999_999_999, 10)));
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.elevation, 10.0, 999, 3)
+        ));
 
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.srsv, 1E13, 999_999, 6)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.refsys, 1E10, 999_999_999, 10)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.srsys, 1E13, 999_999, 6)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.dsg, 1E10, 99_999, 5)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt(self.data.ioe, 999, 3)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.mdtr, 1E10, 9_999, 4)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.smdt, 1E13, 9_999, 4)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.mdio, 1E10, 9_999, 4)));
-        
-        string.push_str(
-            &format!("{} ", cggtts_fmt_f64(self.data.smdi, 1E13, 9_999, 4)));
+        string.push_str(&format!("{} ", cggtts_fmt_f64(self.azimuth, 10.0, 9999, 4)));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.refsv, 1E10, 99_999_999_999, 11)
+        ));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.srsv, 1E13, 999_999, 6)
+        ));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.refsys, 1E10, 99_999_999_999, 11)
+        ));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.srsys, 1E13, 999_999, 6)
+        ));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.dsg, 1E10, 9_999, 4)
+        ));
+
+        string.push_str(&format!("{} ", cggtts_fmt(self.data.ioe, 999, 3)));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.mdtr, 1E10, 9_999, 4)
+        ));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.smdt, 1E13, 9_999, 4)
+        ));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.mdio, 1E10, 9_999, 4)
+        ));
+
+        string.push_str(&format!(
+            "{} ",
+            cggtts_fmt_f64(self.data.smdi, 1E13, 9_999, 4)
+        ));
 
         if let Some(iono) = self.iono {
             string.push_str(&format!(
