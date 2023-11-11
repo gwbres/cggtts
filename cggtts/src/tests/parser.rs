@@ -12,7 +12,7 @@ mod test {
         let resources = PathBuf::new()
             .join(env!("CARGO_MANIFEST_DIR"))
             .join("../data")
-            .join("standard");
+            .join("single");
         for entry in std::fs::read_dir(resources).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -62,7 +62,7 @@ mod test {
         let resources = PathBuf::new()
             .join(env!("CARGO_MANIFEST_DIR"))
             .join("../data")
-            .join("advanced");
+            .join("dual");
 
         for entry in std::fs::read_dir(resources).unwrap() {
             let entry = entry.unwrap();
@@ -87,7 +87,7 @@ mod test {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("data")
-            .join("standard")
+            .join("single")
             .join("GZSY8259.568");
 
         let fullpath = path.to_string_lossy().to_string();
@@ -147,7 +147,7 @@ mod test {
 
         let _dumped = cggtts.to_string();
         let _compare = std::fs::read_to_string(
-            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/standard/GZSY8259.568"),
+            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/single/GZSY8259.568"),
         )
         .unwrap();
     }
@@ -156,7 +156,7 @@ mod test {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("data")
-            .join("advanced")
+            .join("dual")
             .join("RZSY8257.000");
 
         let fullpath = path.to_string_lossy().to_string();

@@ -1,6 +1,5 @@
-use crate::crc::calc_crc; //Error as CrcError};
-use format_num::NumberFormat;
 use thiserror::Error;
+use crate::crc::calc_crc; //Error as CrcError};
 
 mod glonass;
 use glonass::GlonassChannel;
@@ -278,80 +277,82 @@ impl Track {
     }
 }
 
+fn cggtts_fmt<T: std::cmp::Ord + std::fmt::Display>(nb: T, sat: T, padding: usize) -> String {
+    format!("{:>padding$}", std::cmp::min(nb, sat))
+}
+
+fn cggtts_fmt_f64(nb: f64, scaling: f64, sat: u64, padding: usize) -> String {
+    let scaled = (nb * scaling).round() as u64;
+    format!("{:>padding$}", std::cmp::min(scaled, sat))
+}
+
 impl std::fmt::Display for Track {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = String::new();
-        let num = NumberFormat::new();
-        let mjd = self.epoch.to_mjd_utc_days();
+        string.push_str(&format!(
+            "{} {:X} ",
+            self.sv,
+            self.class));
+        
+        string.push_str(&format!("{} ", cggtts_fmt_f64(
+            self.epoch.to_mjd_utc_days().floor(),
+            1.0, 
+            99999,
+            5)));
+        
         let (_, _, _, h, m, s, _) = self.epoch.to_gregorian_utc();
         string.push_str(&format!(
-            "{} {:X} {} {:02}{:02}{:02} ",
-            self.sv,
-            self.class,
-            mjd.floor() as u32,
+            "{:02}{:02}{:02} ",
             h,
             m,
             s
         ));
 
-        let duration = std::cmp::min(self.duration.to_seconds() as u16, 9999);
-        string.push_str(&num.format("04d", duration));
-        string.push(' ');
+        string.push_str(
+            &format!("{} ", cggtts_fmt(self.duration.to_seconds() as u64, 9999, 4)));
 
-        let elevation = std::cmp::min((self.elevation * 10.0) as u16, 999);
-        string.push_str(&num.format("03d", elevation));
-        string.push(' ');
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.elevation, 10.0, 999, 3)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.azimuth, 10.0, 9999, 4)));
 
-        let azimuth = std::cmp::min((self.azimuth * 10.0) as u16, 9999);
-        string.push_str(&num.format("04d", azimuth));
-        string.push(' ');
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.refsv, 1E10, 9_999_999_999, 10)));
 
-        let refsv = std::cmp::min((self.data.refsv * 1E10) as u32, 999_999_999);
-        string.push_str(&num.format("+11d", refsv));
-        string.push(' ');
-
-        let srsv = std::cmp::min((self.data.srsv * 1E13) as u32, 99_999);
-        string.push_str(&num.format("+4d", srsv));
-        string.push(' ');
-
-        let refsys = std::cmp::min((self.data.refsys * 1E10) as u32, 999_999_999);
-        string.push_str(&num.format("+11d", refsys));
-        string.push(' ');
-
-        let srsys = std::cmp::min((self.data.srsys * 1E13) as u32, 999_999);
-        string.push_str(&num.format("+6d", srsys));
-        string.push(' ');
-
-        let dsg = std::cmp::min((self.data.dsg * 1E10) as u32, 99_999);
-        string.push_str(&num.format("4d", dsg));
-        string.push(' ');
-
-        let ioe = std::cmp::min(self.data.ioe, 999);
-        string.push_str(&num.format("03d", ioe));
-        string.push(' ');
-
-        let mdtr = std::cmp::min((self.data.mdtr * 1E10) as u32, 9_999);
-        string.push_str(&num.format("04d", mdtr));
-        string.push(' ');
-
-        let smdt = std::cmp::min((self.data.smdt * 1E13) as u32, 9_999);
-        string.push_str(&num.format("+04d", smdt));
-        string.push(' ');
-
-        let mdio = std::cmp::min((self.data.mdio * 1E10) as u32, 9_999);
-        string.push_str(&num.format("04d", mdio));
-        string.push(' ');
-
-        let smdi = std::cmp::min((self.data.smdi * 1E13) as u32, 9_999);
-        string.push_str(&num.format("+04d", smdi));
-        string.push(' ');
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.srsv, 1E13, 999_999, 6)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.refsys, 1E10, 999_999_999, 10)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.srsys, 1E13, 999_999, 6)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.dsg, 1E10, 99_999, 5)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt(self.data.ioe, 999, 3)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.mdtr, 1E10, 9_999, 4)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.smdt, 1E13, 9_999, 4)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.mdio, 1E10, 9_999, 4)));
+        
+        string.push_str(
+            &format!("{} ", cggtts_fmt_f64(self.data.smdi, 1E13, 9_999, 4)));
 
         if let Some(iono) = self.iono {
             string.push_str(&format!(
                 "{} {} {} ",
-                num.format("11d", iono.msio * 1E10),
-                num.format("+6d", iono.smsi * 1E13),
-                num.format("04d", iono.isg * 1E10),
+                cggtts_fmt_f64(iono.msio, 1E10, 9_999, 4),
+                cggtts_fmt_f64(iono.smsi, 1E13, 999_999, 6),
+                cggtts_fmt_f64(iono.isg, 1E10, 9_999, 4),
             ));
         }
 

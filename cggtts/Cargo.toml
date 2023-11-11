@@ -19,10 +19,8 @@ scheduler = ["linreg"]
 [dependencies]
 thiserror = "1"
 scan_fmt = "0.1"
-format_num = "0.1.0"
 strum = "0.23.0"
 strum_macros = "0.23.0"
-lazy_static = "1.4"
 gnss-rs = { version = "2.1.1", features = ["serde"] }
 hifitime = { version = "3.8.4", features = ["serde", "std"] }
 serde = { version = "1.0", optional = true, features = ["derive"] }

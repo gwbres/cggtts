@@ -1,9 +1,9 @@
-use crate::prelude::{Duration, Epoch, TrackData};
+use thiserror::Error;
 use gnss::prelude::SV;
 use hifitime::SECONDS_PER_DAY_I64;
-use linreg::{linear_regression as linreg, Error as LinregError};
 use std::collections::BTreeMap;
-use thiserror::Error;
+use linreg::linear_regression as linreg;
+use crate::prelude::{Duration, Epoch, TrackData};
 
 /// CGGTTS track formation errors
 #[derive(Debug, Clone, Error)]

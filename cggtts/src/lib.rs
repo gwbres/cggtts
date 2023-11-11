@@ -6,7 +6,7 @@
 //! ```
 //! use cggtts::CGGTTS;
 //! fn main() {
-//!     let cggtts = CGGTTS::from_file("../data/standard/GZSY8259.506")
+//!     let cggtts = CGGTTS::from_file("../data/single/GZSY8259.506")
 //!         .unwrap();
 //!     assert_eq!(cggtts.station, "SY82");
 //!     assert_eq!(cggtts.follows_bipm_specs(), true);
@@ -25,7 +25,7 @@
 //!```
 //! use cggtts::CGGTTS;
 //! fn main() {
-//!     let cggtts = CGGTTS::from_file("../data/advanced/RZSY8257.000")
+//!     let cggtts = CGGTTS::from_file("../data/dual/RZSY8257.000")
 //!         .unwrap();
 //!     if let Some(track) = cggtts.tracks.first() {
 //!         assert_eq!(track.has_ionospheric_data(), true);
@@ -461,8 +461,8 @@ impl CGGTTS {
         true
     }
 
-    /// Returns Epoch of this file's generation
-    pub fn epoch(&self) -> Option<Epoch> {
+    /// Returns first Epoch contained in this file.
+    pub fn first_epoch(&self) -> Option<Epoch> {
         self.tracks.first().map(|trk| trk.epoch)
     }
 
@@ -476,12 +476,10 @@ impl CGGTTS {
         dt
     }
 
-    /// Returns a filename that would match
-    /// specifications / standard requirements
-    /// to represent self.
-    /// We use the first two characters for the Rcvr hardware
-    /// info as identification number (only if they are digits).
-    /// We replace by "__" otherwise.
+    /// Returns a filename that would match naming conventions
+    /// to name Self correctly.
+    /// Note that Self needs to contain at least one track for this to
+    /// generate a competely valid name.
     pub fn filename(&self) -> String {
         let mut res = String::new();
 
@@ -502,7 +500,7 @@ impl CGGTTS {
         let max_offset = std::cmp::min(self.station.len(), 4);
         res.push_str(&self.station[0..max_offset]);
 
-        if let Some(epoch) = self.epoch() {
+        if let Some(epoch) = self.first_epoch() {
             let mjd = epoch.to_mjd_utc_days();
             res.push_str(&format!("{:.3}", (mjd / 1000.0)));
         } else {
@@ -829,7 +827,7 @@ impl std::fmt::Display for CGGTTS {
          * Labels in case we provide Ionospheric parameters estimates
          */
         const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
-        "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
+            "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
 
         /*
          * Labels in case Ionospheric compensation is not available
@@ -952,11 +950,11 @@ impl std::fmt::Display for CGGTTS {
         writeln!(fmt, "{}", "")?; // BLANK
 
         if self.has_ionospheric_data() {
-            writeln!(fmt, "{}\n", TRACK_LABELS_WITH_IONOSPHERIC_DATA)?; // LABELS + BLANK
-            writeln!(fmt, "             hhmmss s  .1dg .1dg .1ns .1ps/s .1ns .1ps/s .1ns .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns")?;
+            writeln!(fmt, "{}", TRACK_LABELS_WITH_IONOSPHERIC_DATA)?;
+            writeln!(fmt, "             hhmmss  s  .1dg .1dg    .1ns    .1ps/s      .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns")?;
         } else {
-            writeln!(fmt, "{}\n", TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA)?; // LABELS + BLANK
-            writeln!(fmt, "            hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s")?;
+            writeln!(fmt, "{}", TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA)?;
+            writeln!(fmt, "             hhmmss  s  .1dg .1dg    .1ns    .1ps/s      .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s")?;
         }
 
         for track in self.tracks.iter() {

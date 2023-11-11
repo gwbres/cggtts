@@ -20,13 +20,13 @@ This library only supports revision **2E**, and will _reject_ other revisions.
 
 ## Ecosystem
 
-`CGGTTS` heavily relies on `Hifitime` for accurate _Epoch_ representation.  
+`CGGTTS` heavily relies on `Hifitime` for accurate _Epoch_ representation
+and _Timescales_ knowledge. 
 Check out Christopher's amazing libraries [right here](https://github.com/nyx-space/hifitime).
 
 The [RNX2CGGTTS application](https://github.com/georust/rinex) is the "goto" application when it comes
-to generate CGTTTS files. Use it to generate such files from coherent RINEX contexts.
-This application is part of the GeoRust toolsuite and is the combination of this crate
-and the [GNSS-RTK solver](https://github.com/rtk-rs/gnss-rtk).
+to generate CGTTTS files. Use it to generate synchronous CGGTTS tracks from coherent RINEX contexts.
+You can then use "cggtts-cli" to compare two remote clocks.
 
 ## Crate achitecture
 
@@ -39,8 +39,8 @@ allows clock comparison is store in its `TrackData`
 
 ## CGGTTS track scheduling
 
-If you compiled the crate with the _scheduler_ feature, you can take advantage of the
-`Scheduler` structure that will help you generate your synchronous CGGTTS.
+If you compiled the crate with the _scheduler_ feature, you can access the
+`Scheduler` structure that helps you generate synchronous CGGTTS tracks.
 
 Synchronous CGGTTS is convenient because it allows direct exchange of CGGTTS files
 and therefore, direct remote clocks comparison.
