@@ -30,13 +30,12 @@ and the [GNSS-RTK solver](https://github.com/rtk-rs/gnss-rtk).
 
 ## Crate achitecture
 
-* [CGGTTS](doc/cggtts.md) is the main structure, it comprises measurement system
-information and measurement data. It is a file parser (reader) and producer
-(data generator).
-* a CGGTTS file contains several [Tracks](doc/track.md) 
-* The number of tracks in a CGGTTS is defined by the tracking specification
-* CGGTTS requires accurate [delay](doc/delay.md) specifications and compensation,
-because it targets 0.1 ns residual errors. 
+* `CGGTTS` is the main structure, it supports construction from a local file
+or dumping into a local file
+* `CGGTTS` is made of several attributes and a list of `Tracks` which are
+actuall data
+* a `Track` is made of several attributes, the actual data that
+allows clock comparison is store in its `TrackData`
 
 ## CGGTTS track scheduling
 
