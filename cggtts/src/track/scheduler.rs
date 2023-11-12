@@ -1,9 +1,9 @@
-use thiserror::Error;
-use std::collections::BTreeMap;
-use polyfit_rs::polyfit_rs::polyfit;
 use crate::prelude::{Duration, Epoch, TrackData};
 use hifitime::{TimeScale, SECONDS_PER_DAY_I64};
-                
+use polyfit_rs::polyfit_rs::polyfit;
+use std::collections::BTreeMap;
+use thiserror::Error;
+
 fn linear_reg_2d(i: (f64, f64), j: (f64, f64)) -> (f64, f64) {
     let (x_i, y_i) = i;
     let (x_j, y_j) = j;
@@ -90,7 +90,10 @@ impl SVTracker {
             .map(|t| t.to_duration().total_nanoseconds() as f64 * 1.0E-9)
             .collect();
 
-        let t_mid_s = trk_midpoint.to_duration_in_time_scale(first.time_scale).total_nanoseconds() as f64 * 1.0E-9;
+        let t_mid_s = trk_midpoint
+            .to_duration_in_time_scale(first.time_scale)
+            .total_nanoseconds() as f64
+            * 1.0E-9;
 
         let mut t_mid_index = 0;
         for (index, t) in self.buffer.keys().enumerate() {
@@ -121,18 +124,20 @@ impl SVTracker {
             None => {
                 let elev: Vec<_> = self.buffer.iter().map(|(_, fit)| fit.elevation).collect();
                 let (a, b) = linear_reg_2d(
-                    (t_xs[t_mid_index], elev[t_mid_index]), 
-                    (t_xs[t_mid_index+1], elev[t_mid_index+1]));
-                
+                    (t_xs[t_mid_index], elev[t_mid_index]),
+                    (t_xs[t_mid_index + 1], elev[t_mid_index + 1]),
+                );
+
                 let elev = a * t_mid_s + b;
-                
+
                 let azi: Vec<_> = self.buffer.iter().map(|(_, fit)| fit.azimuth).collect();
                 let (a, b) = linear_reg_2d(
-                    (t_xs[t_mid_index], azi[t_mid_index]), 
-                    (t_xs[t_mid_index+1], azi[t_mid_index+1]));
+                    (t_xs[t_mid_index], azi[t_mid_index]),
+                    (t_xs[t_mid_index + 1], azi[t_mid_index + 1]),
+                );
 
                 let azi = a * t_mid_s + b;
-                
+
                 (elev, azi)
             },
         };
@@ -145,10 +150,10 @@ impl SVTracker {
                 .map(|f| f.refsv)
                 .collect::<Vec<_>>()
                 .as_slice(),
-            1
+            1,
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
-        
+
         let (srsv, srsv_b) = (fit[1], fit[0]);
         let refsv = srsv * t_mid_s + srsv_b;
 
@@ -160,7 +165,7 @@ impl SVTracker {
                 .map(|f| f.refsys)
                 .collect::<Vec<_>>()
                 .as_slice(),
-            1
+            1,
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
 
@@ -175,10 +180,10 @@ impl SVTracker {
                 .map(|f| f.mdtr)
                 .collect::<Vec<_>>()
                 .as_slice(),
-                1
+            1,
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
-        
+
         let (smdt, smdt_b) = (fit[1], fit[0]);
         let mdtr = smdt * t_mid_s + smdt_b;
 
@@ -190,10 +195,10 @@ impl SVTracker {
                 .map(|f| f.mdio.unwrap_or(0.0_f64))
                 .collect::<Vec<_>>()
                 .as_slice(),
-                1
+            1,
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
-        
+
         let (smdi, smdi_b) = (fit[1], fit[0]);
         let mdio = smdi * t_mid_s + smdi_b;
 
@@ -205,10 +210,10 @@ impl SVTracker {
                 .map(|f| f.msio.unwrap_or(0.0_f64))
                 .collect::<Vec<_>>()
                 .as_slice(),
-                1
+            1,
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
-        
+
         let (smsi, smsi_b) = (fit[1], fit[0]);
         let msio = smsi * t_mid_s + smsi_b;
 
