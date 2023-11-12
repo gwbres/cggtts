@@ -220,9 +220,13 @@ fn cggtts_fmt<T: std::cmp::Ord + std::fmt::Display>(nb: T, sat: T, padding: usiz
     format!("{:>padding$}", std::cmp::min(nb, sat))
 }
 
-fn cggtts_fmt_f64(nb: f64, scaling: f64, sat: u64, padding: usize) -> String {
-    let scaled = (nb * scaling).round() as u64;
-    format!("{:>padding$}", std::cmp::min(scaled, sat))
+fn cggtts_fmt_f64(nb: f64, scaling: f64, sat: i64, padding: usize) -> String {
+    let scaled = (nb * scaling).round() as i64;
+    if scaled.is_negative() {
+        format!("{:>padding$}", std::cmp::max(scaled, -sat / 100))
+    } else {
+        format!("{:>padding$}", std::cmp::min(scaled, sat))
+    }
 }
 
 impl std::fmt::Display for Track {

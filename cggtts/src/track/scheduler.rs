@@ -16,10 +16,12 @@ pub enum FitError {
     /// reset the tracker.
     #[error("buffer contains gaps")]
     NonContiguousBuffer,
-    /// You can't fit a track if you did not provide enough measurements
-    /// as defined in the tracking strategy.
-    #[error("buffer is empty (bad op)")]
-    EmptyBuffer,
+    /// Can only fit "complete" tracks
+    #[error("missing measurements (data gaps)")]
+    IncompleteTrackMissingMeasurements,
+    /// Buffer should be centered on tracking midpoint
+    #[error("not centered on midpoint")]
+    NotCenteredOnTrackMidpoint,
 }
 
 /// SV Tracker is used to track a single SV and form a CGGTTS track.
@@ -51,16 +53,50 @@ pub struct FitData {
 
 impl SVTracker {
     /// Try to fit a track. You need to provide the ongoing IOE.
-    /// It is up to you to verify the buffer continuity and correctness.
-    /// A non continuous buffer will either return a FitError or non relevant results.
-    pub fn fit(&self, ioe: u16, trk_midpoint: Epoch) -> Result<((f64, f64), TrackData), FitError> {
+    pub fn fit(
+        &self,
+        ioe: u16,
+        trk_duration: Duration,
+        sampling_period: Duration,
+        trk_midpoint: Epoch,
+    ) -> Result<((f64, f64), TrackData), FitError> {
+        // verify tracking completion
+        //  complete if we have enough measurements
+        let expected_nb =
+            (trk_duration.to_seconds() / sampling_period.to_seconds()).ceil() as usize;
+        if self.buffer.len() < expected_nb {
+            return Err(FitError::IncompleteTrackMissingMeasurements);
+        }
+
+        // verify tracking completion
+        // complete if we're centered on midpoint
+        let (first, _) = self.buffer.first_key_value().unwrap(); // infaillible at this point
+        let (last, _) = self.buffer.last_key_value().unwrap(); // infaillible at this point
+        if !((*first < trk_midpoint) && (*last > trk_midpoint)) {
+            return Err(FitError::NotCenteredOnTrackMidpoint);
+        }
+
         let t_xs: Vec<_> = self
             .buffer
             .keys()
             .map(|t| t.to_duration().total_nanoseconds() as f64 * 1.0E-9)
             .collect();
 
+        let t_last_s = last.to_duration().total_nanoseconds() as f64 * 1.0E-9;
         let t_mid_s = trk_midpoint.to_duration().total_nanoseconds() as f64 * 1.0E-9;
+
+        let mut below_index = 0;
+        let mut linspace = Vec::<f64>::with_capacity(t_xs.len());
+
+        for (index, t) in self.buffer.keys().enumerate() {
+            linspace.push(index as f64);
+            if *t < trk_midpoint {
+                below_index = index;
+            }
+        }
+
+        let x_interp = t_mid_s * linspace.len() as f64 / t_last_s;
+
         /*
          * for the SV attitude at mid track:
          * we either use the direct measurement if one was latched @ that UTC epoch
@@ -80,11 +116,32 @@ impl SVTracker {
                     .azimuth;
                 (elev.1.elevation, azi)
             },
-            None => (0.0_f64, 0.0_f64),
+            None => {
+                let elev: Vec<_> = self.buffer.iter().map(|(_, fit)| fit.elevation).collect();
+
+                let (a, b): (f64, f64) = linreg(
+                    vec![0.0, 1.0].as_slice(),
+                    vec![elev[below_index], elev[below_index + 1]].as_slice(),
+                )
+                .map_err(|_| FitError::LinearRegressionFailure)?;
+
+                let elev = a * 0.5 + b;
+
+                let azi: Vec<_> = self.buffer.iter().map(|(_, fit)| fit.azimuth).collect();
+
+                let (a, b): (f64, f64) = linreg(
+                    vec![0.0, 1.0].as_slice(),
+                    vec![azi[below_index], azi[below_index + 1]].as_slice(),
+                )
+                .map_err(|_| FitError::LinearRegressionFailure)?;
+
+                let azi = a * 0.5 + b;
+                (elev, azi)
+            },
         };
 
         let (srsv, srsv_b): (f64, f64) = linreg(
-            &t_xs,
+            &linspace,
             &self
                 .buffer
                 .values()
@@ -95,7 +152,7 @@ impl SVTracker {
         .map_err(|_| FitError::LinearRegressionFailure)?;
 
         let (srsys, srsys_b): (f64, f64) = linreg(
-            &t_xs,
+            &linspace,
             &self
                 .buffer
                 .values()
@@ -106,7 +163,7 @@ impl SVTracker {
         .map_err(|_| FitError::LinearRegressionFailure)?;
 
         let (smdt, smdt_b): (f64, f64) = linreg(
-            &t_xs,
+            &linspace,
             &self
                 .buffer
                 .values()
@@ -117,7 +174,7 @@ impl SVTracker {
         .map_err(|_| FitError::LinearRegressionFailure)?;
 
         let (smdi, smdi_b): (f64, f64) = linreg(
-            &t_xs,
+            &linspace,
             &self
                 .buffer
                 .values()
@@ -128,7 +185,7 @@ impl SVTracker {
         .map_err(|_| FitError::LinearRegressionFailure)?;
 
         let (smsi, smsi_b): (f64, f64) = linreg(
-            &t_xs,
+            &linspace,
             &self
                 .buffer
                 .values()
@@ -138,18 +195,19 @@ impl SVTracker {
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
 
-        let refsv = srsv * t_mid_s + srsv_b;
-        let refsys = srsys * t_mid_s + srsys_b;
+        let refsv = srsv * x_interp + srsv_b;
+        let refsys = srsys * x_interp + srsys_b;
 
-        let mut dsg = t_xs
-            .iter()
-            .fold(0.0_f64, |acc, t_xs| acc + (srsys * t_xs + srsys_b).powi(2));
-        dsg /= t_xs.len() as f64;
-        dsg = dsg.sqrt();
+        let dsg = 0.0_f64;
+        // let mut dsg = t_xs
+        //     .iter()
+        //     .fold(0.0_f64, |acc, t_xs| acc + (srsys * t_xs + srsys_b).powi(2));
+        // dsg /= t_xs.len() as f64;
+        // dsg = dsg.sqrt();
 
-        let mdtr = smdt * t_mid_s + smdt_b;
-        let mdio = smdi * t_mid_s + smdi_b;
-        let msio = smsi * t_mid_s + smsi_b;
+        let mdtr = smdt * x_interp + smdt_b;
+        let mdio = smdi * x_interp + smdi_b;
+        let msio = smsi * x_interp + smsi_b;
 
         let trk_data = TrackData {
             refsv,
@@ -171,11 +229,6 @@ impl SVTracker {
     /// You can then use .fit() to try to fit a track.
     pub fn latch_measurement(&mut self, utc_t: Epoch, data: FitData) {
         self.buffer.insert(utc_t, data);
-    }
-
-    /// Returns number of measurements that have been latched
-    pub fn nb_measurements(&self) -> usize {
-        self.buffer.len()
     }
 
     /// You should only form a track (.fit()) if no_gaps are present in the buffer.
@@ -208,10 +261,7 @@ impl SVTracker {
 /// Scheduler used to form synchronous CGGTTS tracks.
 #[derive(Default, Debug, Clone)]
 pub struct Scheduler {
-    /// Tracking duration in use. Although our API allows it,
-    /// you can only modify the tracking duration if you have
-    /// complete access to both remote clocks, so they follow
-    /// the same tracking procedure.
+    /// Tracking duration in use.
     pub trk_duration: Duration,
 }
 
