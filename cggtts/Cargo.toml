@@ -14,7 +14,7 @@ readme = "../README.md"
 default = [] # no features by default
 
 # unlock the Track Scheduling and data production helpers
-scheduler = ["linreg"]
+scheduler = ["polyfit-rs"]
 
 [dependencies]
 thiserror = "1"
@@ -27,7 +27,7 @@ hifitime = { version = "3.8.4", features = ["serde", "std"] }
 serde = { version = "1.0", optional = true, features = ["derive"] }
 
 # track scheduling
-linreg = { version = "0.2", optional = true }
+polyfit-rs = { version = "0.2.1", optional = true }
 
 [dev-dependencies]
 rand = "0.8.4"

@@ -1,8 +1,16 @@
+use thiserror::Error;
+use std::collections::BTreeMap;
+use polyfit_rs::polyfit_rs::polyfit;
 use crate::prelude::{Duration, Epoch, TrackData};
 use hifitime::{TimeScale, SECONDS_PER_DAY_I64};
-use linreg::linear_regression as linreg;
-use std::collections::BTreeMap;
-use thiserror::Error;
+                
+fn linear_reg_2d(i: (f64, f64), j: (f64, f64)) -> (f64, f64) {
+    let (x_i, y_i) = i;
+    let (x_j, y_j) = j;
+    let a = y_j - y_i;
+    let b = y_j - a * x_j;
+    (a, b)
+}
 
 /// CGGTTS track formation errors
 #[derive(Debug, Clone, Error)]
@@ -82,25 +90,19 @@ impl SVTracker {
             .map(|t| t.to_duration().total_nanoseconds() as f64 * 1.0E-9)
             .collect();
 
-        let t_last_s = last.to_duration().total_nanoseconds() as f64 * 1.0E-9;
-        let t_mid_s = trk_midpoint.to_duration().total_nanoseconds() as f64 * 1.0E-9;
+        let t_mid_s = trk_midpoint.to_duration_in_time_scale(first.time_scale).total_nanoseconds() as f64 * 1.0E-9;
 
-        let mut below_index = 0;
-        let mut linspace = Vec::<f64>::with_capacity(t_xs.len());
-
+        let mut t_mid_index = 0;
         for (index, t) in self.buffer.keys().enumerate() {
-            linspace.push(index as f64);
             if *t < trk_midpoint {
-                below_index = index;
+                t_mid_index = index;
             }
         }
-
-        let x_interp = t_mid_s * linspace.len() as f64 / t_last_s;
 
         /*
          * for the SV attitude at mid track:
          * we either use the direct measurement if one was latched @ that UTC epoch
-         * or we use an ax+b fit between adjacent attitudes.
+         * or we fit ax+b fit between adjacent attitudes.
          */
         let elev = self.buffer.iter().find(|(t, _)| **t == trk_midpoint);
 
@@ -118,96 +120,105 @@ impl SVTracker {
             },
             None => {
                 let elev: Vec<_> = self.buffer.iter().map(|(_, fit)| fit.elevation).collect();
-
-                let (a, b): (f64, f64) = linreg(
-                    vec![0.0, 1.0].as_slice(),
-                    vec![elev[below_index], elev[below_index + 1]].as_slice(),
-                )
-                .map_err(|_| FitError::LinearRegressionFailure)?;
-
-                let elev = a * 0.5 + b;
-
+                let (a, b) = linear_reg_2d(
+                    (t_xs[t_mid_index], elev[t_mid_index]), 
+                    (t_xs[t_mid_index+1], elev[t_mid_index+1]));
+                
+                let elev = a * t_mid_s + b;
+                
                 let azi: Vec<_> = self.buffer.iter().map(|(_, fit)| fit.azimuth).collect();
+                let (a, b) = linear_reg_2d(
+                    (t_xs[t_mid_index], azi[t_mid_index]), 
+                    (t_xs[t_mid_index+1], azi[t_mid_index+1]));
 
-                let (a, b): (f64, f64) = linreg(
-                    vec![0.0, 1.0].as_slice(),
-                    vec![azi[below_index], azi[below_index + 1]].as_slice(),
-                )
-                .map_err(|_| FitError::LinearRegressionFailure)?;
-
-                let azi = a * 0.5 + b;
+                let azi = a * t_mid_s + b;
+                
                 (elev, azi)
             },
         };
 
-        let (srsv, srsv_b): (f64, f64) = linreg(
-            &linspace,
+        let fit = polyfit(
+            &t_xs,
             &self
                 .buffer
                 .values()
                 .map(|f| f.refsv)
                 .collect::<Vec<_>>()
                 .as_slice(),
+            1
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
+        
+        let (srsv, srsv_b) = (fit[1], fit[0]);
+        let refsv = srsv * t_mid_s + srsv_b;
 
-        let (srsys, srsys_b): (f64, f64) = linreg(
-            &linspace,
+        let fit = polyfit(
+            &t_xs,
             &self
                 .buffer
                 .values()
                 .map(|f| f.refsys)
                 .collect::<Vec<_>>()
                 .as_slice(),
+            1
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
 
-        let (smdt, smdt_b): (f64, f64) = linreg(
-            &linspace,
+        let (srsys, srsys_b) = (fit[1], fit[0]);
+        let refsys = srsys * t_mid_s + srsys_b;
+
+        let fit = polyfit(
+            &t_xs,
             &self
                 .buffer
                 .values()
                 .map(|f| f.mdtr)
                 .collect::<Vec<_>>()
                 .as_slice(),
+                1
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
+        
+        let (smdt, smdt_b) = (fit[1], fit[0]);
+        let mdtr = smdt * t_mid_s + smdt_b;
 
-        let (smdi, smdi_b): (f64, f64) = linreg(
-            &linspace,
+        let fit = polyfit(
+            &t_xs,
             &self
                 .buffer
                 .values()
                 .map(|f| f.mdio.unwrap_or(0.0_f64))
                 .collect::<Vec<_>>()
                 .as_slice(),
+                1
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
+        
+        let (smdi, smdi_b) = (fit[1], fit[0]);
+        let mdio = smdi * t_mid_s + smdi_b;
 
-        let (smsi, smsi_b): (f64, f64) = linreg(
-            &linspace,
+        let fit = polyfit(
+            &t_xs,
             &self
                 .buffer
                 .values()
                 .map(|f| f.msio.unwrap_or(0.0_f64))
                 .collect::<Vec<_>>()
                 .as_slice(),
+                1
         )
         .map_err(|_| FitError::LinearRegressionFailure)?;
+        
+        let (smsi, smsi_b) = (fit[1], fit[0]);
+        let msio = smsi * t_mid_s + smsi_b;
 
-        let refsv = srsv * x_interp + srsv_b;
-        let refsys = srsys * x_interp + srsys_b;
-
+        //let dsg = 0.0_f64;
+        //// let mut dsg = t_xs
+        ////     .iter()
+        ////     .fold(0.0_f64, |acc, t_xs| acc + (srsys * t_xs + srsys_b).powi(2));
+        //// dsg /= t_xs.len() as f64;
+        //// dsg = dsg.sqrt();
         let dsg = 0.0_f64;
-        // let mut dsg = t_xs
-        //     .iter()
-        //     .fold(0.0_f64, |acc, t_xs| acc + (srsys * t_xs + srsys_b).powi(2));
-        // dsg /= t_xs.len() as f64;
-        // dsg = dsg.sqrt();
-
-        let mdtr = smdt * x_interp + smdt_b;
-        let mdio = smdi * x_interp + smdi_b;
-        let msio = smsi * x_interp + smsi_b;
 
         let trk_data = TrackData {
             refsv,

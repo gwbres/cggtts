@@ -223,7 +223,7 @@ fn cggtts_fmt<T: std::cmp::Ord + std::fmt::Display>(nb: T, sat: T, padding: usiz
 fn cggtts_fmt_f64(nb: f64, scaling: f64, sat: i64, padding: usize) -> String {
     let scaled = (nb * scaling).round() as i64;
     if scaled.is_negative() {
-        format!("{:>padding$}", std::cmp::max(scaled, -sat / 100))
+        format!("{:>padding$}", std::cmp::max(scaled, -sat / 10)) // remove 1 digit for sign
     } else {
         format!("{:>padding$}", std::cmp::min(scaled, sat))
     }
