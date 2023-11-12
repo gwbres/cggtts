@@ -13,7 +13,7 @@ mod scheduler;
 
 #[cfg(feature = "scheduler")]
 #[cfg_attr(docrs, doc(cfg(feature = "scheduler")))]
-pub use scheduler::{FitData, Scheduler};
+pub use scheduler::{FitData, SVTracker, Scheduler};
 
 use gnss::prelude::{Constellation, SV};
 use hifitime::{Duration, Epoch, Unit};
@@ -119,11 +119,12 @@ pub struct IonosphericData {
 }
 
 impl Track {
-    /// Builds a new CGGTTS track.
+    /// Builds a new CGGTTS track. To follow CGGTTS guidelines,
+    /// it is important to use an Epoch expressed in UTC here.
     /// For Glonass SV: prefer [Self::new_glonass_sv]
-    pub fn new_sv(
+    pub fn new(
         sv: SV,
-        epoch: Epoch,
+        utc_epoch: Epoch,
         duration: Duration,
         class: CommonViewClass,
         elevation: f64,
@@ -135,7 +136,7 @@ impl Track {
     ) -> Self {
         Self {
             sv,
-            epoch,
+            epoch: utc_epoch,
             class,
             duration,
             elevation,
@@ -147,10 +148,11 @@ impl Track {
             frc: frc.to_string(),
         }
     }
-    /// Builds new CGGTTS track from single Glonass SV realization
-    pub fn new_glonass_sv(
+    /// Builds new CGGTTS track from single Glonass SV realization.
+    /// Epoch should be expressed in UTC.
+    pub fn new_glonass(
         sv: SV,
-        epoch: Epoch,
+        utc_epoch: Epoch,
         duration: Duration,
         class: CommonViewClass,
         elevation: f64,
@@ -163,7 +165,7 @@ impl Track {
     ) -> Self {
         Self {
             sv,
-            epoch,
+            epoch: utc_epoch,
             duration,
             class,
             elevation,
@@ -312,7 +314,7 @@ impl std::fmt::Display for Track {
         }
 
         let crc = crc.unwrap();
-        string.push_str(&format!(" {:2X}", crc.wrapping_add(32)));
+        string.push_str(&format!(" {:02X}", crc)); //crc.wrapping_add(32)));
 
         fmt.write_str(&string)
     }
