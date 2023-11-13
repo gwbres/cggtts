@@ -1,11 +1,10 @@
-use crate::prelude::{Duration, Epoch, TrackData};
-use hifitime::{TimeScale, SECONDS_PER_DAY_I64};
+use crate::prelude::{Duration, Epoch, TimeScale, TrackData};
 use polyfit_rs::polyfit_rs::polyfit;
 use std::collections::BTreeMap;
 use thiserror::Error;
 
 fn linear_reg_2d(i: (f64, f64), j: (f64, f64)) -> (f64, f64) {
-    let (x_i, y_i) = i;
+    let (_, y_i) = i;
     let (x_j, y_j) = j;
     let a = y_j - y_i;
     let b = y_j - a * x_j;
@@ -249,7 +248,6 @@ impl SVTracker {
 
     /// You should only form a track (.fit()) if no_gaps are present in the buffer.
     pub fn no_gaps(&self, sampling_period: Duration) -> bool {
-        let mut ok = true;
         let mut prev = Option::<Epoch>::None;
         for t in self.buffer.keys() {
             if let Some(prev) = prev {
@@ -260,7 +258,7 @@ impl SVTracker {
             }
             prev = Some(*t);
         }
-        ok
+        true
     }
 
     /// Reset and flush previously latched measurements
