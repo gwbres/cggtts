@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![doc = include_str!("../../README.md")]
 #![cfg_attr(docrs, feature(doc_cfg))]
 //! CGGTTS is the core structure, it comprises
 //! the list of tracks (measurements) and some header information.
