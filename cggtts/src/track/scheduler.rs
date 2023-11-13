@@ -275,10 +275,18 @@ impl SVTracker {
 }
 
 /// Scheduler used to form synchronous CGGTTS tracks.
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Scheduler {
     /// Tracking duration in use.
     pub trk_duration: Duration,
+}
+
+impl Default for Scheduler {
+    fn default() -> Self {
+        Self {
+            trk_duration: Self::bipm_tracking_duration(),
+        }
+    }
 }
 
 impl Scheduler {
@@ -464,7 +472,7 @@ mod test {
                 Epoch::from_mjd_utc(59509.0) + Duration::from_seconds(6.0 * 60.0),
             ),
         ] {
-            let tracker = Scheduler::new(t, Scheduler::bipm_tracking_duration());
+            let tracker = Scheduler::default();
             let next_track_start = tracker.next_track_start(t);
             println!("next track start: {:?}", next_track_start);
             let error_nanos = (next_track_start - expected).abs().total_nanoseconds();

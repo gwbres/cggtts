@@ -90,7 +90,7 @@
 //!     let rcvr_channel = 0_u8;
 //!
 //!     // option 1: track resulting from a single SV observation
-//!     let track = Track::new_sv(
+//!     let track = Track::new(
 //!         sv,
 //!         epoch,
 //!         duration,
