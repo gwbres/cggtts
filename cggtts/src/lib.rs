@@ -806,57 +806,56 @@ impl CGGTTS {
 impl std::fmt::Display for CGGTTS {
     /// Writes self into a `CGGTTS` file
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let latest_rev_date: Epoch = Epoch::from_gregorian_utc_at_midnight(2014, 02, 20);
-
         /*
          * Labels in case we provide Ionospheric parameters estimates
          */
         const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
-            "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
-
+            "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK\n";
         /*
          * Labels in case Ionospheric compensation is not available
          */
         const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
-            "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
+            "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK\n";
 
-        writeln!(
-            fmt,
-            "CGGTTS GENERIC DATA FORMAT VERSION = {}",
+        let mut content = String::new();
+
+        content.push_str(&format!(
+            "CGGTTS GENERIC DATA FORMAT VERSION = {}\n",
             CURRENT_RELEASE
-        )?;
+        ));
 
-        writeln!(fmt, "REV DATE = {}", latest_rev_date)?;
+        // TODO improve this if it ever changes
+        content.push_str("REV DATE = 2014-02-20\n");
 
         if let Some(rcvr) = &self.rcvr {
-            writeln!(fmt, "RCVR = {:X}", rcvr)?;
+            content.push_str(&format!("RCVR = {:X}\n", rcvr));
         } else {
-            writeln!(fmt, "RCVR = RRRRRRRR")?;
+            content.push_str("RCVR = RRRRRRRR\n");
         }
 
-        writeln!(fmt, "CH = {}", self.nb_channels)?;
+        content.push_str(&format!("CH = {}\n", self.nb_channels));
 
         if let Some(ims) = &self.ims {
-            writeln!(fmt, "RCVR = {:X}", ims)?;
+            content.push_str(&format!("RCVR = {:X}\n", ims));
         } else {
-            writeln!(fmt, "IMS = 99999")?;
+            content.push_str("IMS = 99999\n");
         }
 
-        writeln!(fmt, "LAB = {}", self.station)?;
-        writeln!(fmt, "X = {}", self.apc_coordinates.x)?;
-        writeln!(fmt, "Y = {}", self.apc_coordinates.y)?;
-        writeln!(fmt, "Z = {}", self.apc_coordinates.z)?;
+        content.push_str(&format!("LAB = {}\n", self.station));
+        content.push_str(&format!("X = {}\n", self.apc_coordinates.x));
+        content.push_str(&format!("Y = {}\n", self.apc_coordinates.y));
+        content.push_str(&format!("Z = {}\n", self.apc_coordinates.z));
 
         if let Some(r) = &self.reference_frame {
-            writeln!(fmt, "FRAME = {}", r)?;
+            content.push_str(&format!("FRAME = {}\n", r));
         } else {
-            writeln!(fmt, "FRAME = ITRF")?;
+            content.push_str("FRAME = ITRF\n");
         }
 
         if let Some(comments) = &self.comments {
-            writeln!(fmt, "COMMENTS = {}", comments.trim())?;
+            content.push_str(&format!("COMMENTS = {}\n", comments.trim()));
         } else {
-            writeln!(fmt, "COMMENTS = NO COMMENTS")?;
+            content.push_str("COMMENTS = NO COMMENTS\n");
         }
 
         let delays = self.delay.delays.clone();
@@ -866,28 +865,27 @@ impl std::fmt::Display for CGGTTS {
             Constellation::default()
         };
 
-        let mut content = String::new();
         if delays.len() == 1 {
             // Single frequency
             let (code, value) = delays[0];
             match value {
                 Delay::Internal(v) => {
                     content.push_str(&format!(
-                        "INT DLY = {:.1} ns ({:X} {})",
+                        "INT DLY = {:.1} ns ({:X} {})\n",
                         v, constellation, code
                     ));
                 },
                 Delay::System(v) => {
                     content.push_str(&format!(
-                        "SYS DLY = {:.1} ns ({:X} {})",
+                        "SYS DLY = {:.1} ns ({:X} {})\n",
                         v, constellation, code
                     ));
                 },
             }
             if let Some(cal_id) = &self.delay.cal_id {
-                content.push_str(&format!("       CAL_ID = {}", cal_id));
+                content.push_str(&format!("       CAL_ID = {}\n", cal_id));
             } else {
-                content.push_str("       CAL_ID = NA");
+                content.push_str("       CAL_ID = NA\n");
             }
         } else if delays.len() == 2 {
             // Dual frequency
@@ -896,7 +894,7 @@ impl std::fmt::Display for CGGTTS {
             match v1 {
                 Delay::Internal(_) => {
                     content.push_str(&format!(
-                        "INT DLY = {:.1} ns ({:X} {}), {:.1} ns ({:X} {})",
+                        "INT DLY = {:.1} ns ({:X} {}), {:.1} ns ({:X} {})\n",
                         v1.value(),
                         constellation,
                         c1,
@@ -907,7 +905,7 @@ impl std::fmt::Display for CGGTTS {
                 },
                 Delay::System(_) => {
                     content.push_str(&format!(
-                        "SYS DLY = {:.1} ns ({:X} {}), {:.1} ns ({:X} {})",
+                        "SYS DLY = {:.1} ns ({:X} {}), {:.1} ns ({:X} {})\n",
                         v1.value(),
                         constellation,
                         c1,
@@ -918,33 +916,29 @@ impl std::fmt::Display for CGGTTS {
                 },
             }
             if let Some(cal_id) = &self.delay.cal_id {
-                content.push_str(&format!("     CAL_ID = {}", cal_id));
+                content.push_str(&format!("     CAL_ID = {}\n", cal_id));
             } else {
-                content.push_str("     CAL_ID = NA");
+                content.push_str("     CAL_ID = NA\n");
             }
         }
 
-        //TODO rework the calibrated delay infra
-        if content.len() > 0 {
-            writeln!(fmt, "{}", content)?;
-        }
-
-        writeln!(fmt, "CAB DLY = {:.1} ns", self.delay.rf_cable_delay)?;
-        writeln!(fmt, "REF DLY = {:.1} ns", self.delay.ref_delay)?;
-        writeln!(fmt, "REF = {}", self.reference_time)?;
+        content.push_str(&format!("CAB DLY = {:.1} ns\n", self.delay.rf_cable_delay));
+        content.push_str(&format!("REF DLY = {:.1} ns\n", self.delay.ref_delay));
+        content.push_str(&format!("REF = {}\n", self.reference_time));
 
         let crc = crc::calc_crc(&content).map_err(|_| std::fmt::Error)?;
 
-        writeln!(fmt, "CKSUM = {:2X}", crc)?;
-        writeln!(fmt, "{}", "")?; // BLANK
+        content.push_str(&format!("CKSUM = {:2X}\n\n", crc)); // CKSUM + BLANK
 
         if self.has_ionospheric_data() {
-            writeln!(fmt, "{}", TRACK_LABELS_WITH_IONOSPHERIC_DATA)?;
-            writeln!(fmt, "             hhmmss  s  .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns")?;
+            content.push_str(TRACK_LABELS_WITH_IONOSPHERIC_DATA);
+            content.push_str("             hhmmss  s  .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns\n");
         } else {
-            writeln!(fmt, "{}", TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA)?;
-            writeln!(fmt, "             hhmmss  s  .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s")?;
+            content.push_str(TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA);
+            content.push_str("             hhmmss  s  .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s\n");
         }
+
+        write!(fmt, "{}", content)?;
 
         for track in self.tracks.iter() {
             writeln!(fmt, "{}", track)?;

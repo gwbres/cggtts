@@ -310,7 +310,7 @@ impl std::fmt::Display for Track {
             ));
         }
 
-        string.push_str(&format!("{:02} {:02X} {}", self.fr, self.hc, self.frc));
+        string.push_str(&format!("{:02} {:02} {}", self.fr, self.hc, self.frc));
 
         let crc = calc_crc(&string);
         if crc.is_err() {
