@@ -182,7 +182,7 @@ pub fn clock_comparison(pool: &Vec<CGGTTS>, ctx: &mut PlotContext) {
         .map(|trk| (trk.epoch, trk.data.refsys))
         .collect();
 
-    for i in 1..pool.len() - 1 {
+    for i in 1..pool.len() {
         ctx.add_cartesian2d_plot(
             &format!("{}-{}", ref_clock.station, pool[i].station),
             "Delta [s]",
