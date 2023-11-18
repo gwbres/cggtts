@@ -12,7 +12,6 @@ use std::path::Path;
 extern crate log;
 
 use env_logger::{Builder, Target};
-use thiserror::Error;
 use walkdir::WalkDir;
 
 use cggtts::prelude::CGGTTS;
@@ -97,6 +96,8 @@ pub fn main() {
     let cli = Cli::new();
     let mut plot_ctx = PlotContext::new();
 
+    let quiet = cli.quiet();
+
     let workspace_path = match cli.workspace() {
         Some(w) => Path::new(w).to_path_buf(),
         None => Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -105,6 +106,15 @@ pub fn main() {
     };
 
     let pool = load_files(&cli);
+
+    if cli.identification() {
+        for p in pool {
+            info!("station: {}", p.station);
+            info!("number of tracks: {}", p.tracks.len());
+        }
+        return;
+    }
+
     if pool.len() == 1 {
         processing::single_clock(&pool[0], &mut plot_ctx);
     } else {
@@ -122,5 +132,7 @@ pub fn main() {
     write!(fd, "{}", plot_ctx.to_html()).expect("failed to render graphs");
     info!("graphs rendered in $WORKSPACE/graphs.html");
 
-    open_with_web_browser(html_path);
+    if !quiet {
+        open_with_web_browser(html_path);
+    }
 }

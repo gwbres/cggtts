@@ -41,6 +41,10 @@ Folder does not have to exist."))
                         .short('i')
                         .action(ArgAction::SetTrue)
                         .help("Identify local and remote setups."))
+                    .arg(Arg::new("quiet")
+                        .short('q')
+                        .action(ArgAction::SetTrue)
+                        .help("Turn off verbosity."))
                     .get_matches()
             },
         }
@@ -64,10 +68,10 @@ Folder does not have to exist."))
     pub fn identification(&self) -> bool {
         self.matches.get_flag("id")
     }
-    fn get_flag(&self, flag: &str) -> bool {
-        self.matches.get_flag(flag)
-    }
     pub fn workspace(&self) -> Option<&String> {
         self.matches.get_one::<String>("workspace")
+    }
+    pub fn quiet(&self) -> bool {
+        self.matches.get_flag("quiet")
     }
 }
