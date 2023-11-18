@@ -1,7 +1,4 @@
-use super::{
-    build_default_2y_plot, build_default_plot,
-    Plot,
-};
+use super::{build_default_2y_plot, build_default_plot, Plot};
 use plotly::Trace;
 
 /// Plot Context

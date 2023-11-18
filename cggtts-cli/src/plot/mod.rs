@@ -11,7 +11,7 @@ use plotly::{
         Title,
     },
     layout::Axis,
-    Layout, Plot, Scatter
+    Layout, Plot, Scatter,
 };
 
 use rand::Rng;

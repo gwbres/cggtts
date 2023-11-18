@@ -15,12 +15,39 @@ use env_logger::{Builder, Target};
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use cggtts::prelude::{CGGTTS};
+use cggtts::prelude::CGGTTS;
 
 use std::io::Write;
 
-#[derive(Debug, Error)]
-pub enum Error {}
+use std::process::Command;
+
+#[cfg(target_os = "linux")]
+pub fn open_with_web_browser(path: &str) {
+    let web_browsers = vec!["firefox", "chromium"];
+    for browser in web_browsers {
+        let child = Command::new(browser).args([path]).spawn();
+        if child.is_ok() {
+            return;
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn open_with_web_browser(path: &str) {
+    Command::new("open")
+        .args(&[path])
+        .output()
+        .expect("open() failed, can't open HTML content automatically");
+}
+
+#[cfg(target_os = "windows")]
+pub fn open_with_web_browser(path: &str) {
+    Command::new("cmd")
+        .arg("/C")
+        .arg(format!(r#"start {}"#, path))
+        .output()
+        .expect("failed to open generated HTML content");
+}
 
 fn load_files(cli: &Cli) -> Vec<CGGTTS> {
     let mut pool = Vec::<CGGTTS>::new();
@@ -72,11 +99,9 @@ pub fn main() {
 
     let workspace_path = match cli.workspace() {
         Some(w) => Path::new(w).to_path_buf(),
-        None => {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("workspace")
-                .to_path_buf()
-        },
+        None => Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("workspace")
+            .to_path_buf(),
     };
 
     let pool = load_files(&cli);
@@ -86,10 +111,10 @@ pub fn main() {
         processing::clock_comparison(&pool, &mut plot_ctx);
     }
 
-    /* 
+    /*
      * Render graphs
      */
-    let html_path = workspace_path.join("graphs.html"); 
+    let html_path = workspace_path.join("graphs.html");
     let html_path = html_path.to_str().unwrap();
 
     let mut fd = std::fs::File::create(html_path)
@@ -97,4 +122,5 @@ pub fn main() {
     write!(fd, "{}", plot_ctx.to_html()).expect("failed to render graphs");
     info!("graphs rendered in $WORKSPACE/graphs.html");
 
+    open_with_web_browser(html_path);
 }
