@@ -35,7 +35,7 @@ mod test {
 
             // test filename convention
             let stem = path.file_name().unwrap();
-            let stem = stem.to_string_lossy();
+            let _stem = stem.to_string_lossy();
             // assert_eq!(cggtts.filename(), stem, "bad filename convention");
 
             // dump into file
@@ -92,7 +92,7 @@ mod test {
 
         let fullpath = path.to_string_lossy().to_string();
         let cggtts = CGGTTS::from_file(&fullpath);
-        assert_eq!(cggtts.is_ok(), true);
+        assert!(cggtts.is_ok());
 
         let cggtts = cggtts.unwrap();
 
@@ -130,7 +130,7 @@ mod test {
 
         let first = cggtts.tracks.first();
         //assert_eq!(cggtts.delay.value(), 0.0);
-        assert_eq!(first.is_some(), true);
+        assert!(first.is_some());
         let first = first.unwrap();
         assert_eq!(
             first.sv,
@@ -147,7 +147,7 @@ mod test {
 
         let _dumped = cggtts.to_string();
         let _compare = std::fs::read_to_string(
-            &(env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/single/GZSY8259.568"),
+            (env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/single/GZSY8259.568"),
         )
         .unwrap();
     }
@@ -161,7 +161,7 @@ mod test {
 
         let fullpath = path.to_string_lossy().to_string();
         let cggtts = CGGTTS::from_file(&fullpath);
-        assert_eq!(cggtts.is_ok(), true);
+        assert!(cggtts.is_ok());
 
         let cggtts = cggtts.unwrap();
         assert!(cggtts.rcvr.is_none());
@@ -184,16 +184,16 @@ mod test {
         assert_eq!(cggtts.delay.delays[0], (Code::C1, Delay::Internal(53.9)));
 
         let total = cggtts.delay.total_delay(Code::C1);
-        assert_eq!(total.is_some(), true);
+        assert!(total.is_some());
         assert_eq!(total.unwrap(), 53.9 + 237.0 + 149.6);
 
         assert_eq!(cggtts.delay.delays[1], (Code::C2, Delay::Internal(49.8)));
         let total = cggtts.delay.total_delay(Code::C2);
-        assert_eq!(total.is_some(), true);
+        assert!(total.is_some());
         assert_eq!(total.unwrap(), 49.8 + 237.0 + 149.6);
 
         let cal_id = cggtts.delay.cal_id.clone();
-        assert_eq!(cal_id.is_some(), true);
+        assert!(cal_id.is_some());
         assert_eq!(cal_id.unwrap(), String::from("1nnn-yyyy"));
 
         let tracks: Vec<_> = cggtts.tracks().collect();

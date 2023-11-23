@@ -1,6 +1,6 @@
 [package]
 name = "cggtts"
-version = "4.0.0"
+version = "4.0.1"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to analyze and create CGGTTS data"

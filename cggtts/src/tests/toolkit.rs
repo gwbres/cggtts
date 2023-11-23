@@ -20,11 +20,11 @@ pub fn cmp_dut_model(dut: &CGGTTS, model: &CGGTTS) {
 
     /* track comparison */
     assert!(
-        !(dut.tracks.len() < model.tracks.len()),
+        dut.tracks.len() >= model.tracks.len(),
         "dut is missing some tracks"
     );
     assert!(
-        !(dut.tracks.len() > model.tracks.len()),
+        dut.tracks.len() <= model.tracks.len(),
         "dut has too many tracks"
     );
     assert_eq!(

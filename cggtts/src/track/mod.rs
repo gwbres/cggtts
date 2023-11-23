@@ -599,7 +599,7 @@ mod tests {
         let c = GlonassChannel::ChanNum(10);
         assert_eq!(c.to_string(), "0A");
         assert_eq!(c, GlonassChannel::ChanNum(10));
-        assert_eq!(c != GlonassChannel::Unknown, true);
+        assert!(c != GlonassChannel::Unknown);
         assert_eq!(GlonassChannel::default(), GlonassChannel::Unknown);
     }
     #[test]
@@ -607,7 +607,7 @@ mod tests {
         let content =
 "G99 99 59568 001000 0780 099 0099 +9999999999 +99999       +1536   +181   26 999 9999 +999 9999 +999 00 00 L1C D3";
         let track = Track::from_str(content);
-        assert_eq!(track.is_ok(), true);
+        assert!(track.is_ok());
         let track = track.unwrap();
         assert_eq!(
             track.sv,
@@ -617,9 +617,9 @@ mod tests {
             }
         );
         assert_eq!(track.class, CommonViewClass::SingleChannel);
-        assert_eq!(track.follows_bipm_specs(), true);
+        assert!(track.follows_bipm_specs());
         assert_eq!(track.duration, Duration::from_seconds(780.0));
-        assert_eq!(track.has_ionospheric_data(), false);
+        assert!(!track.has_ionospheric_data());
         assert_eq!(track.elevation, 9.9);
         assert_eq!(track.azimuth, 9.9);
         assert_eq!(track.fr, GlonassChannel::Unknown);
@@ -631,7 +631,7 @@ mod tests {
         let content =
 "G99 99 59563 001400 0780 099 0099 +9999999999 +99999       +1588  +1027   27 999 9999 +999 9999 +999 00 00 L1C EA";
         let track = Track::from_str(content);
-        assert_eq!(track.is_ok(), true);
+        assert!(track.is_ok());
         let track = track.unwrap();
         assert_eq!(
             track.sv,
@@ -641,9 +641,9 @@ mod tests {
             }
         );
         assert_eq!(track.class, CommonViewClass::SingleChannel);
-        assert_eq!(track.follows_bipm_specs(), true);
+        assert!(track.follows_bipm_specs());
         assert_eq!(track.duration, Duration::from_seconds(780.0));
-        assert_eq!(track.has_ionospheric_data(), false);
+        assert!(!track.has_ionospheric_data());
         assert_eq!(track.elevation, 9.9);
         assert_eq!(track.azimuth, 9.9);
         assert_eq!(track.fr, GlonassChannel::Unknown);
@@ -653,12 +653,12 @@ mod tests {
         let content =
 "G99 99 59563 232200 0780 099 0099 +9999999999 +99999       +1529   -507   23 999 9999 +999 9999 +999 00 00 L1C D9";
         let track = Track::from_str(content);
-        assert_eq!(track.is_ok(), true);
+        assert!(track.is_ok());
         let track = track.unwrap();
         assert_eq!(track.class, CommonViewClass::SingleChannel);
-        assert_eq!(track.follows_bipm_specs(), true);
+        assert!(track.follows_bipm_specs());
         assert_eq!(track.duration, Duration::from_seconds(780.0));
-        assert_eq!(track.has_ionospheric_data(), false);
+        assert!(!track.has_ionospheric_data());
         assert_eq!(track.elevation, 9.9);
         assert_eq!(track.azimuth, 9.9);
         assert_eq!(track.fr, GlonassChannel::Unknown);
@@ -668,7 +668,7 @@ mod tests {
         let content =
 "G99 99 59567 001400 0780 099 0099 +9999999999 +99999       +1561   -151   27 999 9999 +999 9999 +999 00 00 L1C D4";
         let track = Track::from_str(content);
-        assert_eq!(track.is_ok(), true);
+        assert!(track.is_ok());
         let track = track.unwrap();
         assert_eq!(
             track.sv,
@@ -679,9 +679,9 @@ mod tests {
         );
         assert_eq!(track.class, CommonViewClass::SingleChannel);
         //assert_eq!(track.trktime 043400)
-        assert_eq!(track.follows_bipm_specs(), true);
+        assert!(track.follows_bipm_specs());
         assert_eq!(track.duration, Duration::from_seconds(780.0));
-        assert_eq!(track.has_ionospheric_data(), false);
+        assert!(!track.has_ionospheric_data());
         assert_eq!(track.elevation, 9.9);
         assert_eq!(track.azimuth, 9.9);
         assert_eq!(track.fr, GlonassChannel::Unknown);
@@ -696,9 +696,9 @@ mod tests {
         //assert_eq!(track.is_ok(), true);
         let track = track.unwrap();
         assert_eq!(track.class, CommonViewClass::MultiChannel);
-        assert_eq!(track.follows_bipm_specs(), true);
+        assert!(track.follows_bipm_specs());
         assert_eq!(track.duration, Duration::from_seconds(780.0));
-        assert_eq!(track.has_ionospheric_data(), true);
+        assert!(track.has_ionospheric_data());
         let iono = track.iono.unwrap();
         assert_eq!(iono.msio, 23.0E-10);
         assert_eq!(iono.smsi, -1.0E-13);

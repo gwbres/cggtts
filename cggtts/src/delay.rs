@@ -105,6 +105,12 @@ pub struct SystemDelay {
     pub cal_id: Option<String>,
 }
 
+impl Default for SystemDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SystemDelay {
     /// Builds a new system delay description,
     /// with empty fields. Use `add_delay()` to customize.
@@ -152,8 +158,8 @@ mod delay {
         let delay = Delay::Internal(10.0);
         assert_eq!(delay.value(), 10.0);
         assert_eq!(delay.value_seconds(), 10.0E-9);
-        assert_eq!(delay == Delay::Internal(10.0), true);
-        assert_eq!(delay == Delay::System(10.0), false);
+        assert!(delay == Delay::Internal(10.0));
+        assert!(delay != Delay::System(10.0));
         let d = delay.add_value(20.0);
         assert_eq!(d, Delay::Internal(30.0));
         assert_eq!(delay.value() + 20.0, d.value());
@@ -174,12 +180,12 @@ mod delay {
         assert_eq!(delay.rf_cable_delay, 10.0);
         assert_eq!(delay.ref_delay, 20.0);
         let total = delay.total_delay(Code::C1);
-        assert_eq!(total.is_some(), true);
+        assert!(total.is_some());
         assert_eq!(total.unwrap(), 80.0);
         let totals = delay.total_delays();
-        assert_eq!(totals.len() > 0, true);
+        assert!(!totals.is_empty());
         assert_eq!(totals[0].0, Code::C1);
         assert_eq!(totals[0].1, 80.0);
-        assert_eq!(delay.total_delay(Code::P1).is_none(), true);
+        assert!(delay.total_delay(Code::P1).is_none());
     }
 }
