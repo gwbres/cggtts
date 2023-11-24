@@ -147,7 +147,7 @@ jobs:
           "$PWD/target:/target:Z" \
           "rustembedded/cross:${{ matrix.target }}" \
           "${{ matrix.strip }}" \
-          "/target/${{ matrix.target }}/release/rg"
+          "/target/${{ matrix.target }}/release/cggts-cli"
 
     - name: Determine archive name
       shell: bash
