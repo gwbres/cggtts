@@ -128,9 +128,9 @@ jobs:
       run: |
         ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          bin="target/${{ matrix.target }}/release/rg.exe"
+          bin="target/${{ matrix.target }}/release/cggtts-cli.exe"
         else
-          bin="target/${{ matrix.target }}/release/rg"
+          bin="target/${{ matrix.target }}/release/cggtts-cli"
         fi
         echo "BIN=$bin" >> $GITHUB_ENV
 
