@@ -172,13 +172,13 @@ jobs:
   
   publish-release:
     name: Publish Release
+    needs: ['build-release']
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: svenstaro/upload-release-action@v2
+      - name: Publish Release
+        uses: actions/create-release@v1
         with:
-          repo_name: owner/repository-name
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: false
+          release_name: ${{ github.ref_name }}
           file: LICENSE-MIT
-          overwrite: true
-          prerelease: true
