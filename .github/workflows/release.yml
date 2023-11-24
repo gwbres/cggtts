@@ -7,7 +7,7 @@ on:
 
 # We need this to be able to create releases.
 permissions:
-  contents: write-all
+  contents: write
 
 jobs:
   # The create-release job runs purely to initialize the GitHub release itself,
@@ -176,10 +176,19 @@ jobs:
         shasum -a 256 "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.sha256"
         echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
         echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
-
-    - name: Upload release archive
+    
+    - name: Upload release (Unix)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
+      if: matrix.os != 'windows-latest'
       run: |
-        gh release upload "$version" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
+        gh release upload "$version" "$ARCHIVE.tar.gz" 
+
+    - name: Upload release (Windows)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+      if: matrix.os == 'windows-latest'
+      run: |
+        gh release upload "$version" "$ARCHIVE.zip" 
