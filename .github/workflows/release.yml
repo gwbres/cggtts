@@ -180,15 +180,23 @@ jobs:
     - name: Upload release (Unix)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      shell: bash
       if: matrix.os != 'windows-latest'
-      run: |
-        gh release upload "$version" "$ARCHIVE.tar.gz" 
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: $ARCHIVE.tar.gz
+        tag: ${{ github.ref }}
+        overwrite: true
+        body: "Latest release"
 
     - name: Upload release (Windows)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      shell: bash
       if: matrix.os == 'windows-latest'
-      run: |
-        gh release upload "$version" "$ARCHIVE.zip" 
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: $ARCHIVE.tar.gz
+        tag: ${{ github.ref }}
+        overwrite: true
+        body: "Latest release"
