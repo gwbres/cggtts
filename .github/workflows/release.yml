@@ -159,15 +159,6 @@ jobs:
         cp "$BIN" "$ARCHIVE"/
         cp {README.md,LICENSE-MIT,LICENSE-APACHE} "$ARCHIVE"/
 
-    - name: Build archive (Windows)
-      shell: bash
-      if: matrix.os == 'windows-latest'
-      run: |
-        7z a "$ARCHIVE.zip" "$ARCHIVE"
-        certutil -hashfile "$ARCHIVE.zip" SHA256 > "$ARCHIVE.zip.sha256"
-        echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
-        echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
-
     - name: Build archive (Unix)
       shell: bash
       if: matrix.os != 'windows-latest'
@@ -177,6 +168,15 @@ jobs:
         echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
         echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
     
+    - name: Build archive (Windows)
+      shell: bash
+      if: matrix.os == 'windows-latest'
+      run: |
+        7z a "$ARCHIVE.zip" "$ARCHIVE"
+        certutil -hashfile "$ARCHIVE.zip" SHA256 > "$ARCHIVE.zip.sha256"
+        echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
+        echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
+
     - name: Upload release (Unix)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -184,7 +184,7 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: $ARCHIVE.tar.gz
+        file: $${ ARCHIVE }}.tar.gz
         tag: ${{ github.ref }}
         overwrite: true
         body: "Latest release"
@@ -196,7 +196,6 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: $ARCHIVE.tar.gz
-        tag: ${{ github.ref }}
+        file: $${ ARCHIVE }}.zip
         overwrite: true
         body: "Latest release"
