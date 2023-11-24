@@ -170,10 +170,15 @@ jobs:
         echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
         echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
   
-    - name: Upload artefacts
-      uses: "marvinpinto/action-automatic-releases@latest"
-      with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          draft: true
-          files: |
-            $ARCHIVE
+  publish-release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: svenstaro/upload-release-action@v2
+        with:
+          repo_name: owner/repository-name
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: LICENSE-MIT
+          overwrite: true
+          prerelease: true
