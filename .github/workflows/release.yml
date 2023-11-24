@@ -152,7 +152,7 @@ jobs:
         echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
   
   release:
-    name: Rrelease
+    name: Release
     runs-on: ubuntu-latest
     needs: ['build']
     steps:
@@ -172,3 +172,5 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: LICENSE-MIT
+          asset_name: license
+          asset_content_type: application/zip
