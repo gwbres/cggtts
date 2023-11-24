@@ -1,4 +1,5 @@
 name: Release
+
 on:
   push:
     tags:
@@ -42,7 +43,7 @@ jobs:
       # systems.
       CARGO: cargo
       # When CARGO is set to CROSS, this is set to `--target matrix.target`.
-      TARGET_FLAGS:
+      TARGET_FLAGS: ''
       # When CARGO is set to CROSS, TARGET_DIR includes matrix.target.
       TARGET_DIR: ./target
       # Bump this as appropriate. We pin to a version to make sure CI
