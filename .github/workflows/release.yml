@@ -5,20 +5,13 @@ on:
     tags:
       - '*'
 
-# We need this to be able to create releases.
 permissions:
   contents: write
 
 jobs:
-  # The create-release job runs purely to initialize the GitHub release itself,
-  # and names the release after the `x.y.z` tag that was pushed. It's separate
-  # from building the release so that we only create the release once.
   create-release:
     name: create-release
     runs-on: ubuntu-latest
-    # env:
-      # Set to force version number, e.g., when no tag exists.
-      # VERSION: TEST-0.0.0
     steps:
       - uses: actions/checkout@v4
       - name: Get the release version from the tag
@@ -176,26 +169,25 @@ jobs:
         certutil -hashfile "$ARCHIVE.zip" SHA256 > "$ARCHIVE.zip.sha256"
         echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
         echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
-
-    - name: Upload release (Unix)
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+    - name: Upload Unix artefacts
       if: matrix.os != 'windows-latest'
-      uses: svenstaro/upload-release-action@v2
+      uses: "marvinpinto/action-automatic-releases@latest"
+      env: 
+        ARCHIVE: ${{ env.ARCHIVE }}.tar.gz
       with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: $${ ARCHIVE }}.tar.gz
-        tag: ${{ github.ref }}
-        overwrite: true
-        body: "Latest release"
-
-    - name: Upload release (Windows)
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          draft: true
+          files: |
+            $ARCHIVE
+    
+    - name: Upload Windows artefacts
       if: matrix.os == 'windows-latest'
-      uses: svenstaro/upload-release-action@v2
+      uses: "marvinpinto/action-automatic-releases@latest"
+      env: 
+        ARCHIVE: ${{ env.ARCHIVE }}.zip
       with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: $${ ARCHIVE }}.zip
-        overwrite: true
-        body: "Latest release"
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          draft: true
+          files: |
+            $ARCHIVE
