@@ -170,22 +170,8 @@ jobs:
         echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
         echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
   
-    - name: Upload Unix artefacts
-      if: matrix.os != 'windows-latest'
+    - name: Upload artefacts
       uses: "marvinpinto/action-automatic-releases@latest"
-      env: 
-        ARCHIVE: ${{ env.ARCHIVE }}.tar.gz
-      with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          draft: true
-          files: |
-            $ARCHIVE
-    
-    - name: Upload Windows artefacts
-      if: matrix.os == 'windows-latest'
-      uses: "marvinpinto/action-automatic-releases@latest"
-      env: 
-        ARCHIVE: ${{ env.ARCHIVE }}.zip
       with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           draft: true
