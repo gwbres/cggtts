@@ -44,11 +44,13 @@ mod tests {
     use crate::track::GlonassChannel;
     #[test]
     fn glonass_chx() {
-        for (value, expected) in [(GlonassChannel::Unknown, "00"),
+        for (value, expected) in [
+            (GlonassChannel::Unknown, "00"),
             (GlonassChannel::ChanNum(1), "01"),
             (GlonassChannel::ChanNum(9), "09"),
             (GlonassChannel::ChanNum(10), "0A"),
-            (GlonassChannel::ChanNum(11), "0B")] {
+            (GlonassChannel::ChanNum(11), "0B"),
+        ] {
             assert_eq!(value.to_string(), expected);
         }
     }
