@@ -52,8 +52,6 @@ jobs:
       CROSS_VERSION: v0.2.5
       # Emit backtraces on panics.
       RUST_BACKTRACE: 1
-      # Build static releases with PCRE2.
-      PCRE2_SYS_STATIC: 1
     strategy:
       fail-fast: false
       matrix:
@@ -158,7 +156,7 @@ jobs:
     - name: Creating directory for archive
       shell: bash
       run: |
-        mkdir -p "$ARCHIVE"/{complete,doc}
+        mkdir -p "$ARCHIVE"
         cp "$BIN" "$ARCHIVE"/
         cp {README.md,LICENSE-MIT,LICENSE-APACHE} "$ARCHIVE"/
 
@@ -180,10 +178,16 @@ jobs:
         echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
         echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
 
+    - name: Create release
+      shell: bash
+      run: |
+        gh release create ${{ env.VERSION }} -t ${{ env.VERSION }} -d --generate-notes 
+
     - name: Upload release archive
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      permissions: write-all
       shell: bash
+      env: ${{ env.VERSION }}
       run: |
-        version="${{ needs.create-release.outputs.version }}"
-        gh release upload "$version" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
+        gh release upload "$version" "$ARCHIVE.zip"
