@@ -7,7 +7,7 @@ on:
 
 # We need this to be able to create releases.
 permissions:
-  contents: write
+  contents: write-all
 
 jobs:
   # The create-release job runs purely to initialize the GitHub release itself,
@@ -30,7 +30,7 @@ jobs:
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create $VERSION --draft --verify-tag --title $VERSION
+        run: gh release create $VERSION --draft --verify-tag --title $VERSION --generate-notes
     outputs:
       version: ${{ env.VERSION }}
 
@@ -92,7 +92,6 @@ jobs:
       with:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
-
     - name: Use Cross
       if: matrix.os == 'ubuntu-latest' && matrix.target != ''
       shell: bash
@@ -178,16 +177,9 @@ jobs:
         echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
         echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
 
-    - name: Create release
-      shell: bash
-      run: |
-        gh release create ${{ env.VERSION }} -t ${{ env.VERSION }} -d --generate-notes 
-
     - name: Upload release archive
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      permissions: write-all
       shell: bash
-      env: ${{ env.VERSION }}
       run: |
-        gh release upload "$version" "$ARCHIVE.zip"
+        gh release upload "$version" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
