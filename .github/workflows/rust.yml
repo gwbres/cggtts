@@ -10,33 +10,59 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  lint:
+    name: Linter 
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --all-features --verbose
-    - name: Coverage 
+    - uses: actions/checkout@v3
+    - uses: actions-rs/toolchain@v1
+      name: Install Rust 
+      with:
+        toolchain: stable
+        override: true
+        components: rustfmt, clippy 
+    - uses: actions-rs/cargo@v1
+      name: Linter 
+      with:
+        command: fmt
+        args: --all -- --check
+    - name: Audit
+      continue-on-error: true
       run: |
-        cargo install cargo-tarpaulin
-        cargo tarpaulin --out Xml
-    - name: Run tests
-      run: cargo test --verbose
+        cargo install cargo-audit
+        cargo audit
 
+  tests:
+    name: Tests 
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions-rs/toolchain@v1
+      name: Install Rust
+      with:
+        toolchain: stable
+        override: true
+    - uses: actions-rs/cargo@v1
+      name: Test
+      with:
+        command: test
+        args: --verbose
+    - uses: actions-rs/cargo@v1
+      name: Test (all features)
+      with:
+        command: test
+        args: --verbose --all-features
+  
   build-ws:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
     - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      run: cargo build --all-features --release --verbose
   
   build-mac:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2
     - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      run: cargo build --all-features --release --verbose
