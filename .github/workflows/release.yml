@@ -157,15 +157,17 @@ jobs:
     needs: ['build']
     steps:
       - name: Create release
-        uses: actions/create-release@v1
         id: create_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/checkout@v4
+        uses: actions/create-release@v1
         with:
           draft: true
           tag_name: ${{ github.ref_name }}
           release_name: ${{ github.ref_name }}
       - name: Upload Artefacts
+        uses: actions/checkout@v4
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
