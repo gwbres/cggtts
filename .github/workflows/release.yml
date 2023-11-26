@@ -154,9 +154,10 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v3     
       with:
-        name: "$ARCHIVE"
-        path: "$ARCHIVE.zip"
-        retention-days: 1
+        name: ${{ env.ASSET }}
+        path: |
+          ${{ env.ASSET }}
+          ${{ env.ASSET_SUM }}
   
   release:
     runs-on: ubuntu-latest
