@@ -8,13 +8,21 @@ Rust package to parse and generate CGGTTS data.
 [![crates.io](https://docs.rs/cggtts/badge.svg)](https://docs.rs/cggtts/badge.svg)
 [![crates.io](https://img.shields.io/crates/d/cggtts.svg)](https://crates.io/crates/cggtts)    
 
-CGGTTS is a file format to describe a local clock behavior against a single or the combination of clocks embedded in Satellite Vehicles (SV).  
-Exchanging CGGTTS files enables so called "Common View" Time Transfer.
+CGGTTS is a file format designed to describe a local clock's behavior against GNSS constellations.   
+Exchanging CGGTTS files then permits to compare two remote clocks to one another, this is called the called "Common View" Time Transfer
+technique.
 
 CGGTTS is specified by the Bureau International des Poids & des Mesures (BIPM):
 [CGGTTS 2E specifications](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
 
 This library only supports revision **2E**, and will _reject_ other revisions.
+
+## Set of tools
+
+- `cggtts` is the main library. Compile it with the _scheduler_ option to unlock
+full support of CGGTTS data production
+- `cggtts-cli` is an application to analyze one or compare to CGGTTS files to one another.  
+Download its latest release from the [github portal](https://github.com/gwbres/cggtts/releases).
 
 ## Ecosystem
 
@@ -22,9 +30,9 @@ This library only supports revision **2E**, and will _reject_ other revisions.
 and _Timescales_ knowledge. 
 Check out Christopher's amazing libraries [right here](https://github.com/nyx-space/hifitime).
 
-The [RNX2CGGTTS application](https://github.com/georust/rinex) is the "goto" application when it comes
-to generate CGTTTS files. Use it to generate synchronous CGGTTS tracks from coherent RINEX contexts.
-You can then use "cggtts-cli" to compare two remote clocks.
+The [RNX2CGGTTS application](https://github.com/georust/rinex) is the _goto_ application when it comes
+to generate CGTTTS files. Use it to generate synchronous CGGTTS tracks from coherent RINEX contexts.  
+Checkout the RINEX Wiki for examples of CGGTTS file exchanges.
 
 ## Crate achitecture
 
