@@ -21,7 +21,7 @@ This library only supports revision **2E**, and will _reject_ other revisions.
 
 - `cggtts` is the main library. Compile it with the _scheduler_ option to unlock
 full support of CGGTTS data production
-- `cggtts-cli` is an application to analyze one or compare to CGGTTS files to one another.  
+- `cggtts-cli` is an application to analyze one or compare two CGGTTS files.  
 Download its latest release from the [github portal](https://github.com/gwbres/cggtts/releases).
 
 ## Ecosystem
