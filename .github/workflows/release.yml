@@ -173,12 +173,12 @@ jobs:
         tag_name: ${{ github.ref_name }}
         release_name: ${{ github.ref_name }}
 
-    - name: Upload Release
+    - name: Upload Ubuntu (latest)
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ github.token }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: LICENSE-MIT
-        asset_name: license
+        asset_path: cggtts-cli--x86_64-unknown-linux-musl.tar.gz
+        asset_name: ubuntu-latest.tar.gz
         asset_content_type: application/zip
