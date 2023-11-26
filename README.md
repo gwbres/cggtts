@@ -17,7 +17,7 @@ CGGTTS is specified by the Bureau International des Poids & des Mesures (BIPM):
 
 This library only supports revision **2E**, and will _reject_ other revisions.
 
-## Set of tools
+## Set of tools
 
 - `cggtts` is the main library. Compile it with the _scheduler_ option to unlock
 full support of CGGTTS data production
@@ -33,15 +33,6 @@ Check out Christopher's amazing libraries [right here](https://github.com/nyx-sp
 The [RNX2CGGTTS application](https://github.com/georust/rinex) is the _goto_ application when it comes
 to generate CGTTTS files. Use it to generate synchronous CGGTTS tracks from coherent RINEX contexts.  
 Checkout the RINEX Wiki for examples of CGGTTS file exchanges.
-
-## Crate achitecture
-
-* `CGGTTS` is the main structure, it supports construction from a local file
-or dumping into a local file
-* `CGGTTS` is made of several attributes and a list of `Tracks` which are
-actuall data
-* a `Track` is made of several attributes, the actual data that
-allows clock comparison is store in its `TrackData`
 
 ## CGGTTS track scheduling
 
