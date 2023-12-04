@@ -110,7 +110,7 @@ impl SVTracker {
 
         let (elev, azi) = match elev {
             Some(elev) => {
-                // UTC epoch directly given
+                // UTC epoch exists
                 let azi = self
                     .buffer
                     .iter()
@@ -121,6 +121,7 @@ impl SVTracker {
                 (elev.1.elevation, azi)
             },
             None => {
+                /* linear interpolation */
                 let elev: Vec<_> = self.buffer.iter().map(|(_, fit)| fit.elevation).collect();
                 let (a, b) = linear_reg_2d(
                     (t_xs[t_mid_index], elev[t_mid_index]),
@@ -136,7 +137,6 @@ impl SVTracker {
                 );
 
                 let azi = a * t_mid_s + b;
-
                 (elev, azi)
             },
         };
@@ -170,6 +170,14 @@ impl SVTracker {
 
         let (srsys, srsys_b) = (fit[1], fit[0]);
         let refsys = srsys * t_mid_s + srsys_b;
+
+        let refsys_fit: Vec<_> = t_xs.iter().map(|t_s| srsys * t_s + srsys_b).collect();
+
+        let mut dsg = 0.0_f64;
+        for refsys_fit in refsys_fit {
+            dsg += (refsys_fit - refsys).powi(2);
+        }
+        dsg = dsg.sqrt();
 
         let fit = polyfit(
             &t_xs,
@@ -215,14 +223,6 @@ impl SVTracker {
 
         let (smsi, smsi_b) = (fit[1], fit[0]);
         let msio = smsi * t_mid_s + smsi_b;
-
-        //let dsg = 0.0_f64;
-        //// let mut dsg = t_xs
-        ////     .iter()
-        ////     .fold(0.0_f64, |acc, t_xs| acc + (srsys * t_xs + srsys_b).powi(2));
-        //// dsg /= t_xs.len() as f64;
-        //// dsg = dsg.sqrt();
-        let dsg = 0.0_f64;
 
         let trk_data = TrackData {
             refsv,
