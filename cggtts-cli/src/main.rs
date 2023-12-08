@@ -6,7 +6,9 @@ use plot::PlotContext;
 
 mod processing;
 
+use std::io::Write;
 use std::path::Path;
+use std::process::Command;
 
 #[macro_use]
 extern crate log;
@@ -16,9 +18,7 @@ use walkdir::WalkDir;
 
 use cggtts::prelude::CGGTTS;
 
-use std::io::Write;
-
-use std::process::Command;
+use itertools::Itertools;
 
 #[cfg(target_os = "linux")]
 pub fn open_with_web_browser(path: &str) {
@@ -109,8 +109,22 @@ pub fn main() {
 
     if cli.identification() {
         for p in pool {
-            info!("station: {}", p.station);
-            info!("number of tracks: {}", p.tracks.len());
+            info!("STATION          \"{}\"", p.station);
+            info!("NUMBER OF TRACKS  {}", p.tracks.len());
+            info!(
+                "CODES            {:?}",
+                p.tracks()
+                    .map(|trk| trk.frc.clone())
+                    .unique()
+                    .collect::<Vec<_>>()
+            );
+            info!(
+                "SV               {:?}",
+                p.tracks()
+                    .map(|trk| trk.sv.to_string())
+                    .unique()
+                    .collect::<Vec<_>>()
+            );
         }
         return;
     }
@@ -118,7 +132,7 @@ pub fn main() {
     if pool.len() == 1 {
         processing::single_clock(&pool[0], &mut plot_ctx);
     } else {
-        processing::clock_comparison(&pool, &mut plot_ctx);
+        processing::clock_comparison(&workspace_path, &pool, &mut plot_ctx);
     }
 
     /*

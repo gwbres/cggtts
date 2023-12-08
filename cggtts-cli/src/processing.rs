@@ -2,6 +2,9 @@ use cggtts::prelude::{Epoch, CGGTTS};
 use itertools::Itertools;
 use plotly::common::Mode;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 
 use crate::plot::{
     //build_timedomain_plot,
@@ -180,7 +183,7 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
     }
 }
 
-pub fn clock_comparison(pool: &Vec<CGGTTS>, ctx: &mut PlotContext) {
+pub fn clock_comparison(workspace: &Path, pool: &Vec<CGGTTS>, ctx: &mut PlotContext) {
     let ref_clock = &pool[0];
     info!("{} is considered reference clock", ref_clock.station);
 
@@ -238,6 +241,44 @@ pub fn clock_comparison(pool: &Vec<CGGTTS>, ctx: &mut PlotContext) {
                     t_err,
                 );
                 ctx.add_trace(chart);
+            }
+        }
+    }
+
+    let mut fd = File::create(workspace.join(&pool[0].station))
+        .expect("failed to create textfile: permission denied");
+
+    writeln!(fd, "{}", "t, CLOCK(A), CLOCK(B), SV, (elev[°], azi[°]) @REF, (elev[°], azi[°]) @CLOCK, SIGNAL, CLOCK(A) - CLOCK(B) [s]")
+        .expect("failed to generate textfile");
+
+    for trk in ref_clock.tracks() {
+        let ref_t = trk.epoch;
+        let ref_sv = trk.sv;
+        let (ref_elev, ref_azim) = (trk.elevation, trk.azimuth);
+        let ref_frc = &trk.frc;
+        for i in 1..pool.len() {
+            let track = pool[i]
+                .tracks()
+                .filter(|trk| trk.epoch == ref_t && trk.sv == ref_sv && trk.frc == *ref_frc)
+                .reduce(|trk, _| trk);
+            if let Some(b_trk) = track {
+                let (b_elev, b_azim) = (b_trk.elevation, b_trk.azimuth);
+                let dt = b_trk.data.refsys - trk.data.refsys;
+                writeln!(
+                    fd,
+                    "{:?}, {}, {}, {}, ({:.2E}, {:.2E}), ({:.2E}, {:.2E}), {}, {:.3E}",
+                    ref_t,
+                    pool[i].station,
+                    pool[0].station,
+                    ref_sv,
+                    ref_elev,
+                    ref_azim,
+                    b_elev,
+                    b_azim,
+                    ref_frc,
+                    dt
+                )
+                .expect("failed to generate textfile");
             }
         }
     }
