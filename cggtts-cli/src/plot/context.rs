@@ -1,4 +1,5 @@
-use super::{build_default_2y_plot, build_default_plot, Plot};
+use super::{build_timedomain_2y_plot, build_timedomain_plot, Plot};
+
 use plotly::Trace;
 
 /// Plot Context
@@ -17,12 +18,12 @@ impl PlotContext {
         let len = self.plots.len() - 1;
         self.plots.get_mut(len)
     }*/
-    pub fn add_cartesian2d_plot(&mut self, title: &str, y_label: &str) {
-        self.plots.push(build_default_plot(title, y_label));
+    pub fn add_timedomain_plot(&mut self, title: &str, y_label: &str) {
+        self.plots.push(build_timedomain_plot(title, y_label));
     }
-    pub fn add_cartesian2d_2y_plot(&mut self, title: &str, y1_label: &str, y2_label: &str) {
+    pub fn add_timedomain_2y_plot(&mut self, title: &str, y1_label: &str, y2_label: &str) {
         self.plots
-            .push(build_default_2y_plot(title, y1_label, y2_label));
+            .push(build_timedomain_2y_plot(title, y1_label, y2_label));
     }
     pub fn add_trace(&mut self, trace: Box<dyn Trace>) {
         let len = self.plots.len() - 1;

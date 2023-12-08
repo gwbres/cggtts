@@ -1,8 +1,13 @@
-use crate::plot::{build_chart_epoch_axis, PlotContext};
 use cggtts::prelude::{Epoch, CGGTTS};
 use itertools::Itertools;
 use plotly::common::Mode;
 use std::collections::HashMap;
+
+use crate::plot::{
+    //build_timedomain_plot,
+    build_chart_epoch_axis,
+    PlotContext,
+};
 
 pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
     let sv: Vec<_> = cggtts.tracks().map(|trk| trk.sv).unique().collect();
@@ -13,7 +18,11 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
         .collect();
 
     //REFSV/SRSV analysis
-    ctx.add_cartesian2d_2y_plot(&format!("{} REFSV/SRSV", cggtts.station), "REFSV", "SRSV");
+    ctx.add_timedomain_2y_plot(
+        &format!("{} REFSV/SRSV", cggtts.station),
+        "REFSV [s]",
+        "SRSV [s/s]",
+    );
     for sv in &sv {
         for code in &codes {
             let epochs: Vec<_> = cggtts
@@ -63,10 +72,10 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
     }
 
     //REFSYS/SRSYS analysis
-    ctx.add_cartesian2d_2y_plot(
+    ctx.add_timedomain_2y_plot(
         &format!("{} REFSYS/SRSYS", cggtts.station),
-        "REFSYS",
-        "SRSYS",
+        "REFSYS [s]",
+        "SRSYS [s/s]",
     );
     for sv in &sv {
         for code in &codes {
@@ -117,7 +126,11 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
     }
 
     //TROPO
-    ctx.add_cartesian2d_2y_plot(&format!("{} MDTR/SMDT", cggtts.station), "MDTR", "SMDT");
+    ctx.add_timedomain_2y_plot(
+        &format!("{} MDTR/SMDT", cggtts.station),
+        "MDTR [s]",
+        "SMDT [s/s]",
+    );
     for sv in &sv {
         for code in &codes {
             let epochs: Vec<_> = cggtts
@@ -183,7 +196,7 @@ pub fn clock_comparison(pool: &Vec<CGGTTS>, ctx: &mut PlotContext) {
         .collect();
 
     for i in 1..pool.len() {
-        ctx.add_cartesian2d_plot(
+        ctx.add_timedomain_plot(
             &format!("{}-{}", ref_clock.station, pool[i].station),
             "Delta [s]",
         );
