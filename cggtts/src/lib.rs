@@ -836,7 +836,7 @@ impl std::fmt::Display for CGGTTS {
         content.push_str(&format!("CH = {}\n", self.nb_channels));
 
         if let Some(ims) = &self.ims {
-            content.push_str(&format!("RCVR = {:X}\n", ims));
+            content.push_str(&format!("IMS = {:X}\n", ims));
         } else {
             content.push_str("IMS = 99999\n");
         }
