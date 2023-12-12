@@ -209,7 +209,7 @@ pub fn clock_comparison(workspace: &Path, pool: &Vec<CGGTTS>, ctx: &mut PlotCont
                     .tracks()
                     .filter_map(|trk| {
                         if trk.sv == *sv && &trk.frc == code {
-                            if let Some(_) = refsys.get(&trk.epoch) {
+                            if refsys.get(&trk.epoch).is_some() {
                                 Some(trk.epoch)
                             } else {
                                 None
@@ -223,11 +223,9 @@ pub fn clock_comparison(workspace: &Path, pool: &Vec<CGGTTS>, ctx: &mut PlotCont
                     .tracks()
                     .filter_map(|trk| {
                         if trk.sv == *sv && &trk.frc == code {
-                            if let Some(refsys) = refsys.get(&trk.epoch) {
-                                Some(trk.data.refsys - refsys)
-                            } else {
-                                None
-                            }
+                            refsys
+                                .get(&trk.epoch)
+                                .map(|refsys| trk.data.refsys - refsys)
                         } else {
                             None
                         }
@@ -248,7 +246,7 @@ pub fn clock_comparison(workspace: &Path, pool: &Vec<CGGTTS>, ctx: &mut PlotCont
     let mut fd = File::create(workspace.join(&pool[0].station))
         .expect("failed to create textfile: permission denied");
 
-    writeln!(fd, "{}", "t, CLOCK(A), CLOCK(B), SV, (elev[°], azi[°]) @REF, (elev[°], azi[°]) @CLOCK, SIGNAL, CLOCK(A) - CLOCK(B) [s]")
+    writeln!(fd, "t, CLOCK(A), CLOCK(B), SV, (elev[°], azi[°]) @REF, (elev[°], azi[°]) @CLOCK, SIGNAL, CLOCK(A) - CLOCK(B) [s]")
         .expect("failed to generate textfile");
 
     for trk in ref_clock.tracks() {
