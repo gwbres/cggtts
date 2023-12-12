@@ -1,4 +1,4 @@
-use crate::prelude::{Duration, Epoch, TimeScale, TrackData};
+use crate::prelude::{Duration, Epoch, IonosphericData, TimeScale, TrackData};
 use polyfit_rs::polyfit_rs::polyfit;
 use std::collections::BTreeMap;
 use thiserror::Error;
@@ -59,6 +59,14 @@ pub struct FitData {
 }
 
 impl SVTracker {
+    /* has msio data */
+    fn has_msio(&self) -> bool {
+        self.buffer
+            .values()
+            .filter(|data| data.msio.is_some())
+            .count()
+            > 0
+    }
     /// Try to fit a track. You need to provide the ongoing IOE.
     pub fn fit(
         &self,
@@ -66,7 +74,7 @@ impl SVTracker {
         trk_duration: Duration,
         sampling_period: Duration,
         trk_midpoint: Epoch,
-    ) -> Result<((f64, f64), TrackData), FitError> {
+    ) -> Result<((f64, f64), TrackData, Option<IonosphericData>), FitError> {
         // verify tracking completion
         //  complete if we have enough measurements
         let expected_nb =
@@ -209,21 +217,6 @@ impl SVTracker {
         let (smdi, smdi_b) = (fit[1], fit[0]);
         let mdio = smdi * t_mid_s + smdi_b;
 
-        let fit = polyfit(
-            &t_xs,
-            &self
-                .buffer
-                .values()
-                .map(|f| f.msio.unwrap_or(0.0_f64))
-                .collect::<Vec<_>>()
-                .as_slice(),
-            1,
-        )
-        .map_err(|_| FitError::LinearRegressionFailure)?;
-
-        let (smsi, smsi_b) = (fit[1], fit[0]);
-        let msio = smsi * t_mid_s + smsi_b;
-
         let trk_data = TrackData {
             refsv,
             srsv,
@@ -237,7 +230,36 @@ impl SVTracker {
             smdi,
         };
 
-        Ok(((elev, azi), trk_data))
+        let iono_data = match self.has_msio() {
+            false => None,
+            true => {
+                let fit = polyfit(
+                    &t_xs,
+                    &self
+                        .buffer
+                        .values()
+                        .map(|f| f.msio.unwrap())
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                    1,
+                )
+                .map_err(|_| FitError::LinearRegressionFailure)?;
+
+                let (smsi, smsi_b) = (fit[1], fit[0]);
+                let msio = smsi * t_mid_s + smsi_b;
+
+                let mut isg = 0.0_f64;
+                let msio_fit: Vec<_> = t_xs.iter().map(|t_s| smsi * t_s + smsi_b).collect();
+                for msio_fit in msio_fit {
+                    isg += (msio_fit - msio).powi(2);
+                }
+                isg = isg.sqrt();
+
+                Some(IonosphericData { msio, smsi, isg })
+            },
+        };
+
+        Ok(((elev, azi), trk_data, iono_data))
     }
 
     /// Latch a new measurement at given UTC Epoch.
