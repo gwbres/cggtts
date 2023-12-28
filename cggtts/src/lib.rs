@@ -505,7 +505,7 @@ impl CGGTTS {
 
         //let mut cksum: u8 = crc::calc_crc(lines.next().ok_or(Error::CrcMissing)?)?;
         let mut cksum = 0_u8;
-        let mut header_ck = 0_u8;
+        let header_ck;
 
         let mut release_date = Epoch::default();
         let mut nb_channels: u16 = 0;
