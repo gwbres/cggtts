@@ -13,17 +13,7 @@ jobs:
     name: build
     runs-on: ${{ matrix.os }}
     env:
-      # For some builds, we use cross to test on 32-bit and big-endian
-      # systems.
       CARGO: cargo
-      # When CARGO is set to CROSS, this is set to `--target matrix.target`.
-      TARGET_FLAGS: ''
-      # When CARGO is set to CROSS, TARGET_DIR includes matrix.target.
-      TARGET_DIR: ./target
-      # Bump this as appropriate. We pin to a version to make sure CI
-      # continues to work as cross releases in the past have broken things
-      # in subtle ways.
-      CROSS_VERSION: v0.2.5
       # Emit backtraces on panics.
       RUST_BACKTRACE: 1
     strategy:
@@ -33,29 +23,23 @@ jobs:
         - build: linux
           os: ubuntu-latest
           rust: stable
-          target: x86_64-unknown-linux-musl
-          strip: x86_64-linux-musl-strip
-        - build: stable-x86
-          os: ubuntu-latest
-          rust: stable
-          target: i686-unknown-linux-gnu
-          strip: x86_64-linux-gnu-strip
+          target: x86_64-unknown-linux-gnu
         - build: macos
           os: macos-latest
-          rust: nightly
+          rust: stable
           target: x86_64-apple-darwin
-        - build: win-msvc
+        - build: macos
+          os: macos-latest
+          rust: stable
+          target: aarch64-apple-darwin
+        - build: win64-msvc
           os: windows-latest
-          rust: nightly
+          rust: stsable-x86_64-gnu
           target: x86_64-pc-windows-msvc
-        - build: win-gnu
+        - build: win64-gnu
           os: windows-latest
-          rust: nightly-x86_64-gnu
+          rust: stable
           target: x86_64-pc-windows-gnu
-        - build: win32-msvc
-          os: windows-latest
-          rust: nightly
-          target: i686-pc-windows-msvc
 
     steps:
     - name: Checkout repository
@@ -66,38 +50,17 @@ jobs:
       with:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
-    - name: Use Cross
-      if: matrix.os == 'ubuntu-latest' && matrix.target != ''
-      shell: bash
-      run: |
-        # In the past, new releases of 'cross' have broken CI. So for now, we
-        # pin it. We also use their pre-compiled binary releases because cross
-        # has over 100 dependencies and takes a bit to compile.
-        dir="$RUNNER_TEMP/cross-download"
-        mkdir "$dir"
-        echo "$dir" >> $GITHUB_PATH
-        cd "$dir"
-        curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
-        tar xf cross-x86_64-unknown-linux-musl.tar.gz
-        echo "CARGO=cross" >> $GITHUB_ENV
 
-    - name: Set target variables
+    - name: Build applications
       shell: bash
       run: |
-        echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
-        echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
-
-    - name: Show command used for Cargo
-      shell: bash
-      run: |
-        echo "cargo command is: ${{ env.CARGO }}"
-        echo "target flag is: ${{ env.TARGET_FLAGS }}"
-        echo "target dir is: ${{ env.TARGET_DIR }}"
-
-    - name: Build release binary
-      shell: bash
-      run: |
-        ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
+        CARGO_PROFILE_RELEASE_STRIP=symbols ${{ env.CARGO }} build \
+          --verbose \
+          --target ${{ matrix.target }} \
+          --all-features \
+          --release \
+          -p cggtts-cli
+        ls -lah target/${{ matrix.target }}/release
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           bin="target/${{ matrix.target }}/release/cggtts-cli.exe"
         else
@@ -105,26 +68,10 @@ jobs:
         fi
         echo "BIN=$bin" >> $GITHUB_ENV
 
-    - name: Strip release binary (macos)
-      if: matrix.os == 'macos-latest'
-      shell: bash
-      run: strip "$BIN"
-
-    - name: Strip release binary (cross)
-      if: env.CARGO == 'cross'
-      shell: bash
-      run: |
-        docker run --rm -v \
-          "$PWD/target:/target:Z" \
-          "rustembedded/cross:${{ matrix.target }}" \
-          "${{ matrix.strip }}" \
-          "/target/${{ matrix.target }}/release/cggtts-cli"
-
     - name: Determine archive name
       shell: bash
       run: |
-        version="${{ needs.create-release.outputs.version }}"
-        echo "ARCHIVE=cggtts-cli-$version-${{ matrix.target }}" >> $GITHUB_ENV
+        echo "ARCHIVE=cggtts-cli-${{ github.ref_name }}-${{ matrix.target }}" >> $GITHUB_ENV
 
     - name: Creating directory for archive
       shell: bash
@@ -133,7 +80,7 @@ jobs:
         cp "$BIN" "$ARCHIVE"/
         cp {README.md,LICENSE-MIT,LICENSE-APACHE} "$ARCHIVE"/
 
-    - name: Build archive (Unix)
+    - name: Gzip archive (Unix)
       shell: bash
       if: matrix.os != 'windows-latest'
       run: |
@@ -142,7 +89,7 @@ jobs:
         echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
         echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
     
-    - name: Build archive (Windows)
+    - name: Zip archive (Windows)
       shell: bash
       if: matrix.os == 'windows-latest'
       run: |
@@ -173,40 +120,25 @@ jobs:
         tag_name: ${{ github.ref_name }}
         release_name: ${{ github.ref_name }}
 
-    - name: Download linux-stable (musl)
+    - name: Download linux-stable
       uses: actions/download-artifact@v3
       with: 
-        name: cggtts-cli--x86_64-unknown-linux-musl.tar.gz
+        name: cggtts-cli-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
 
-    - name: Upload linux-stable (musl)
+    - name: Upload linux-stable
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ github.token }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: cggtts-cli--x86_64-unknown-linux-musl.tar.gz
-        asset_name: cggtts-cli-x86_x64-linux-musl.tar.gz
-        asset_content_type: application/gzip
-
-    - name: Download linux-stable (i686)
-      uses: actions/download-artifact@v3
-      with: 
-        name: cggtts-cli--i686-unknown-linux-gnu.tar.gz
-
-    - name: Upload linux-stable (i686)
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: cggtts-cli--i686-unknown-linux-gnu.tar.gz
-        asset_name: cggtts-cli-i686-linux-gnu.tar.gz
+        asset_path: cggtts-cli-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
+        asset_name: cggtts-cli-x86_x64-linux-gnu.tar.gz
         asset_content_type: application/gzip
 
     - name: Download macos-latest
       uses: actions/download-artifact@v3
       with: 
-        name: cggtts-cli--x86_64-apple-darwin.tar.gz
+        name: cggtts-cli-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
 
     - name: Upload macos-latest
       uses: actions/upload-release-asset@v1
@@ -214,29 +146,29 @@ jobs:
         GITHUB_TOKEN: ${{ github.token }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: cggtts-cli--x86_64-apple-darwin.tar.gz
-        asset_name: cggtts-cli--x86_64-apple-darwin.tar.gz
+        asset_path: cggtts-cli-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
+        asset_name: cggtts-cli-x86_64-apple-darwin.tar.gz
         asset_content_type: application/gzip
-
-    - name: Download windows i686
+    
+    - name: Download macos-latest (aarch64)
       uses: actions/download-artifact@v3
       with: 
-        name: cggtts-cli--i686-pc-windows-msvc.zip
-        
-    - name: Upload windows i686
+        name: cggtts-cli-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
+
+    - name: Upload macos-latest
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ github.token }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: cggtts-cli--i686-pc-windows-msvc.zip
-        asset_name: cggtts-cli--i686-pc-windows-msvc.zip
-        asset_content_type: application/zip
- 
+        asset_path: cggtts-cli-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
+        asset_name: cggtts-cli-aarch64-apple-darwin.tar.gz
+        asset_content_type: application/gzip
+
     - name: Download windows x86_64 (msvc)
       uses: actions/download-artifact@v3
       with: 
-        name: cggtts-cli--x86_64-pc-windows-msvc.zip       
+        name: cggtts-cli-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip       
     
     - name: Download windows x86_64 (msvc)
       uses: actions/upload-release-asset@v1
@@ -244,14 +176,14 @@ jobs:
         GITHUB_TOKEN: ${{ github.token }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: cggtts-cli--x86_64-pc-windows-msvc.zip  
-        asset_name: cggtts-cli--x86_64-pc-windows-msvc.zip  
+        asset_path: cggtts-cli-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip  
+        asset_name: cggtts-cli-x86_64-pc-windows-msvc.zip  
         asset_content_type: application/zip
   
     - name: Download windows x86_64 (gnu)
       uses: actions/download-artifact@v3
       with: 
-        name: cggtts-cli--x86_64-pc-windows-gnu.zip
+        name: cggtts-cli-${{ github.ref_name }}-x86_64-pc-windows-gnu.zip
         
     - name: Download windows x86_64 (msvc)
       uses: actions/upload-release-asset@v1
@@ -259,7 +191,6 @@ jobs:
         GITHUB_TOKEN: ${{ github.token }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: cggtts-cli--x86_64-pc-windows-gnu.zip  
-        asset_name: cggtts-cli--x86_64-pc-windows-gnu.zip 
+        asset_path: cggtts-cli-${{ github.ref_name }}-x86_64-pc-windows-gnu.zip  
+        asset_name: cggtts-cli-x86_64-pc-windows-gnu.zip 
         asset_content_type: application/zip
-  

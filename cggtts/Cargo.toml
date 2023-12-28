@@ -1,6 +1,6 @@
 [package]
 name = "cggtts"
-version = "4.1.1"
+version = "4.1.2"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to analyze and create CGGTTS data"
@@ -31,3 +31,7 @@ polyfit-rs = { version = "0.2.1", optional = true }
 
 [dev-dependencies]
 rand = "0.8.4"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]
