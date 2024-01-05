@@ -8,9 +8,9 @@ Rust package to parse and generate CGGTTS data.
 [![crates.io](https://docs.rs/cggtts/badge.svg)](https://docs.rs/cggtts/badge.svg)
 [![crates.io](https://img.shields.io/crates/d/cggtts.svg)](https://crates.io/crates/cggtts)    
 
-CGGTTS is a file format designed to describe a local clock's behavior against GNSS constellations.   
-Exchanging CGGTTS files then permits to compare two remote clocks to one another, this is called the called "Common View" Time Transfer
-technique.
+CGGTTS is a file format designed to describe a local clock state compared to GNSS time systems.  
+Exchanging CGGTTS files allows comparison of remote clocks by means of common satellite clocks in sight.  
+This is called the "common view" time transfer technique.
 
 CGGTTS is specified by the Bureau International des Poids & des Mesures (BIPM):
 [CGGTTS 2E specifications](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
