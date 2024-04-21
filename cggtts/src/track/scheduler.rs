@@ -85,8 +85,10 @@ impl SVTracker {
 
         // verify tracking completion
         // complete if we're centered on midpoint
-        let (first, _) = self.buffer.first_key_value().unwrap(); // infaillible at this point
-        let (last, _) = self.buffer.last_key_value().unwrap(); // infaillible at this point
+        let (first, _) = self.buffer.first_key_value().unwrap();
+
+        let (last, _) = self.buffer.last_key_value().unwrap();
+
         if !((*first < trk_midpoint) && (*last > trk_midpoint)) {
             return Err(FitError::NotCenteredOnTrackMidpoint);
         }
@@ -265,6 +267,12 @@ impl SVTracker {
     /// Latch a new measurement at given UTC Epoch.
     /// You can then use .fit() to try to fit a track.
     pub fn latch_measurement(&mut self, utc_t: Epoch, data: FitData) {
+        if let Some((last_t, _)) = self.buffer.last_key_value() {
+            assert!(
+                utc_t > *last_t,
+                "samples should be streamed in chronological order"
+            );
+        }
         self.buffer.insert(utc_t, data);
     }
 
