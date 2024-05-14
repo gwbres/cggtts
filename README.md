@@ -8,9 +8,13 @@ Rust package to parse and generate CGGTTS data.
 [![crates.io](https://docs.rs/cggtts/badge.svg)](https://docs.rs/cggtts/)
 [![crates.io](https://img.shields.io/crates/d/cggtts.svg)](https://crates.io/crates/cggtts)    
 
-CGGTTS is a file format designed to describe a local clock state compared to GNSS time systems.  
-Exchanging CGGTTS files allows comparison of remote clocks by means of common satellite clocks in sight.  
-This is called the "common view" time transfer technique.
+CGGTTS is a file format designed to describe the state of a local clock with respect to spacecraft that belong
+to GNSS constellation, ie., a GNSS timescale.  
+Exchanging CGGTTS files allows direct clock comparison between two remote sites, by comparing how the clock behaves
+with respect to a specific spacecraft (ie., on board clock).  
+This is called the _common view_ time transfer technique. Although it is more accurate to say CGGTTS is just the comparison method,
+what you do from the final results is up to end application. Usually, the final end goal is to have the B site track the A site
+and replicate the remote clock. It is for example, one option to generate a UTC replica.
 
 CGGTTS is specified by the Bureau International des Poids & des Mesures (BIPM):
 [CGGTTS 2E specifications](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
@@ -30,9 +34,11 @@ Download its latest release from the [github portal](https://github.com/gwbres/c
 and _Timescales_ knowledge. 
 Check out Christopher's amazing libraries [right here](https://github.com/nyx-space/hifitime).
 
-The [RNX2CGGTTS application](https://github.com/georust/rinex) is the _goto_ application when it comes
-to generate CGTTTS files. Use it to generate synchronous CGGTTS tracks from coherent RINEX contexts.  
-Checkout the RINEX Wiki for examples of CGGTTS file exchanges.
+The CGGTTS solutions solver that is integrated to [the RINEX toolbox](https://github.com/georust/rinex)
+is the _goto_ application to generate CGGTTS files from all this framework.  
+
+The [RINEX Wiki pages](https://github.com/georust/rinex/wiki/CGGTTS) explain how you can resolve CGGTTS solutions
+using this toolbox.
 
 ## CGGTTS track scheduling
 
