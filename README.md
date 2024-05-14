@@ -30,15 +30,14 @@ Download its latest release from the [github portal](https://github.com/gwbres/c
 
 ## Ecosystem
 
-`CGGTTS` heavily relies on `Hifitime` for accurate _Epoch_ representation
-and _Timescales_ knowledge. 
-Check out Christopher's amazing libraries [right here](https://github.com/nyx-space/hifitime).
-
 The CGGTTS solutions solver that is integrated to [the RINEX toolbox](https://github.com/georust/rinex)
 is the _goto_ application to generate CGGTTS files from all this framework.  
 
 The [RINEX Wiki pages](https://github.com/georust/rinex/wiki/CGGTTS) explain how you can resolve CGGTTS solutions
 using this toolbox.
+
+This crate heavily relies on `Hifitime` for accurate _Epoch_ representation
+and _Timescales_ knowledge. Check out Christopher's amazing libraries [right here](https://github.com/nyx-space/hifitime).
 
 ## CGGTTS track scheduling
 
