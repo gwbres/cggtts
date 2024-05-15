@@ -96,7 +96,11 @@ impl SVTracker {
         let t_xs: Vec<_> = self
             .buffer
             .keys()
-            .map(|t| t.to_duration().total_nanoseconds() as f64 * 1.0E-9)
+            .map(|t| {
+                t.to_duration_in_time_scale(t.time_scale)
+                    .total_nanoseconds() as f64
+                    * 1.0E-9
+            })
             .collect();
 
         let t_mid_s = trk_midpoint
