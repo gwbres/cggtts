@@ -15,6 +15,15 @@ pub enum CommonViewClass {
     MultiChannel,
 }
 
+impl std::fmt::Display for CommonViewClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::SingleChannel => write!(f, "Single Channel"),
+            Self::MultiChannel => write!(f, "Multi Channel"),
+        }
+    }
+}
+
 impl std::fmt::UpperHex for CommonViewClass {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
