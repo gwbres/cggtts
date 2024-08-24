@@ -1,6 +1,6 @@
 [package]
 name = "cggtts"
-version = "4.1.5"
+version = "4.1.6"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "Package to analyze and create CGGTTS data"
@@ -22,7 +22,7 @@ scan_fmt = "0.1"
 strum = "0.23.0"
 itertools = "0.11.0"
 strum_macros = "0.23.0"
-gnss-rs = { version = "2.2.1", features = ["serde"] }
+gnss-rs = { version = "2.2.3", features = ["serde"] }
 serde = { version = "1.0", optional = true, features = ["derive"] }
 hifitime = { version = "4.0.0-alpha", features = ["serde", "std"] }
 
