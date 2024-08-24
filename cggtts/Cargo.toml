@@ -19,7 +19,7 @@ scheduler = ["polyfit-rs"]
 [dependencies]
 thiserror = "1"
 scan_fmt = "0.1"
-strum = "0.23.0"
+strum = "0.26.3"
 itertools = "0.11.0"
 strum_macros = "0.23.0"
 gnss-rs = { version = "2.2.3", features = ["serde"] }
