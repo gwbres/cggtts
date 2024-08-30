@@ -21,7 +21,7 @@ thiserror = "1"
 scan_fmt = "0.1"
 strum = "0.26.3"
 itertools = "0.13.0"
-strum_macros = "0.23.0"
+strum_macros = "0.26.4"
 gnss-rs = { version = "2.2.4", features = ["serde"] }
 serde = { version = "1.0", optional = true, features = ["derive"] }
 hifitime = { version = "4.0.0-alpha", features = ["serde", "std"] }
