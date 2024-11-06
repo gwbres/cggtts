@@ -17,7 +17,7 @@ default = [] # no features by default
 scheduler = ["polyfit-rs"]
 
 [dependencies]
-thiserror = "1"
+thiserror = "2"
 scan_fmt = "0.1"
 strum = "0.26.3"
 itertools = "0.13.0"
