@@ -13,8 +13,10 @@ readme = "../README.md"
 [features]
 default = [] # no features by default
 
-# unlock the Track Scheduling and data production helpers
-scheduler = ["polyfit-rs"]
+# The tracker features unlock the
+# SkyTracker structure, that facilitates common view tracking
+# and integrates a fitting method based on BIPM recommendations.
+tracker = ["polyfit-rs"]
 
 [dependencies]
 thiserror = "2"

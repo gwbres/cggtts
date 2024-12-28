@@ -1,7 +1,11 @@
-use crate::prelude::{Duration, Epoch, IonosphericData, TimeScale, TrackData};
+//! Satellite tracking utilities
+
 use polyfit_rs::polyfit_rs::polyfit;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use thiserror::Error;
+
+use crate::prelude::{Duration, Epoch, IonosphericData, TimeScale, TrackData, SV};
+use std::collections::BTreeMap;
 
 fn linear_reg_2d(i: (f64, f64), j: (f64, f64)) -> (f64, f64) {
     let (_, y_i) = i;
@@ -31,35 +35,45 @@ pub enum FitError {
     NotCenteredOnTrackMidpoint,
 }
 
-/// SV Tracker is used to track a single SV and form a CGGTTS track.
+/// SkyTracker is used to track all Satellite vehicles
+/// in sight during a [CommonViewPeriod] and eventually collect [CGGTTS].
+#[derive(Default, Debug, Clone)]
+pub struct SkyTracker {
+    /// Internal buffer
+    sv_trackers: HashMap<SV, SVTracker>,
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct SVTracker {
-    /* internal buffer */
+    /// Internal buffer.
+    // Using BTreeMap actually makes this tolerant
+    // to sampling in non chronological and chaotic order..
+    // We only require steady sampling in the whole period.
     buffer: BTreeMap<Epoch, FitData>,
 }
 
-/// FitData is a measurement to pass several times
-/// to the SVTracker and try to form a track.
+/// [FitData] needs to be evenly sampled during a [CommonViewPeriod]
+/// by [SVTracker] to possibly fit a [Track].
 #[derive(Debug, Default, Clone)]
 pub struct FitData {
-    /// REFSV [s]
+    /// Satellite onboard clock offset to local clock
     pub refsv: f64,
-    /// REFSYS [s]
+    /// Satellite onboard clock offset to timescale
     pub refsys: f64,
-    /// MDTR Modeled Tropospheric Delay [s]
+    /// Modeled Tropospheric Delay in seconds of propagation delay
     pub mdtr: f64,
-    /// SV elevation [°]
+    /// Elevation in degrees
     pub elevation: f64,
-    /// SV azimuth [°]
+    /// Azimuth in degrees
     pub azimuth: f64,
-    /// MDIO Modeled Ionospheric Delay [s]
+    /// Modeled Ionospheric Delay in seconds of propagation delay
     pub mdio: Option<f64>,
-    /// MSIO Measured Ionospheric Delay [s]
+    /// Measured Ionospheric Delay in seconds of propagation delay
     pub msio: Option<f64>,
 }
 
 impl SVTracker {
-    /* has msio data */
+    /// True if MSIO field is present
     fn has_msio(&self) -> bool {
         self.buffer
             .values()
@@ -67,6 +81,7 @@ impl SVTracker {
             .count()
             > 0
     }
+
     /// Try to fit a track. You need to provide the ongoing IOE.
     pub fn fit(
         &self,
@@ -268,16 +283,17 @@ impl SVTracker {
         Ok(((elev, azi), trk_data, iono_data))
     }
 
-    /// Latch a new measurement at given UTC Epoch.
+    /// [FitData] sampling at [Epoch] of measurement.
+    /// Although CGGTTS works in UTC, we accept any timescale here.
     /// You can then use .fit() to try to fit a track.
-    pub fn latch_measurement(&mut self, utc_t: Epoch, data: FitData) {
+    pub fn sampling(&mut self, sampling_t: Epoch, data: FitData) {
         if let Some((last_t, _)) = self.buffer.last_key_value() {
             assert!(
-                utc_t > *last_t,
+                sampling_t > *last_t,
                 "samples should be streamed in chronological order"
             );
         }
-        self.buffer.insert(utc_t, data);
+        self.buffer.insert(sampling_t, data);
     }
 
     /// You should only form a track (.fit()) if no_gaps are present in the buffer.
@@ -295,7 +311,7 @@ impl SVTracker {
         true
     }
 
-    /// Reset and flush previously latched measurements
+    /// Reset and flush this latched measurements
     pub fn reset(&mut self) {
         self.buffer.clear();
     }
@@ -403,124 +419,4 @@ impl Scheduler {
 }
 
 #[cfg(test)]
-mod test {
-    use crate::track::Scheduler;
-    use crate::{Duration, Epoch};
-    #[test]
-    fn t0_offset_minutes() {
-        let duration = Duration::from_seconds(Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64);
-        for (mjd, expected) in vec![
-            (50721, 6 * 60 * 1_000_000_000),
-            (50722, 2 * 60 * 1_000_000_000),
-            (50723, 14 * 60 * 1_000_000_000),
-            (50724, 10 * 60 * 1_000_000_000),
-            (59507, 14 * 60 * 1_000_000_000),
-            (59508, 10 * 60 * 1_000_000_000),
-            (59509, 6 * 60 * 1_000_000_000),
-            (59510, 2 * 60 * 1_000_000_000),
-        ] {
-            assert_eq!(Scheduler::t0_offset_nanos(mjd, duration), expected);
-        }
-    }
-    #[test]
-    fn next_track_scheduler() {
-        for (t, expected) in vec![
-            // reference MJD
-            (
-                Epoch::from_mjd_utc(50722.0),
-                Epoch::from_mjd_utc(50722.0) + Duration::from_seconds(120.0),
-            ),
-            // 1 sec into reference MJD
-            (
-                Epoch::from_mjd_utc(50722.0) + Duration::from_seconds(1.0),
-                Epoch::from_mjd_utc(50722.0) + Duration::from_seconds(120.0),
-            ),
-            // 10 sec into reference MJD
-            (
-                Epoch::from_mjd_utc(50722.0) + Duration::from_seconds(1.0),
-                Epoch::from_mjd_utc(50722.0) + Duration::from_seconds(120.0),
-            ),
-            // 1 sec before reference MJD
-            (
-                Epoch::from_mjd_utc(50722.0) - Duration::from_seconds(1.0),
-                Epoch::from_mjd_utc(50722.0) + Duration::from_seconds(120.0),
-            ),
-            // 10 sec before reference MJD
-            (
-                Epoch::from_mjd_utc(50722.0) - Duration::from_seconds(10.0),
-                Epoch::from_mjd_utc(50722.0) + Duration::from_seconds(120.0),
-            ),
-            // two tracks into reference MJD
-            (
-                Epoch::from_mjd_utc(50722.0)
-                    + Duration::from_seconds(
-                        2.0 * Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64 + 120.0,
-                    ),
-                Epoch::from_mjd_utc(50722.0)
-                    + Duration::from_seconds(
-                        2.0 * Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64 + 120.0,
-                    ),
-            ),
-            // two tracks + 10sec into reference MJD
-            (
-                Epoch::from_mjd_utc(50722.0)
-                    + Duration::from_seconds(
-                        2.0 * Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64 + 130.0,
-                    ),
-                Epoch::from_mjd_utc(50722.0)
-                    + Duration::from_seconds(
-                        3.0 * Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64 + 120.0,
-                    ),
-            ),
-            // two tracks + 950 sec into reference MJD
-            (
-                Epoch::from_mjd_utc(50722.0)
-                    + Duration::from_seconds(
-                        2.0 * Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64 + 120.0 + 950.0,
-                    ),
-                Epoch::from_mjd_utc(50722.0)
-                    + Duration::from_seconds(
-                        3.0 * Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64 + 120.0,
-                    ),
-            ),
-            // MJD = 59_506
-            (
-                Epoch::from_mjd_utc(59506.0),
-                Epoch::from_mjd_utc(59506.0) + Duration::from_seconds(2.0 * 60.0),
-            ),
-            // MJD = 59_507
-            (
-                Epoch::from_mjd_utc(59507.0),
-                Epoch::from_mjd_utc(59507.0) + Duration::from_seconds(14.0 * 60.0),
-            ),
-            // MJD = 59_508
-            (
-                Epoch::from_mjd_utc(59508.0),
-                Epoch::from_mjd_utc(59508.0) + Duration::from_seconds(10.0 * 60.0),
-            ),
-            // MJD = 59_509
-            (
-                Epoch::from_mjd_utc(59509.0),
-                Epoch::from_mjd_utc(59509.0) + Duration::from_seconds(6.0 * 60.0),
-            ),
-        ] {
-            let tracker = Scheduler::default();
-            let next_track_start = tracker.next_track_start(t);
-            println!("next track start: {:?}", next_track_start);
-            let error_nanos = (next_track_start - expected).abs().total_nanoseconds();
-            assert!(
-                error_nanos < 10,
-                "failed for {} with {} ns of error",
-                t,
-                error_nanos
-            );
-        }
-    }
-    #[test]
-    fn verify_bipm_track_definition() {
-        assert_eq!(
-            Scheduler::bipm_tracking_duration(),
-            Duration::from_seconds(Scheduler::BIPM_TRACKING_DURATION_SECONDS as f64)
-        );
-    }
-}
+mod test {}

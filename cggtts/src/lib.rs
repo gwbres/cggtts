@@ -116,6 +116,7 @@
 //! - specify carrier dependent delays [see Delay]
 
 mod crc;
+mod cv;
 mod rcvr;
 mod reference_time;
 mod version;
@@ -125,6 +126,10 @@ mod tests;
 
 pub mod delay;
 pub mod track;
+
+#[cfg(feature = "tracker")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tracker")))]
+pub mod tracker;
 
 extern crate gnss_rs as gnss;
 
@@ -157,6 +162,7 @@ pub struct Coordinates {
 }
 
 pub mod prelude {
+    pub use crate::cv::CommonViewPeriod;
     pub use crate::rcvr::Rcvr;
     pub use crate::reference_time::ReferenceTime;
     pub use crate::track::{CommonViewClass, IonosphericData, Track, TrackData};
@@ -164,12 +170,14 @@ pub mod prelude {
     pub use crate::CGGTTS;
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::prelude::{Duration, Epoch, TimeScale};
+
+    #[cfg(feature = "scheduler")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "scheduler")))]
+    pub use tracker::{FitData, SVTracker};
 }
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-// use lazy_static::lazy_static;
 
 /// Latest CGGTTS release : only version we truly support
 pub const CURRENT_RELEASE: &str = "2E";
@@ -204,9 +212,11 @@ impl std::fmt::Display for Code {
     }
 }
 
-/// CGGTTS structure to store a list of comparison, between a
-/// local clock and a reference time. Common view time transfer is then achieved
-/// by exchanging CGGTTS data between two remote sites that used the same reference time.
+/// [CGGTTS] is a structure that holds a list of [Track]s that describe
+/// the behavior of a local clock compared to a satellite onboard clock.
+/// The [Track]s were solved by tracking satellites individually.
+/// Remote clock comparison is then achieved by exchanging [CGGTTS]
+/// between synchronous remote sites and running the common view comparison.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CGGTTS {
@@ -214,7 +224,7 @@ pub struct CGGTTS {
     /// We currently only support 2E (latest)
     pub version: Version,
     /// Release date of this file revision.
-    pub release_date: hifitime::Epoch,
+    pub release_date: Epoch,
     /// Station name (data producer: laboratory, agency..)
     pub station: String,
     /// Possible GNSS receiver infos

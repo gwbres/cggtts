@@ -7,14 +7,6 @@ pub use glonass::GlonassChannel;
 mod class;
 pub use class::CommonViewClass;
 
-#[cfg(feature = "scheduler")]
-#[cfg_attr(docsrs, doc(cfg(feature = "scheduler")))]
-mod scheduler;
-
-#[cfg(feature = "scheduler")]
-#[cfg_attr(docsrs, doc(cfg(feature = "scheduler")))]
-pub use scheduler::{FitData, SVTracker, Scheduler};
-
 use gnss::prelude::{Constellation, SV};
 use hifitime::{Duration, Epoch, Unit};
 
