@@ -1,131 +1,5 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-//! CGGTTS is the core structure, it comprises
-//! the list of tracks (measurements) and some header information.
-//! ```
-//! use cggtts::CGGTTS;
-//! fn main() {
-//!     let cggtts = CGGTTS::from_file("../data/single/GZSY8259.506")
-//!         .unwrap();
-//!     assert_eq!(cggtts.station, "SY82");
-//!     assert_eq!(cggtts.follows_bipm_specs(), true);
-//!     if let Some(track) = cggtts.tracks.first() {
-//!         let duration = track.duration;
-//!         let (refsys, srsys) = (track.data.refsys, track.data.srsys);
-//!         assert_eq!(track.has_ionospheric_data(), false);
-//!         assert_eq!(track.follows_bipm_specs(), true);
-//!     }
-//! }
-//! ```
-//!
-//! # Advanced CGGTTS
-//! Comes with ionospheric parameters estimates
-//!
-//!```
-//! use cggtts::CGGTTS;
-//! fn main() {
-//!     let cggtts = CGGTTS::from_file("../data/dual/RZSY8257.000")
-//!         .unwrap();
-//!     if let Some(track) = cggtts.tracks.first() {
-//!         assert_eq!(track.has_ionospheric_data(), true);
-//!         if let Some(iono) = track.iono {
-//!             let (msio, smsi, isg) = (iono.msio, iono.smsi, iono.isg);
-//!         }
-//!     }
-//! }
-//!```
-//!
-//! # CGGTTS production
-//! Use `to_string` to dump CGGTTS data
-//!
-//! ```
-//! use gnss_rs as gnss;
-//! use cggtts::prelude::*;
-//! use cggtts::Coordinates;
-//! use cggtts::track::Track;
-//! use gnss::prelude::{Constellation, SV};
-//! use std::io::Write;
-//! fn main() {
-//!     let rcvr = Rcvr::default()
-//!         .manufacturer("SEPTENTRIO")  
-//!         .receiver("POLARRx5")
-//!         .serial_number("#12345")
-//!         .year(2023)
-//!         .release("v1");
-//!
-//!     let mut cggtts = CGGTTS::default()
-//!         .station("AJACFR")
-//!         .receiver(rcvr)
-//!         .apc_coordinates(Coordinates {
-//!             x: 0.0_f64,
-//!             y: 0.0_f64,
-//!             z: 0.0_f64,
-//!         })
-//!         .reference_time(ReferenceTime::UTCk("LAB".to_string()))
-//!         .reference_frame("ITRF");
-//!         
-//!     // add some tracks
-//!
-//!     // TrackData is mandatory
-//!     let data = TrackData {
-//!         refsv: 0.0_f64,
-//!         srsv: 0.0_f64,
-//!         refsys: 0.0_f64,
-//!         srsys: 0.0_f64,
-//!         dsg: 0.0_f64,
-//!         ioe: 0_u16,
-//!         smdt: 0.0_f64,
-//!         mdtr: 0.0_f64,
-//!         mdio: 0.0_f64,
-//!         smdi: 0.0_f64,
-//!     };
-//!
-//!     // tracking parameters
-//!     let epoch = Epoch::default();
-//!     let sv = SV::default();
-//!     let (elevation, azimuth) = (0.0_f64, 0.0_f64);
-//!     let duration = Duration::from_seconds(780.0);
-//!
-//!     // receiver channel being used
-//!     let rcvr_channel = 0_u8;
-//!
-//!     // option 1: track resulting from a single SV observation
-//!     let track = Track::new(
-//!         sv,
-//!         epoch,
-//!         duration,
-//!         CommonViewClass::SingleChannel,
-//!         elevation,
-//!         azimuth,
-//!         data,
-//!         None,
-//!         rcvr_channel,
-//!         "L1C",
-//!     );
-
-//!     cggtts.tracks.push(track);
-//!     let mut fd = std::fs::File::create("test.txt") // does not respect naming conventions
-//!         .unwrap();
-//!     write!(fd, "{}", cggtts).unwrap();
-//! }
-//! ```
-//!
-//! To produced advanced CGGTTS data correctly, one should specify / provide
-//! - secondary hardware info [IMS]
-//! - ionospheric parameter estimates
-//! - specify carrier dependent delays [see Delay]
-
-mod crc;
-mod cv;
-mod rcvr;
-mod reference_time;
-mod version;
-
-#[cfg(test)]
-mod tests;
-
-pub mod delay;
-pub mod track;
 
 #[cfg(feature = "tracker")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tracker")))]
@@ -290,7 +164,6 @@ pub enum Error {
 }
 
 impl Default for CGGTTS {
-    /// Buils default `CGGTTS` structure,
     fn default() -> Self {
         Self {
             version: Version::default(),
@@ -505,7 +378,36 @@ impl CGGTTS {
         res
     }
 
-    /// Builds Self from given `CGGTTS` file.
+    /// Parse [CGGTTS] from a local file.
+    /// ```
+    /// use cggtts::prelude::CGGTTS;
+    /// let cggtts = CGGTTS::from_file("../data/single/GZSY8259.506")
+    ///     .unwrap();
+    ///
+    /// assert_eq!(cggtts.station, "SY82");
+    /// assert_eq!(cggtts.follows_bipm_specs(), true);
+    ///
+    /// if let Some(track) = cggtts.tracks.first() {
+    ///     let duration = track.duration;
+    ///     let (refsys, srsys) = (track.data.refsys, track.data.srsys);
+    ///     assert_eq!(track.has_ionospheric_data(), false);
+    ///     assert_eq!(track.follows_bipm_specs(), true);
+    /// }
+    /// ```
+    ///
+    /// Advanced CGGTTS files generated from modern GNSS
+    /// receivers that may describe the ionospheric delay compensation:
+    /// ```
+    /// use cggtts::prelude::CGGTTS;
+    /// let cggtts = CGGTTS::from_file("../data/dual/RZSY8257.000")
+    ///     .unwrap();
+    /// if let Some(track) = cggtts.tracks.first() {
+    ///     assert_eq!(track.has_ionospheric_data(), true);
+    ///     if let Some(iono) = track.iono {
+    ///         let (msio, smsi, isg) = (iono.msio, iono.smsi, iono.isg);
+    ///     }
+    /// }
+    ///```
     pub fn from_file(fp: &str) -> Result<Self, Error> {
         let file_content = std::fs::read_to_string(fp)?;
         let mut lines = file_content.lines();
@@ -813,6 +715,95 @@ impl CGGTTS {
     }
 }
 
+mod crc;
+mod cv;
+mod rcvr;
+mod reference_time;
+mod version;
+
+#[cfg(test)]
+mod tests;
+
+pub mod delay;
+pub mod track;
+
+/// CGGTTS production is currently permitted by "Displaying"
+/// the [CGGTTS] structure. To produce advanced CGGTTS
+/// data correctly, one should specify:
+/// - a secondary hardware elemenct [IMS]
+/// - ionospheric parameters
+/// - carrier dependent delays (see [Delay])
+/// ```
+/// use gnss_rs as gnss;
+/// use cggtts::prelude::*;
+/// use cggtts::Coordinates;
+/// use cggtts::track::Track;
+/// use gnss::prelude::{Constellation, SV};
+/// use std::io::Write;
+/// fn main() {
+///     let rcvr = Rcvr::default()
+///         .manufacturer("SEPTENTRIO")  
+///         .receiver("POLARRx5")
+///         .serial_number("#12345")
+///         .year(2023)
+///         .release("v1");
+///
+///     let mut cggtts = CGGTTS::default()
+///         .station("AJACFR")
+///         .receiver(rcvr)
+///         .apc_coordinates(Coordinates {
+///             x: 0.0_f64,
+///             y: 0.0_f64,
+///             z: 0.0_f64,
+///         })
+///         .reference_time(ReferenceTime::UTCk("LAB".to_string()))
+///         .reference_frame("ITRF");
+///         
+///     // add some tracks
+///
+///     // TrackData is mandatory
+///     let data = TrackData {
+///         refsv: 0.0_f64,
+///         srsv: 0.0_f64,
+///         refsys: 0.0_f64,
+///         srsys: 0.0_f64,
+///         dsg: 0.0_f64,
+///         ioe: 0_u16,
+///         smdt: 0.0_f64,
+///         mdtr: 0.0_f64,
+///         mdio: 0.0_f64,
+///         smdi: 0.0_f64,
+///     };
+///
+///     // tracking parameters
+///     let epoch = Epoch::default();
+///     let sv = SV::default();
+///     let (elevation, azimuth) = (0.0_f64, 0.0_f64);
+///     let duration = Duration::from_seconds(780.0);
+///
+///     // receiver channel being used
+///     let rcvr_channel = 0_u8;
+///
+///     // option 1: track resulting from a single SV observation
+///     let track = Track::new(
+///         sv,
+///         epoch,
+///         duration,
+///         CommonViewClass::SingleChannel,
+///         elevation,
+///         azimuth,
+///         data,
+///         None,
+///         rcvr_channel,
+///         "L1C",
+///     );
+
+///     cggtts.tracks.push(track);
+///     let mut fd = std::fs::File::create("test.txt") // does not respect naming conventions
+///         .unwrap();
+///     write!(fd, "{}", cggtts).unwrap();
+/// }
+/// ```
 impl std::fmt::Display for CGGTTS {
     /// Writes self into a `CGGTTS` file
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
