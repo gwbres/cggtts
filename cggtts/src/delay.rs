@@ -1,17 +1,57 @@
-use crate::Code;
+use crate::{errors::ParsingError, Code};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Different types of delay known,
-/// refer to documentation to truly understand what they
-/// represent. <!> Delays are always specified in nanoseconds <!>
+#[cfg(docsrs)]
+use crate::prelude::CGGTTS;
+
+/// Indication about precise system delay calibration process,
+/// as found in [CGGTTS].
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct CalibrationID {
+    /// ID # of this calibration process
+    pub process_id: u16,
+    /// Year of calibration
+    pub year: u16,
+}
+
+impl std::str::FromStr for CalibrationID {
+    type Err = ParsingError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parsed_items = 0;
+        let (mut process_id, mut year) = (0, 0);
+
+        for (nth, item) in s.trim().split('-').enumerate() {
+            if nth == 0 {
+                if let Ok(value) = item.parse::<u16>() {
+                    process_id = value;
+                    parsed_items += 1;
+                }
+            } else if nth == 1 {
+                if let Ok(value) = item.parse::<u16>() {
+                    year = value;
+                    parsed_items += 1;
+                }
+            }
+        }
+
+        if parsed_items == 2 {
+            Ok(Self { process_id, year })
+        } else {
+            Err(ParsingError::InvalidCalibrationId)
+        }
+    }
+}
+
+/// [Delay] describes all supported types of propagation delay.
+/// NB: the specified value is always in nanoseconds.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Delay {
-    /// Delay defined as `internal`
+    /// Delay defined as internal in nanoseconds
     Internal(f64),
-    /// `System` delay
+    /// Systemic delay, in nanoseconds
     System(f64),
 }
 
@@ -22,20 +62,32 @@ impl Default for Delay {
 }
 
 impl Delay {
-    /// Returns (`unwraps`) delay value in nanoseconds
-    pub fn value(&self) -> f64 {
+    /// Define new internal [Delay]
+    pub fn new_internal_nanos(nanos: f64) -> Self {
+        Self::Internal(nanos)
+    }
+
+    /// Define new systemic [Delay]
+    pub fn new_systemic(nanos: f64) -> Self {
+        Self::System(nanos)
+    }
+
+    /// Returns total delay in nanoseconds, whatever its kind.
+    pub fn total_nanoseconds(&self) -> f64 {
         match self {
             Delay::Internal(d) => *d,
             Delay::System(d) => *d,
         }
     }
-    /// Returns (`unwraps`) itself in seconds
-    pub fn value_seconds(&self) -> f64 {
-        self.value() * 1.0E-9
+
+    /// Returns total delay in seconds, whatever its kind.
+    pub fn total_seconds(&self) -> f64 {
+        self.total_nanoseconds() * 1.0E-9
     }
 
-    /// Adds value to self
-    pub fn add_value(&self, rhs: f64) -> Self {
+    /// Adds specific amount of nanoseconds to internal delay,
+    /// whatever its definition.
+    pub fn add_nanos(&self, rhs: f64) -> Self {
         match self {
             Delay::System(d) => Delay::System(*d + rhs),
             Delay::Internal(d) => Delay::Internal(*d + rhs),
@@ -43,149 +95,176 @@ impl Delay {
     }
 }
 
-/*
-impl std::fmt::Display for CalibratedDelay {
-fn fmt (&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-    if self.values.len() == 1 {
-        fmt.write_str(&format!("{:.1} ns ({} {})", self.values[0] * 1E9, self.constellation, self.channels[0]))?
-    } else {
-        // CSV
-        for i in 0..self.values.len()-1 {
-            fmt.write_str(&format!("{:.1} ns ({} {}), ",
-                self.values[i] *1E9, self.constellation, self.channels[i]))?
-        }
-        fmt.write_str(&format!("{:.1} ns ({} {})",
-            self.values[self.values.len()-1] *1E9, self.constellation,
-                self.channels[self.values.len()-1]))?
-    }
-    fmt.write_str(&format!("     CAL_ID = {}", self.report))?;
-    Ok(())
-}
-}
-*/
-
-/*
-/// Identifies carrier dependant informations
-/// from a string shaped like '53.9 ns (GLO C1)'
-fn carrier_dependant_delay_parsing (string: &str)
-        -> Result<(f64,track::Constellation,String),Error>
-{
-    let (delay, const_str, channel) : (f64, String, String) = match scan_fmt!(string, "{f} ns ({} {})", f64, String, String) {
-        (Some(delay),Some(constellation),Some(channel)) => (delay,constellation,channel),
-        _ => return Err(Error::FrequencyDependentDelayParsingError(String::from(string)))
-    };
-    let mut constellation: track::Constellation = track::Constellation::default();
-    if const_str.eq("GPS") {
-        constellation = track::Constellation::GPS
-    } else if const_str.eq("GLO") {
-        constellation = track::Constellation::Glonass
-    } else if const_str.eq("BDS") {
-        constellation = track::Constellation::Beidou
-    } else if const_str.eq("GAL") {
-        constellation = track::Constellation::Galileo
-    } else if const_str.eq("QZS") {
-        constellation = track::Constellation::QZSS
-    }
-    Ok((delay,constellation,channel))
-}
-*/
-
-/// System Delay describe the total measurement systems delay
-/// to be used in `Cggtts`
-#[derive(Clone, PartialEq, Debug)]
+/// [SystemDelay] describes total measurement systems delay.
+/// This is used in [CGGTTS] to describe the measurement system
+/// accurately.
+///
+/// Example of simplistic definition, compatible with
+/// very precise single frequency Common View:
+/// ```
+/// use cggtts::prelude::SystemDelay;
+///
+/// let system_specs = SystemDelay::default()
+///     .with_antenna_cable_delay(10.0)
+///     .with_ref_delay(20.0);
+///
+/// assert_eq!(system_specs.total)
+/// ```
+///
+/// Example of advanced definition, compatible with
+/// ultra precise dual frequency Common View:
+/// ```
+/// use cggtts::prelude::SystemDelay;
+///
+///
+/// ```
+#[derive(Clone, Default, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SystemDelay {
-    /// RF/cable delay
-    pub rf_cable_delay: f64,
-    /// reference delay
-    pub ref_delay: f64,
-    /// carrier dependend delays
-    pub delays: Vec<(Code, Delay)>,
-    /// Calibration ID
-    pub cal_id: Option<String>,
-}
-
-impl Default for SystemDelay {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// Delay induced by GNSS antenna cable length.
+    pub antenna_cable_delay: f64,
+    /// Delay induced by cable between measurement system
+    /// and local clock.
+    pub local_ref_delay: f64,
+    /// Carrier frequency dependend delays
+    pub freq_dependent_delays: Vec<(Code, Delay)>,
+    /// Possible calibration ID
+    pub calibration_id: Option<CalibrationID>,
 }
 
 impl SystemDelay {
-    /// Builds a new system delay description,
-    /// with empty fields. Use `add_delay()` to customize.
-    pub fn new() -> Self {
+    /// Define new [SystemDelay] with desired readable calibration ID.
+    /// This is usually the official ID of the calibration process.
+    pub fn with_calibration_id(&self, calibration: CalibrationID) -> Self {
         Self {
-            rf_cable_delay: 0.0_f64,
-            ref_delay: 0.0_f64,
-            delays: Vec::new(),
-            cal_id: None,
+            antenna_cable_delay: self.antenna_cable_delay,
+            local_ref_delay: self.local_ref_delay,
+            freq_dependent_delays: self.freq_dependent_delays.clone(),
+            calibration_id: Some(calibration),
         }
     }
-    /// Returns Self with additionnal calibration info
-    pub fn with_calibration_id(&self, info: &str) -> Self {
-        Self {
-            rf_cable_delay: self.rf_cable_delay,
-            ref_delay: self.ref_delay,
-            delays: self.delays.clone(),
-            cal_id: Some(info.to_string()),
-        }
+
+    /// Define new [SystemDelay] with desired
+    /// RF cable delay in nanoseconds ie.,
+    /// delay induced by the antenna cable length itself.
+    pub fn with_antenna_cable_delay(&self, nanos: f64) -> Self {
+        let mut s = self.clone();
+        s.antenna_cable_delay = nanos;
+        s
     }
-    /// Returns total system delay for given carrier code
-    pub fn total_delay(&self, code: Code) -> Option<f64> {
-        for (k, v) in self.delays.iter() {
-            if *k == code {
-                return Some(v.value() + self.rf_cable_delay + self.ref_delay);
+
+    /// Define new [SystemDelay] with REF delay in nanoseconds,
+    /// ie., the delay induced by cable between the measurement
+    /// system and the local clock.
+    pub fn with_ref_delay_delay(&self, nanos: f64) -> Self {
+        let mut s = self.clone();
+        s.local_ref_delay = nanos;
+        s
+    }
+
+    /// Returns total cable delay in nanoseconds, that will affect all measurements.
+    pub fn total_cable_delay_nanos(&self) -> f64 {
+        self.antenna_cable_delay + self.local_ref_delay
+    }
+
+    /// Returns total system delay, in nanoseconds,
+    /// for desired frequency represented by [Code], if we
+    /// do have specifications for it.
+    ///
+    /// ```
+    /// ```
+    pub fn total_frequency_dependent_delay_nanos(&self, code: &Code) -> Option<f64> {
+        for (k, v) in self.freq_dependent_delays.iter() {
+            if k == code {
+                return Some(v.total_nanoseconds() + self.total_cable_delay_nanos());
             }
         }
         None
     }
-    /// Groups total system delay per carrier codes
-    pub fn total_delays(&self) -> Vec<(Code, f64)> {
-        let mut res: Vec<(Code, f64)> = Vec::new();
-        for (k, v) in self.delays.iter() {
-            res.push((*k, v.value() + self.rf_cable_delay + self.ref_delay))
-        }
-        res
+
+    /// Iterates over all frequency dependent delays, per carrier frequency,
+    /// in nanoseconds of propagation delay for said frequency.
+    pub fn frequency_dependent_nanos_delay_iter(
+        &self,
+    ) -> Box<dyn Iterator<Item = (&Code, f64)> + '_> {
+        Box::new(
+            self.freq_dependent_delays
+                .iter()
+                .map(move |(k, v)| (k, v.total_nanoseconds() + self.total_cable_delay_nanos())),
+        )
     }
 }
 
 #[cfg(test)]
-mod delay {
+mod test {
+
     use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn calibration_id() {
+        let calibration = CalibrationID::from_str("1015-2024").unwrap();
+        assert_eq!(calibration.process_id, 1015);
+        assert_eq!(calibration.year, 2024);
+
+        assert!(CalibrationID::from_str("NA").is_err());
+        assert!(CalibrationID::from_str("1nnn-2024").is_err());
+    }
+
     #[test]
     fn test_delay() {
         let delay = Delay::Internal(10.0);
-        assert_eq!(delay.value(), 10.0);
-        assert_eq!(delay.value_seconds(), 10.0E-9);
+        assert_eq!(delay.total_nanoseconds(), 10.0);
+
+        assert_eq!(delay.total_seconds(), 10.0E-9);
         assert!(delay == Delay::Internal(10.0));
         assert!(delay != Delay::System(10.0));
-        let d = delay.add_value(20.0);
+
+        let d = delay.add_nanos(20.0);
         assert_eq!(d, Delay::Internal(30.0));
-        assert_eq!(delay.value() + 20.0, d.value());
+        assert_eq!(delay.total_nanoseconds() + 20.0, d.total_nanoseconds());
         assert_eq!(Delay::default(), Delay::System(0.0));
+
         let delay = Delay::System(30.5);
-        assert_eq!(delay.value(), 30.5);
-        let d = delay.add_value(20.0);
-        assert_eq!(d.value(), 50.5);
+        assert_eq!(delay.total_nanoseconds(), 30.5);
+
+        let d = delay.add_nanos(20.0);
+        assert_eq!(d.total_nanoseconds(), 50.5);
     }
 
     #[test]
     fn test_system_delay() {
-        let mut delay = SystemDelay::new();
-        assert_eq!(delay.rf_cable_delay, 0.0);
-        delay.rf_cable_delay = 10.0;
-        delay.ref_delay = 20.0;
-        delay.delays.push((Code::C1, Delay::Internal(50.0)));
-        assert_eq!(delay.rf_cable_delay, 10.0);
-        assert_eq!(delay.ref_delay, 20.0);
-        let total = delay.total_delay(Code::C1);
-        assert!(total.is_some());
-        assert_eq!(total.unwrap(), 80.0);
-        let totals = delay.total_delays();
-        assert!(!totals.is_empty());
-        assert_eq!(totals[0].0, Code::C1);
-        assert_eq!(totals[0].1, 80.0);
-        assert!(delay.total_delay(Code::P1).is_none());
+        let delay = SystemDelay::default();
+        assert_eq!(delay.antenna_cable_delay, 0.0);
+        assert_eq!(delay.local_ref_delay, 0.0);
+
+        let delay = SystemDelay::default().with_antenna_cable_delay(10.0);
+
+        assert_eq!(delay.antenna_cable_delay, 10.0);
+        assert_eq!(delay.local_ref_delay, 0.0);
+
+        let delay = SystemDelay::default()
+            .with_antenna_cable_delay(10.0)
+            .with_ref_delay_delay(20.0);
+
+        assert_eq!(delay.antenna_cable_delay, 10.0);
+        assert_eq!(delay.local_ref_delay, 20.0);
+        assert_eq!(delay.total_cable_delay_nanos(), 30.0);
+
+        assert_eq!(delay.antenna_cable_delay, 10.0);
+        assert_eq!(delay.local_ref_delay, 20.0);
+
+        assert!(delay
+            .total_frequency_dependent_delay_nanos(&Code::C1)
+            .is_none());
+
+        for (k, v) in delay.frequency_dependent_nanos_delay_iter() {
+            assert_eq!(*k, Code::C1);
+            assert_eq!(v, 80.0);
+        }
+
+        assert!(delay
+            .total_frequency_dependent_delay_nanos(&Code::P1)
+            .is_none());
     }
 }

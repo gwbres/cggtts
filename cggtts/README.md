@@ -26,7 +26,7 @@ cggtts = "4"
 
 ## Crate features
 
-The `CGGTTS` supports several features:
+`CGGTTS` supports several features:
 
 - `serde` will unlock the serdes operation
 of many internal structures.
@@ -35,9 +35,6 @@ of gzip compressed files.
 - `polyfit-rs` will unlock one fitting helper
 that help fit observation according to the BIPM track
 fitting method
-- `anise` will unlock a few methods that help
-connect this library to `anise` for navigation purposes
-and may help the process of [CGGTTS] tracks resolution.
 
 ## Parsing
 
