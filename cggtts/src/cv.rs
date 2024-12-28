@@ -35,7 +35,7 @@ impl CommonViewPeriod {
     /// Returns total period of this [CommonViewPeriod],
     /// expressed as [Duration].
     /// ```
-    /// use cggtts::scheduler::CommonViewPeriod;
+    /// use cggtts::prelude::CommonViewPeriod;
     ///
     /// let bipm = CommonViewPeriod::bipm_common_view_period();
     /// assert_eq!(bipm.total_period().to_seconds(), 960.0);
