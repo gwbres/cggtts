@@ -5,8 +5,11 @@ pub fn cmp_dut_model(dut: &CGGTTS, model: &CGGTTS) {
     assert_eq!(dut.version, model.version, "wrong version");
     assert_eq!(dut.release_date, model.release_date, "wrong release date");
     assert_eq!(dut.station, model.station, "bad station name");
-    assert_eq!(dut.rcvr, model.rcvr, "bad receiver data");
-    assert_eq!(dut.nb_channels, model.nb_channels, "bad receiver channels");
+    assert_eq!(dut.receiver, model.receiver, "invalid receiver data");
+    assert_eq!(
+        dut.nb_channels, model.nb_channels,
+        "invalid receiver channels"
+    );
     assert_eq!(
         dut.reference_time, model.reference_time,
         "bad reference time"

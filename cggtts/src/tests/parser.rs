@@ -1,7 +1,7 @@
 mod test {
     use crate::{
-        prelude::{Constellation, Epoch, Rcvr, ReferenceTime, CGGTTS, SV},
-        tests::toolkit::{cmp_dut_model, random_name},
+        prelude::{Constellation, Epoch, Hardware, ReferenceTime, CGGTTS, SV},
+        tests::toolkit::random_name,
         Code, Coordinates, Delay,
     };
     use std::fs::File;
@@ -104,20 +104,21 @@ mod test {
         );
 
         assert_eq!(
-            cggtts.rcvr,
+            cggtts.receiver,
             Some(
-                Rcvr::default()
-                    .manufacturer("GORGYTIMING")
-                    .receiver("SYREF25")
-                    .serial_number("18259999")
-                    .year(2018)
-                    .release("v00")
+                Hardware::default()
+                    .with_manufacturer("GORGYTIMING")
+                    .with_model("SYREF25")
+                    .with_serial_number("18259999")
+                    .with_release_year(2018)
+                    .with_release_version("v00")
             ),
         );
 
         assert_eq!(cggtts.station, "SY82");
         assert_eq!(cggtts.nb_channels, 12);
-        assert_eq!(cggtts.ims, None);
+        assert!(cggtts.ims_hardware.is_none());
+
         assert_eq!(
             cggtts.reference_time,
             ReferenceTime::Custom(String::from("REF(SY82)"))
@@ -162,12 +163,12 @@ mod test {
             .join("RZSY8257.000");
 
         let fullpath = path.to_string_lossy().to_string();
-        let cggtts = CGGTTS::from_file(&fullpath);
-        assert!(cggtts.is_ok());
 
-        let cggtts = cggtts.unwrap();
-        assert!(cggtts.rcvr.is_none());
-        assert!(cggtts.ims.is_none());
+        let cggtts = CGGTTS::from_file(&fullpath).unwrap();
+
+        assert!(cggtts.receiver.is_none());
+        assert!(cggtts.ims_hardware.is_none());
+
         assert_eq!(
             cggtts.apc_coordinates,
             Coordinates {
@@ -176,6 +177,7 @@ mod test {
                 z: 4919499.36,
             }
         );
+
         assert!(cggtts.comments.is_none());
         assert_eq!(cggtts.station, "ABC");
         assert_eq!(cggtts.nb_channels, 12);
