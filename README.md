@@ -9,17 +9,24 @@ Rust package to parse and generate CGGTTS data.
 [![crates.io](https://img.shields.io/crates/d/cggtts.svg)](https://crates.io/crates/cggtts)    
 
 CGGTTS is a file format designed to describe the state of a local clock with respect to spacecraft that belong
-to GNSS constellation, ie., a GNSS timescale.  
+to a GNSS constellation, ie., a GNSS timescale.  
 Exchanging CGGTTS files allows direct clock comparison between two remote sites, by comparing how the clock behaves
-with respect to a specific spacecraft (ie., on board clock).  
-This is called the _common view_ time transfer technique. Although it is more accurate to say CGGTTS is just the comparison method,
-what you do from the final results is up to end application. Usually, the final end goal is to have the B site track the A site
-and replicate the remote clock. It is for example, one option to generate a UTC replica.
+with respect to a specific spacecraft (more specifically, its onboard clock).  
+
+Exchanging CGGTTS files allows a posteriori _common view_ time transfer. Although, 
+it is more accurate to say CGGTTS is just the comparison method,
+what you do from the final results is up to end application. 
+
+One typical application of common view time transfer by means of CGGTTS files exchange,
+is to have a remote site track a reference site. It is often used in creating local copies of 
+UTC times.
 
 CGGTTS is specified by the Bureau International des Poids & des Mesures (BIPM):
 [CGGTTS 2E specifications](https://www.bipm.org/documents/20126/52718503/G1-2015.pdf/f49995a3-970b-a6a5-9124-cc0568f85450)
 
-This library only supports revision **2E**, and will _reject_ other revisions.
+## File Revisions
+
+This library only supports revision **2E** (latest) and will _reject_ other revisions.
 
 ## Set of tools
 
@@ -58,4 +65,4 @@ A built in API allows accurate system delay description as defined in CGGTTS.
 
 ## CGGTTS-CLI
 
-[A command line application](gnss_cli/README.md) is developed to process one or two CGGTTS file for clock comparison.
+[A command line application](gnss-cli/README.md) is developed to process one or two CGGTTS file for clock comparison.
