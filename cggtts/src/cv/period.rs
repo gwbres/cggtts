@@ -1,4 +1,5 @@
-//! Common view scheduling
+//! Common View observation and gather period
+
 use crate::prelude::{Duration, Epoch, TimeScale};
 use hifitime::Unit;
 
@@ -17,8 +18,10 @@ const REFERENCE_MJD: u32 = 50_722;
 pub struct CommonViewPeriod {
     /// Setup duration, is a [Duration] at the beginning
     /// of each common view period where data is not collected.
+    /// This is historically a 3' duration yet still used by strict CGGGTTS 2E collection (arbitrary).
     pub setup_duration: Duration,
-    /// Tracking duration is the active tracking [Duration]
+    /// Tracking duration is the active tracking [Duration].
+    /// This is historically a 13' duration yet still used by strict CGGGTTS 2E collection (arbitrary).
     pub tracking_duration: Duration,
 }
 
@@ -284,6 +287,11 @@ mod test {
                     + 950.0 * Unit::Second,
                 Epoch::from_mjd_utc(59025.0) + 23.0 * Unit::Hour + (50.0 * 60.0) * Unit::Second,
             ),
+            // // MJD = 59_025 N-1 => MJD 59_026 N-1
+            (
+                Epoch::from_mjd_utc(59025.0) + 23.0 * Unit::Hour + (50.0 * 60.0) * Unit::Second,
+                Epoch::from_mjd_utc(59025.0) + 23.0 * Unit::Hour + (50.0 * 60.0) * Unit::Second,
+            ),
             // // MJD = 59_025 N-1 +10s => MJD 59_026 T0
             (
                 Epoch::from_mjd_utc(59025.0)
@@ -291,6 +299,13 @@ mod test {
                     + (50.0 * 60.0 + 10.0) * Unit::Second,
                 CommonViewPeriod::bipm_common_view_period()
                     .next_period_start(Epoch::from_mjd_utc(59026.0)),
+            ),
+            // // MJD = 59_025 N-1 +10s => MJD 59_026 T0
+            (
+                Epoch::from_mjd_utc(59025.0)
+                    + 23.0 * Unit::Hour
+                    + (50.0 * 60.0 + 10.0) * Unit::Second,
+                Epoch::from_mjd_utc(59026.0) + (2.0 * 60.0) * Unit::Second,
             ),
         ] {
             let next_start = cv.next_period_start(now);

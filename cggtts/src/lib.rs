@@ -38,7 +38,7 @@ extern crate serde;
 pub mod prelude {
 
     pub use crate::{
-        cv::CommonViewPeriod,
+        cv::{calendar::CommonViewCalendar, period::CommonViewPeriod},
         header::*,
         track::{CommonViewClass, IonosphericData, Track, TrackData},
         CGGTTS,
