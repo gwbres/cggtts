@@ -13,7 +13,7 @@ SYS DLY = 000.0 ns (GPS C1)     CAL_ID = NA
 CAB DLY = 000.0 ns
 REF DLY = 000.0 ns
 REF = REF(SY82)
-CKSUM = CE
+CKSUM = 38
 
 SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK
              hhmmss s   .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s
