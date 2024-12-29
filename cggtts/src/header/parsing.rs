@@ -1,9 +1,7 @@
 use crate::{
-    crc::calc_crc as crc_calculation,
-    delay::{CalibrationID, Delay, SystemDelay},
     errors::ParsingError,
-    prelude::{Epoch, Hardware, ReferenceTime, Track, Version, CGGTTS},
-    Code, Coordinates,
+    header::{CalibrationID, Code, Coordinates, Delay, SystemDelay},
+    prelude::{Epoch, Hardware, Header, ReferenceTime, Version},
 };
 
 use scan_fmt::scan_fmt;
@@ -13,8 +11,8 @@ use std::{
     str::FromStr,
 };
 
-impl CGGTTS {
-    /// Parse [CGGTTS] from any [Read]able input.
+impl Header {
+    /// Parse [Header] from any [Read]able input.
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
         let mut lines_iter = reader.lines();
 
@@ -39,10 +37,6 @@ impl CGGTTS {
         let mut reference_time = ReferenceTime::default();
         let (_x, _y, _z): (f64, f64, f64) = (0.0, 0.0, 0.0);
 
-        // tracks / measurements parsing
-        let mut tracks_parsing = false;
-        let mut tracks = Vec::with_capacity(8);
-
         // VERSION must come first
         let version = lines_iter.next().ok_or(ParsingError::VersionFormat)?;
         let version = version.map_err(|_| ParsingError::VersionFormat)?;
@@ -58,7 +52,6 @@ impl CGGTTS {
             }
 
             let line = line.unwrap();
-            let line_len = line.len();
 
             if line.starts_with("REV DATE = ") {
                 match scan_fmt!(&line, "REV DATE = {d}-{d}-{d}", i32, u8, u8) {
@@ -308,7 +301,7 @@ impl CGGTTS {
                 };
 
                 let end_pos = line.find("= ").unwrap();
-                cksum = cksum.wrapping_add(crc_calculation(line.split_at(end_pos + 2).0)?);
+                //cksum = cksum.wrapping_add(crc_calculation(line.split_at(end_pos + 2).0)?);
 
                 //if cksum != header_ck {
                 //    //return Err(Error::ChecksumError(crc::Error::ChecksumError(cksum, ck)));
@@ -324,16 +317,12 @@ impl CGGTTS {
                 field_labels = false;
                 unit_labels = true;
             } else if unit_labels {
-                tracks_parsing = true;
-                unit_labels = false;
-            } else if tracks_parsing {
-                if let Ok(trk) = Track::from_str(&line) {
-                    tracks.push(trk);
-                }
+                // last line that concludes this section
+                break;
             } else {
-                // every single line contributes to Header CRC calculation
+                // every single line (except comments) contributes to CRC calculation
                 if !line.starts_with("COMMENTS = ") {
-                    cksum = cksum.wrapping_add(crc_calculation(&line)?);
+                    //cksum = cksum.wrapping_add(crc_calculation(&line)?);
                 }
             }
         }
@@ -350,7 +339,6 @@ impl CGGTTS {
             comments,
             delay: system_delay,
             reference_time,
-            tracks,
         })
     }
 }

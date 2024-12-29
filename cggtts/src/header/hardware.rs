@@ -66,7 +66,7 @@ impl std::fmt::LowerHex for Hardware {
 
 #[cfg(test)]
 mod test {
-    use crate::hardware::Hardware;
+    use crate::header::hardware::Hardware;
 
     #[test]
     fn hardware_parsing() {

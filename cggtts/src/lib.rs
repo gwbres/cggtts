@@ -9,57 +9,39 @@ extern crate gnss_rs as gnss;
 
 use gnss::prelude::{Constellation, SV};
 use hifitime::{Duration, Epoch, TimeScale};
-use itertools::Itertools;
-use strum_macros::EnumString;
 
-use std::{fs::File, io::BufReader, path::Path};
-
-#[cfg(feature = "flate2")]
-use flate2::read::GzDecoder;
-
-use crate::{
-    delay::SystemDelay,
-    hardware::Hardware,
-    reference_time::ReferenceTime,
-    track::{CommonViewClass, Track},
-    version::Version,
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, BufWriter, Read, Write},
+    path::Path,
+    str::FromStr,
 };
 
-mod crc;
+#[cfg(feature = "flate2")]
+use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
+
+//mod crc;
 mod cv;
-mod formatting;
-mod hardware;
-mod parsing;
-mod reference_time;
-mod version;
+mod header;
 
 #[cfg(test)]
 mod tests;
 
-pub mod delay;
 pub mod errors;
 pub mod track;
+
+pub(crate) mod buffer;
 
 #[cfg(feature = "serde")]
 #[macro_use]
 extern crate serde;
 
-#[derive(PartialEq, Debug, Clone, Copy, Default)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Coordinates {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
-
 pub mod prelude {
 
     pub use crate::{
         cv::CommonViewPeriod,
-        hardware::Hardware,
-        reference_time::ReferenceTime,
+        header::*,
         track::{CommonViewClass, IonosphericData, Track, TrackData},
-        version::Version,
         CGGTTS,
     };
 
@@ -74,176 +56,48 @@ pub mod prelude {
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use errors::ParsingError;
+use crate::{
+    buffer::Utf8Buffer,
+    errors::{FormattingError, ParsingError},
+    header::Header,
+    track::{CommonViewClass, Track},
+};
 
-/// Latest CGGTTS release : only version we truly support
-pub const CURRENT_RELEASE: &str = "2E";
+// /// Latest CGGTTS release : only version we truly support
+// pub const CURRENT_RELEASE: &str = "2E";
 
-#[derive(Clone, Copy, PartialEq, Debug, EnumString)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Default)]
-pub enum Code {
-    #[default]
-    C1,
-    C2,
-    P1,
-    P2,
-    E1,
-    E5,
-    B1,
-    B2,
-}
-
-impl std::fmt::Display for Code {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Code::C1 => fmt.write_str("C1"),
-            Code::C2 => fmt.write_str("C2"),
-            Code::P1 => fmt.write_str("P1"),
-            Code::P2 => fmt.write_str("P2"),
-            Code::E1 => fmt.write_str("E1"),
-            Code::E5 => fmt.write_str("E5"),
-            Code::B1 => fmt.write_str("B1"),
-            Code::B2 => fmt.write_str("B2"),
-        }
-    }
-}
-
-/// [CGGTTS] is a structure that holds a list of [Track]s that describe
-/// the behavior of a local clock compared to a satellite onboard clock.
-/// The [Track]s were solved by tracking satellites individually.
-/// Remote clock comparison is then achieved by exchanging [CGGTTS]
-/// between synchronous remote sites and running the common view comparison.
-#[derive(Debug, Clone)]
+/// [CGGTTS] is a structure split in two:
+/// - the [Header] section gives general information
+/// about the measurement system and context
+/// - [Track]s, ofen times referred to as measurements,
+/// describe the behavior of the measurement system's local clock
+/// with resepect to satellite onboard clocks. Each [Track]
+/// was solved by tracking satellites individually.
+/// NB: Correct [CGGTTS] only contain [Track]s of the same [Constellation].
+///  
+/// Remote (measurement systems) clock comparison is then allowed by
+/// exchanging remote [CGGTTS] (from both sites), and comparing synchronous
+/// (on both sites) [Track]s referring to identical satellite vehicles.
+/// This is called the common view time transfer technique.
+#[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CGGTTS {
-    /// CGGTTS [Version] used at production time of this [CGGTTS].
-    pub version: Version,
-    /// Release date of this file revision.
-    pub release_date: Epoch,
-    /// Station name, usually the data producer (agency, laboratory..).
-    pub station: String,
-    /// Possible GNSS receiver infos
-    pub receiver: Option<Hardware>,
-    /// # of GNSS receiver channels
-    pub nb_channels: u16,
-    /// IMS Ionospheric Measurement System (if any)
-    pub ims_hardware: Option<Hardware>,
-    /// Description of Reference time system (if any)
-    pub reference_time: ReferenceTime,
-    /// Reference frame, coordinates system and conversions,
-    /// used in `coordinates` field
-    pub reference_frame: Option<String>,
-    /// Antenna phase center coordinates in meters ECEF (as [Coordinates]).
-    pub apc_coordinates: Coordinates,
-    /// Short readable comments (if any)
-    pub comments: Option<String>,
-    /// Measurement [SystemDelay]
-    pub delay: SystemDelay,
+    /// [Header] gives general information
+    pub header: Header,
     /// [Track]s describe the result of track fitting,
     /// in chronological order.
     pub tracks: Vec<Track>,
 }
 
-impl Default for CGGTTS {
-    fn default() -> Self {
-        Self {
-            version: Version::default(),
-            release_date: Epoch::from_gregorian_utc_at_midnight(2014, 02, 20), /* latest rev. */
-            station: String::from("LAB"),
-            nb_channels: 0,
-            apc_coordinates: Coordinates::default(),
-            receiver: None,
-            tracks: Vec::new(),
-            ims_hardware: None,
-            reference_frame: None,
-            reference_time: ReferenceTime::default(),
-            comments: None,
-            delay: SystemDelay::default(),
-        }
-    }
-}
-
 impl CGGTTS {
-    /// Returns [CGGTTS] with desired station name
-    pub fn with_station(&self, station: &str) -> Self {
-        let mut c = self.clone();
-        c.station = station.to_string();
-        c
-    }
-
-    /// Adds readable comments to this [CGGTTS].
-    /// Try to keep it short, because it will eventually be
-    /// wrapped in a single line.
-    pub fn with_comment(&self, comment: &str) -> Self {
-        let mut s = self.clone();
-        s.comments = Some(comment.to_string());
-        s
-    }
-
-    /// Returns a new [CGGTTS] with desired number of channels.
-    pub fn with_channels(&self, ch: u16) -> Self {
-        let mut c = self.clone();
-        c.nb_channels = ch;
-        c
-    }
-
-    /// Returns a new [CGGTTS] with [Hardware] information about
-    /// the GNSS receiver.
-    pub fn with_receiver_hardware(&self, receiver: Hardware) -> Self {
-        let mut c = self.clone();
-        c.receiver = Some(receiver);
-        c
-    }
-
-    /// Returns a new [CGGTTS] with [Hardware] information about
-    /// the device that help estimate the Ionosphere parameters.
-    pub fn with_ims_hardware(&self, ims: Hardware) -> Self {
-        let mut c = self.clone();
-        c.ims_hardware = Some(ims);
-        c
-    }
-
-    /// Returns new [CGGTTS] with desired APC coordinates in ECEF.
-    pub fn with_apc_coordinates(&self, apc: Coordinates) -> Self {
-        let mut c = self.clone();
-        c.apc_coordinates = apc;
-        c
-    }
-
-    /// Returns new [CGGTTS] with [TimeScale::UTC] reference system time.
-    pub fn with_utc_reference_time(&self) -> Self {
-        let mut c = self.clone();
-        c.reference_time = TimeScale::UTC.into();
-        c
-    }
-
-    /// Returns new [CGGTTS] with [TimeScale::TAI] reference system time.
-    pub fn with_tai_reference_time(&self) -> Self {
-        let mut c = self.clone();
-        c.reference_time = TimeScale::TAI.into();
-        c
-    }
-
-    /// Returns new [CGGTTS] with desired [ReferenceTime] system
-    pub fn with_reference_time(&self, reference: ReferenceTime) -> Self {
-        let mut c = self.clone();
-        c.reference_time = reference;
-        c
-    }
-
-    /// Returns new [CGGTTS] with desired Reference Frame
-    pub fn with_reference_frame(&self, reference: &str) -> Self {
-        let mut c = self.clone();
-        c.reference_frame = Some(reference.to_string());
-        c
-    }
-
-    /// Returns true if all tracks (measurements) contained in this
-    /// [CGGTTS] follow BIPM tracking specifications.
-    pub fn follows_bipm_specs(&self) -> bool {
+    /// Returns true if all [Track]s (measurements) seems compatible
+    /// with the [CommonViewPeriod] recommended by BIPM.
+    /// This cannot be a complete confirmation, because only the receiver
+    /// that generated this data knows if [Track] collection and fitting
+    /// was implemented correctly.
+    pub fn follows_bipm_tracking(&self) -> bool {
         for track in self.tracks.iter() {
-            if !track.follows_bipm_specs() {
+            if !track.follows_bipm_tracking() {
                 return false;
             }
         }
@@ -288,42 +142,74 @@ impl CGGTTS {
         self.common_view_class() == CommonViewClass::MultiChannel
     }
 
-    /// Returns true if this [Constellation] contributed to at least one track (measurement)
-    /// contained in this [CGGTTS].
-    pub fn uses_constellation(&self, c: Constellation) -> bool {
-        self.tracks
-            .iter()
-            .filter_map(|trk| {
-                if trk.sv.constellation == c {
-                    Some(trk)
-                } else {
-                    None
-                }
-            })
-            .count()
-            > 0
+    /// Returns true if this is a [Constellation::GPS] [CGGTTS].
+    /// Meaning, all measurements [Track]ed this constellation.
+    pub fn is_gps_cggtts(&self) -> bool {
+        if let Some(first) = self.tracks.first() {
+            first.sv.constellation == Constellation::GPS
+        } else {
+            false
+        }
     }
 
-    /// Returns true if this [CGGTTS] only contains measurements
-    /// against a unique [Constellation] (also referred to, as "mono constellation" [CGGTTS]).
-    pub fn has_single_constellation(&self) -> bool {
-        self.tracks
-            .iter()
-            .map(|trk| trk.sv.constellation)
-            .unique()
-            .count()
-            == 1
+    /// Returns true if this is a [Constellation::Galileo] [CGGTTS].
+    /// Meaning, all measurements [Track]ed this constellation.
+    pub fn is_galileo_cggtts(&self) -> bool {
+        if let Some(first) = self.tracks.first() {
+            first.sv.constellation == Constellation::Galileo
+        } else {
+            false
+        }
     }
 
-    /// Returns true if this [CGGTTS] contains measurements
-    /// against several [Constellation]s.
-    pub fn has_mixed_constellations(&self) -> bool {
-        self.tracks
-            .iter()
-            .map(|trk| trk.sv.constellation)
-            .unique()
-            .count()
-            == 1
+    /// Returns true if this is a [Constellation::BeiDou] [CGGTTS].
+    /// Meaning, all measurements [Track]ed this constellation.
+    pub fn is_beidou_cggtts(&self) -> bool {
+        if let Some(first) = self.tracks.first() {
+            first.sv.constellation == Constellation::BeiDou
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if this is a [Constellation::Glonass] [CGGTTS].
+    /// Meaning, all measurements[Track]ed this constellation.
+    pub fn is_glonass_cggtts(&self) -> bool {
+        if let Some(first) = self.tracks.first() {
+            first.sv.constellation == Constellation::Glonass
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if this is a [Constellation::QZSS] [CGGTTS].
+    /// Meaning, all measurements[Track]ed this constellation.
+    pub fn is_qzss_cggtts(&self) -> bool {
+        if let Some(first) = self.tracks.first() {
+            first.sv.constellation == Constellation::QZSS
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if this is a [Constellation::IRNSS] [CGGTTS].
+    /// Meaning, all measurements [Track]ed this constellation.
+    pub fn is_irnss_cggtts(&self) -> bool {
+        if let Some(first) = self.tracks.first() {
+            first.sv.constellation == Constellation::IRNSS
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if this is a [Constellation::SBAS] [CGGTTS].
+    /// Meaning, all measurements[Track]ed geostationary vehicles.
+    pub fn is_sbas_cggtts(&self) -> bool {
+        if let Some(first) = self.tracks.first() {
+            first.sv.constellation.is_sbas()
+        } else {
+            false
+        }
     }
 
     /// Returns [Track] (measurements) Iterator
@@ -339,68 +225,78 @@ impl CGGTTS {
             .filter_map(move |trk| if trk.sv == sv { Some(trk) } else { None })
     }
 
-    /// Iterate over [Track]s (measurements) that result from tracking
-    /// this particular [Constellation] only.
-    pub fn constellation_tracks(
-        &self,
-        constellation: Constellation,
-    ) -> impl Iterator<Item = &Track> {
-        self.tracks.iter().filter_map(move |trk| {
-            if trk.sv.constellation == constellation {
-                Some(trk)
-            } else {
-                None
-            }
-        })
-    }
-
     /// Returns first Epoch contained in this file.
     pub fn first_epoch(&self) -> Option<Epoch> {
         self.tracks.first().map(|trk| trk.epoch)
     }
 
-    /// Returns total set duration,
-    /// by cummulating all measurements duration
-    pub fn total_duration(&self) -> Duration {
-        let mut dt = Duration::default();
-        for trk in self.tracks.iter() {
-            dt += trk.duration;
-        }
-        dt
+    /// Returns last Epoch contained in this file.
+    pub fn last_epoch(&self) -> Option<Epoch> {
+        self.tracks.last().map(|trk| trk.epoch)
     }
 
-    /// Returns a filename that would match naming conventions
-    /// to name Self correctly.
-    /// Note that Self needs to contain at least one track for this to
-    /// generate a competely valid name.
-    pub fn filename(&self) -> String {
-        let mut res = String::new();
+    /// Returns total [Duration] of this [CGGTTS].
+    pub fn total_duration(&self) -> Duration {
+        if let Some(t1) = self.last_epoch() {
+            if let Some(t0) = self.first_epoch() {
+                return t1 - t0;
+            }
+        }
+        Duration::ZERO
+    }
 
-        let constellation = match self.tracks.first() {
-            Some(track) => track.sv.constellation,
-            None => Constellation::default(),
-        };
-        res.push_str(&format!("{:x}", constellation));
+    /// Generates a standardized file name that would describes
+    /// this [CGGTTS] correctly according to naming conventions.
+    /// This method is infaillible, but might generate incomplete
+    /// results. In particular, this [CGGTTS] should not be empty
+    /// and must contain [Track]s measurements for this to work correctly.
+    pub fn standardized_file_name(&self) -> String {
+        let mut ret = String::new();
 
-        if self.has_ionospheric_data() {
-            res.push('Z') // Dual Freq / Multi channel
-        } else if self.single_channel() {
-            res.push('S') // Single Freq / Channel
+        // Grab first letter of constellation
+        if let Some(first) = self.tracks.first() {
+            ret.push_str(&first.sv.constellation.to_string()[0..1]);
         } else {
-            res.push('M') // Single Freq / Multi Channel
+            ret.push('X');
         }
 
-        let max_offset = std::cmp::min(self.station.len(), 4);
-        res.push_str(&self.station[0..max_offset]);
+        // Second letter depends on channelling capabilities
+        if self.has_ionospheric_data() {
+            ret.push('Z') // Dual Freq / Multi channel
+        } else if self.single_channel() {
+            ret.push('S') // Single Freq / Channel
+        } else {
+            ret.push('M') // Single Freq / Multi Channel
+        }
+
+        // Two following letters: from lab/agency code
+        let station_len = self.header.station.len();
+        let max = std::cmp::min(station_len, 2);
+
+        ret.push_str(&self.header.station[0..max]);
+
+        // TODO: need to cover case where station name is single letter..
+
+        // Two following letters: from receiver SN
+        if let Some(gnss_rx) = &self.header.receiver {
+            let sn_len = gnss_rx.serial_number.len();
+            let max = std::cmp::min(sn_len, 2);
+            ret.push_str(&gnss_rx.serial_number[0..max]);
+
+            // TODO: need to cover case where serial number is single letter..
+        } else {
+            // as per specs
+            ret.push_str("__");
+        };
 
         if let Some(epoch) = self.first_epoch() {
             let mjd = epoch.to_mjd_utc_days();
-            res.push_str(&format!("{:.3}", (mjd / 1000.0)));
+            ret.push_str(&format!("{:02.3}", (mjd / 1000.0)));
         } else {
-            res.push_str("YY.YYY");
+            ret.push_str("dd.ddd");
         }
 
-        res
+        ret
     }
 
     /// Parse [CGGTTS] from a local file.
@@ -409,14 +305,14 @@ impl CGGTTS {
     /// let cggtts = CGGTTS::from_file("../data/single/GZSY8259.506")
     ///     .unwrap();
     ///
-    /// assert_eq!(cggtts.station, "SY82");
-    /// assert_eq!(cggtts.follows_bipm_specs(), true);
+    /// assert_eq!(cggtts.header.station, "SY82");
+    /// assert_eq!(cggtts.follows_bipm_tracking(), true);
     ///
     /// if let Some(track) = cggtts.tracks.first() {
     ///     let duration = track.duration;
     ///     let (refsys, srsys) = (track.data.refsys, track.data.srsys);
     ///     assert_eq!(track.has_ionospheric_data(), false);
-    ///     assert_eq!(track.follows_bipm_specs(), true);
+    ///     assert_eq!(track.follows_bipm_tracking(), true);
     /// }
     /// ```
     ///
@@ -439,6 +335,48 @@ impl CGGTTS {
         Self::parse(&mut reader)
     }
 
+    /// Parse a new [CGGTTS] from any [Read]able interface.
+    /// This will fail on:
+    /// - Any critical standard violation
+    /// - If file revision is not 2E (latest)
+    /// - If following [Track]s do not contain the same [Constellation]
+    pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
+        let header = Header::parse(reader)?;
+
+        let mut tracks = Vec::with_capacity(16);
+
+        // consume all remaning lines in attempting to parse a track
+        // on each new line. CRC is interally verified on a line basis.
+        // We will abort if [Constellation]s content is not consistent,
+        // as per standard specifications.
+        let lines = reader.lines();
+
+        let mut constellation = Option::<Constellation>::None;
+
+        for line in lines {
+            if line.is_err() {
+                continue;
+            }
+
+            let line = line.unwrap();
+
+            if let Ok(track) = Track::from_str(&line) {
+                // constellation content verification
+                if let Some(constellation) = &constellation {
+                    if track.sv.constellation != *constellation {
+                        return Err(ParsingError::MixedConstellation);
+                    }
+                } else {
+                    constellation = Some(track.sv.constellation);
+                }
+
+                tracks.push(track);
+            }
+        }
+
+        Ok(Self { header, tracks })
+    }
+
     /// Parse [CGGTTS] from gzip compressed local path.
     #[cfg(feature = "flate2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
@@ -449,19 +387,155 @@ impl CGGTTS {
         let mut reader = BufReader::new(reader);
         Self::parse(&mut reader)
     }
-}
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use std::str::FromStr;
+    /// CGGTTS production is currently permitted by "Displaying"
+    /// the [CGGTTS] structure.
+    ///
+    /// Basic [CGGTTS] example:
+    ///
+    /// To produce valid advanced CGGTTS, one should specify:
+    /// - IMS [Hardware]
+    /// - ionospheric parameters
+    /// - System delay definitions, per signal carrier
+    ///
+    /// ```
+    /// use std::io::Write;
+    /// use cggtts::prelude::CGGTTS;
+    ///
+    /// let rcvr = Hardware::default()
+    ///     .with_manufacturer("SEPTENTRIO")  
+    ///     .with_model("POLARRx5")
+    ///     .with_serial_number("#12345")
+    ///     .with_release_year(2023)
+    ///     .with_release_version("v1");
+    ///
+    /// let mut cggtts = CGGTTS::default()
+    ///     .with_station("AJACFR")
+    ///     .with_receiver_hardware(rcvr)
+    ///     .with_apc_coordinates(Coordinates {
+    ///         x: 0.0_f64,
+    ///         y: 0.0_f64,
+    ///         z: 0.0_f64,
+    ///     })
+    ///     .with_reference_time(ReferenceTime::UTCk("LAB".to_string()))
+    ///     .with_reference_frame("ITRF");
+    ///
+    ///     // TrackData is mandatory
+    ///     let data = TrackData {
+    ///         refsv: 0.0_f64,
+    ///         srsv: 0.0_f64,
+    ///         refsys: 0.0_f64,
+    ///         srsys: 0.0_f64,
+    ///         dsg: 0.0_f64,
+    ///         ioe: 0_u16,
+    ///         smdt: 0.0_f64,
+    ///         mdtr: 0.0_f64,
+    ///         mdio: 0.0_f64,
+    ///         smdi: 0.0_f64,
+    ///     };
+    ///
+    ///     // tracking parameters
+    ///     let epoch = Epoch::default();
+    ///     let sv = SV::default();
+    ///     let (elevation, azimuth) = (0.0_f64, 0.0_f64);
+    ///     let duration = Duration::from_seconds(780.0);
+    ///
+    ///     // receiver channel being used
+    ///     let rcvr_channel = 0_u8;
+    ///
+    ///     // option 1: track resulting from a single SV observation
+    ///     let track = Track::new(
+    ///         sv,
+    ///         epoch,
+    ///         duration,
+    ///         CommonViewClass::SingleChannel,
+    ///         elevation,
+    ///         azimuth,
+    ///         data,
+    ///         None,
+    ///         rcvr_channel,
+    ///         "L1C",
+    ///     );
 
-    #[test]
-    fn test_code() {
-        assert_eq!(Code::default(), Code::C1);
-        assert_eq!(Code::from_str("C2").unwrap(), Code::C2);
-        assert_eq!(Code::from_str("P1").unwrap(), Code::P1);
-        assert_eq!(Code::from_str("P2").unwrap(), Code::P2);
-        assert_eq!(Code::from_str("E5").unwrap(), Code::E5);
+    ///     cggtts.tracks.push(track);
+    ///
+    ///     let mut fd = std::fs::File::create("test.txt") // does not respect naming conventions
+    ///         .unwrap();
+    ///
+    ///     write!(fd, "{}", cggtts).unwrap();
+    /// }
+    /// ```
+    pub fn format<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), FormattingError> {
+        const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
+        "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS DSG IOE MDTR SMDT MDIO SMDI MSIO SMSI ISG FR HC FRC CK";
+
+        const UNIT_LABELS_WITH_IONOSPHERIC : &str = "             hhmmss  s  .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s.1ns.1ps/s.1ns";
+
+        const TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA: &str =
+            "SAT CL  MJD  STTIME TRKL ELV AZTH   REFSV      SRSV     REFSYS    SRSYS  DSG IOE MDTR SMDT MDIO SMDI FR HC FRC CK";
+
+        const UNIT_LABELS_WITHOUT_IONOSPHERIC :&str = "             hhmmss  s  .1dg .1dg    .1ns     .1ps/s     .1ns    .1ps/s .1ns     .1ns.1ps/s.1ns.1ps/s";
+
+        // create local (tiny) Utf-8 buffer
+        let mut buf = Utf8Buffer::new(1024);
+
+        // format header
+        self.header.format(writer, &mut buf)?;
+
+        // format track labels
+        if self.has_ionospheric_data() {
+            writeln!(writer, "{}", TRACK_LABELS_WITH_IONOSPHERIC_DATA)?;
+            writeln!(writer, "{}", UNIT_LABELS_WITH_IONOSPHERIC,)?;
+        } else {
+            writeln!(writer, "{}", TRACK_LABELS_WITHOUT_IONOSPHERIC_DATA)?;
+            writeln!(writer, "{}", UNIT_LABELS_WITHOUT_IONOSPHERIC)?;
+        }
+
+        // format all tracks
+        for track in self.tracks.iter() {
+            track.format(writer, &mut buf)?;
+        }
+
+        Ok(())
+    }
+
+    /// Writes this [CGGTTS] into readable local file
+    pub fn to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), FormattingError> {
+        let fd = File::create(path)?;
+        let mut writer = BufWriter::new(fd);
+        self.format(&mut writer)
+    }
+
+    /// Writes this [CGGTTS] into gzip compressed local file
+    #[cfg(feature = "flate2")]
+    pub fn to_gzip_file<P: AsRef<Path>>(&self, path: P) -> Result<(), FormattingError> {
+        let fd = File::create(path)?;
+        let compression = GzCompression::new(5);
+        let mut writer = BufWriter::new(GzEncoder::new(fd, compression));
+        self.format(&mut writer)
+    }
+
+    /// Returns a new [CGGTTS] ready to solve
+    /// [Track]s in [TimeScale::UTC] (most standard scenario).
+    /// Use this method when setting up a [CGGTTS] production context.
+    /// NB: use this prior solving any [Track]s, otherwise
+    /// it will corrupt previously solved content, because
+    /// it does not perform the time shift for you.
+    pub fn with_utc_reference_time(&self) -> Self {
+        let mut s = self.clone();
+        s.header = s.header.with_reference_time(TimeScale::UTC.into());
+        s
+    }
+
+    /// Returns a new [CGGTTS] ready to solve
+    /// [Track]s in [TimeScale::TAI].
+    /// Use this method when setting up a [CGGTTS] production context.
+    /// NB: use this prior solving any [Track]s, otherwise
+    /// it will corrupt previously solved content, because
+    /// it does not perform the time shift for you.
+    pub fn with_tai_reference_time(&self) -> Self {
+        let mut s = self.clone();
+        s.header = s.header.with_reference_time(TimeScale::TAI.into());
+        s
     }
 }

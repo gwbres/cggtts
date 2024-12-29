@@ -1,12 +1,11 @@
 mod test {
     use crate::{
-        delay::{CalibrationID, Delay},
+        header::{CalibrationID, Code, Coordinates, Delay},
         prelude::{Constellation, Epoch, Hardware, ReferenceTime, CGGTTS, SV},
         tests::toolkit::random_name,
-        Code, Coordinates,
     };
     use std::{
-        fs::{read_dir, File},
+        fs::read_dir,
         io::Write,
         path::{Path, PathBuf},
     };
@@ -73,6 +72,10 @@ mod test {
 
             let cggtts = CGGTTS::from_file(&path)
                 .unwrap_or_else(|e| panic!("failed to parse {}: {}", path.display(), e));
+
+            let file_name = random_name(8);
+
+            cggtts.to_file(&file_name).unwrap();
         }
     }
 
@@ -91,12 +94,14 @@ mod test {
         let cggtts = cggtts.unwrap();
 
         assert_eq!(
-            cggtts.release_date,
+            cggtts.header.release_date,
             Epoch::from_gregorian_utc_at_midnight(2014, 02, 20),
         );
 
+        assert!(cggtts.is_gps_cggtts());
+
         assert_eq!(
-            cggtts.receiver,
+            cggtts.header.receiver,
             Some(
                 Hardware::default()
                     .with_manufacturer("GORGYTIMING")
@@ -107,20 +112,22 @@ mod test {
             ),
         );
 
-        assert_eq!(cggtts.station, "SY82");
-        assert_eq!(cggtts.nb_channels, 12);
-        assert!(cggtts.ims_hardware.is_none());
+        assert_eq!(cggtts.header.station, "SY82");
+        assert_eq!(cggtts.header.nb_channels, 12);
+        assert!(cggtts.header.ims_hardware.is_none());
 
         assert_eq!(
-            cggtts.reference_time,
+            cggtts.header.reference_time,
             ReferenceTime::Custom(String::from("REF(SY82)"))
         );
 
-        assert_eq!(cggtts.reference_frame, Some(String::from("ITRF")));
-        assert!((cggtts.apc_coordinates.x - 4314143.824).abs() < 1E-6);
-        assert!((cggtts.apc_coordinates.y - 452633.241).abs() < 1E-6);
-        assert!((cggtts.apc_coordinates.z - 4660711.385).abs() < 1E-6);
-        assert_eq!(cggtts.comments, None);
+        assert_eq!(cggtts.header.reference_frame, Some(String::from("ITRF")));
+        assert!((cggtts.header.apc_coordinates.x - 4314143.824).abs() < 1E-6);
+        assert!((cggtts.header.apc_coordinates.y - 452633.241).abs() < 1E-6);
+        assert!((cggtts.header.apc_coordinates.z - 4660711.385).abs() < 1E-6);
+
+        assert_eq!(cggtts.header.comments, None);
+
         assert_eq!(cggtts.tracks.len(), 32);
 
         let first = cggtts.tracks.first();
@@ -135,7 +142,10 @@ mod test {
             }
         );
 
-        assert_eq!(cggtts.filename(), String::from("GSSY8259.568"));
+        assert_eq!(
+            cggtts.standardized_file_name(),
+            String::from("GSSY1859.568")
+        );
 
         let tracks: Vec<_> = cggtts.tracks().collect();
         assert_eq!(tracks.len(), 32);
@@ -159,11 +169,12 @@ mod test {
 
         let cggtts = CGGTTS::from_file(&fullpath).unwrap();
 
-        assert!(cggtts.receiver.is_none());
-        assert!(cggtts.ims_hardware.is_none());
+        assert!(cggtts.header.receiver.is_none());
+        assert!(cggtts.header.ims_hardware.is_none());
+        assert!(cggtts.is_glonass_cggtts());
 
         assert_eq!(
-            cggtts.apc_coordinates,
+            cggtts.header.apc_coordinates,
             Coordinates {
                 x: 4027881.79,
                 y: 306998.67,
@@ -171,20 +182,21 @@ mod test {
             }
         );
 
-        assert!(cggtts.comments.is_none());
-        assert_eq!(cggtts.station, "ABC");
-        assert_eq!(cggtts.nb_channels, 12);
+        assert!(cggtts.header.comments.is_none());
+        assert_eq!(cggtts.header.station, "ABC");
+        assert_eq!(cggtts.header.nb_channels, 12);
 
-        assert_eq!(cggtts.delay.antenna_cable_delay, 237.0);
-        assert_eq!(cggtts.delay.local_ref_delay, 149.6);
-        assert_eq!(cggtts.delay.freq_dependent_delays.len(), 2);
+        assert_eq!(cggtts.header.delay.antenna_cable_delay, 237.0);
+        assert_eq!(cggtts.header.delay.local_ref_delay, 149.6);
+        assert_eq!(cggtts.header.delay.freq_dependent_delays.len(), 2);
 
         assert_eq!(
-            cggtts.delay.freq_dependent_delays[0],
+            cggtts.header.delay.freq_dependent_delays[0],
             (Code::C1, Delay::Internal(53.9))
         );
 
         let delay_nanos = cggtts
+            .header
             .delay
             .total_frequency_dependent_delay_nanos(&Code::C1)
             .unwrap();
@@ -193,6 +205,7 @@ mod test {
         assert!(err_nanos < 1.0);
 
         let delay_nanos = cggtts
+            .header
             .delay
             .total_frequency_dependent_delay_nanos(&Code::C2)
             .unwrap();
@@ -200,7 +213,7 @@ mod test {
         let err_nanos = (delay_nanos - (49.8 + 237.0 + 149.6)).abs();
         assert!(err_nanos < 1.0);
 
-        assert!(cggtts.delay.calibration_id.is_none());
+        assert!(cggtts.header.delay.calibration_id.is_none());
 
         let tracks: Vec<_> = cggtts.tracks().collect();
         assert_eq!(tracks.len(), 4);
@@ -218,11 +231,12 @@ mod test {
 
         let cggtts = CGGTTS::from_file(&fullpath).unwrap();
 
-        assert!(cggtts.receiver.is_none());
-        assert!(cggtts.ims_hardware.is_none());
+        assert!(cggtts.header.receiver.is_none());
+        assert!(cggtts.header.ims_hardware.is_none());
+        assert!(cggtts.is_galileo_cggtts());
 
         assert_eq!(
-            cggtts.delay.calibration_id,
+            cggtts.header.delay.calibration_id,
             Some(CalibrationID {
                 process_id: 1015,
                 year: 2021,

@@ -47,7 +47,7 @@ let cggtts = CGGTTS::from_file("../data/dual/GZGTR560.258");
 assert!(cggtts.is_ok());
 
 let cggtts = cggtts.unwrap();
-assert_eq!(cggtts.station, "LAB");
+assert_eq!(cggtts.header.station, "LAB");
 assert_eq!(cggtts.tracks.len(), 2097);
 ```
 

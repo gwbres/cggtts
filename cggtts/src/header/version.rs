@@ -1,4 +1,4 @@
-use crate::errors::ParsingError;
+use crate::{errors::ParsingError, prelude::Epoch};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -8,6 +8,14 @@ use serde::{Deserialize, Serialize};
 pub enum Version {
     #[default]
     Version2E,
+}
+
+impl Version {
+    pub(crate) fn release_date(&self) -> Epoch {
+        match self {
+            Self::Version2E => Epoch::from_gregorian_utc_at_midnight(2014, 02, 20),
+        }
+    }
 }
 
 impl std::str::FromStr for Version {
@@ -41,7 +49,7 @@ impl std::fmt::LowerHex for Version {
 
 #[cfg(test)]
 mod test {
-    use crate::version::Version;
+    use crate::prelude::Version;
     use std::str::FromStr;
 
     #[test]

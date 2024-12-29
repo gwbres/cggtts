@@ -2,34 +2,48 @@ use crate::prelude::{Epoch, Track, TrackData, CGGTTS};
 use rand::{distributions::Alphanumeric, Rng};
 
 pub fn cmp_dut_model(dut: &CGGTTS, model: &CGGTTS) {
-    assert_eq!(dut.version, model.version, "wrong version");
-    assert_eq!(dut.release_date, model.release_date, "wrong release date");
-    assert_eq!(dut.station, model.station, "bad station name");
-    assert_eq!(dut.receiver, model.receiver, "invalid receiver data");
+    assert_eq!(dut.header.version, model.header.version, "wrong version");
     assert_eq!(
-        dut.nb_channels, model.nb_channels,
+        dut.header.release_date, model.header.release_date,
+        "wrong release date"
+    );
+    assert_eq!(
+        dut.header.station, model.header.station,
+        "invalid station name"
+    );
+    assert_eq!(
+        dut.header.receiver, model.header.receiver,
+        "invalid receiver data"
+    );
+    assert_eq!(
+        dut.header.nb_channels, model.header.nb_channels,
         "invalid receiver channels"
     );
     assert_eq!(
-        dut.reference_time, model.reference_time,
-        "bad reference time"
+        dut.header.reference_time, model.header.reference_time,
+        "wrong reference time"
     );
     assert_eq!(
-        dut.apc_coordinates, model.apc_coordinates,
-        "bad apc coordinates"
+        dut.header.apc_coordinates, model.header.apc_coordinates,
+        "wrong apc coordinates"
     );
-    assert_eq!(dut.comments, model.comments, "wrong comments content");
-    assert_eq!(dut.delay, model.delay, "bad delay values");
+    assert_eq!(
+        dut.header.comments, model.header.comments,
+        "wrong comments content"
+    );
+    assert_eq!(dut.header.delay, model.header.delay, "wrong delay values");
 
-    /* track comparison */
+    // Tracks comparison
     assert!(
         dut.tracks.len() >= model.tracks.len(),
         "dut is missing some tracks"
     );
+
     assert!(
         dut.tracks.len() <= model.tracks.len(),
         "dut has too many tracks"
     );
+
     assert_eq!(
         dut.tracks.len(),
         model.tracks.len(),
@@ -48,6 +62,7 @@ fn cmp_trk_model(dut_trk: &Track, model_trk: &Track) {
         "bad common view class @ {:?}",
         dut_trk.epoch
     );
+
     assert_eq!(
         dut_trk.duration, model_trk.duration,
         "bad tracking duration @ {:?}",
@@ -58,16 +73,19 @@ fn cmp_trk_model(dut_trk: &Track, model_trk: &Track) {
         "bad sv description @ {:?}",
         dut_trk.epoch
     );
+
     assert_eq!(
-        dut_trk.elevation, model_trk.elevation,
+        dut_trk.elevation_deg, model_trk.elevation_deg,
         "bad sv elevation @ {:?}",
         dut_trk.epoch
     );
+
     assert_eq!(
-        dut_trk.azimuth, model_trk.azimuth,
+        dut_trk.azimuth_deg, model_trk.azimuth_deg,
         "bad sv azimuth @ {:?}",
         dut_trk.epoch
     );
+
     assert_eq!(
         dut_trk.hc, model_trk.hc,
         "bad hardware channel @ {:?}",
@@ -112,9 +130,7 @@ pub fn trk_data_cmp(t: Epoch, dut: &TrackData, model: &TrackData) {
     //assert!((dut.smdi - model.smdi).abs() < 1.0E-9, "bad SMDI @ {:?}", t);
 }
 
-/*
- * Tool to generate random names when we need to produce a file
- */
+/// Generates a random name, used in file production testing
 pub fn random_name(size: usize) -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)

@@ -1,4 +1,4 @@
-use crate::{errors::ParsingError, Code};
+use crate::{errors::ParsingError, header::Code};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -9,6 +9,7 @@ use crate::prelude::CGGTTS;
 /// Indication about precise system delay calibration process,
 /// as found in [CGGTTS].
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CalibrationID {
     /// ID # of this calibration process
     pub process_id: u16,
@@ -108,14 +109,13 @@ impl Delay {
 ///     .with_antenna_cable_delay(10.0)
 ///     .with_ref_delay(20.0);
 ///
-/// assert_eq!(system_specs.total)
+/// assert_eq!(system_specs.total_cable_delay_nanos(), 30.0);
 /// ```
 ///
 /// Example of advanced definition, compatible with
 /// ultra precise dual frequency Common View:
 /// ```
 /// use cggtts::prelude::SystemDelay;
-///
 ///
 /// ```
 #[derive(Clone, Default, PartialEq, Debug)]
@@ -156,7 +156,7 @@ impl SystemDelay {
     /// Define new [SystemDelay] with REF delay in nanoseconds,
     /// ie., the delay induced by cable between the measurement
     /// system and the local clock.
-    pub fn with_ref_delay_delay(&self, nanos: f64) -> Self {
+    pub fn with_ref_delay(&self, nanos: f64) -> Self {
         let mut s = self.clone();
         s.local_ref_delay = nanos;
         s
@@ -245,7 +245,7 @@ mod test {
 
         let delay = SystemDelay::default()
             .with_antenna_cable_delay(10.0)
-            .with_ref_delay_delay(20.0);
+            .with_ref_delay(20.0);
 
         assert_eq!(delay.antenna_cable_delay, 10.0);
         assert_eq!(delay.local_ref_delay, 20.0);
