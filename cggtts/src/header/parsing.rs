@@ -14,13 +14,14 @@ use std::{
 impl Header {
     /// Parse [Header] from any [Read]able input.
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
+        const CKSUM_PATTERN: &str = "CKSUM = ";
+        const CKSUM_LEN: usize = CKSUM_PATTERN.len();
+
         let mut lines_iter = reader.lines();
 
         // init variables
+        let mut crc = 0u8;
         let mut system_delay = SystemDelay::default();
-
-        let mut header_ck;
-        let mut cksum = 0_u8;
 
         let (mut blank, mut field_labels, mut unit_labels) = (false, false, false);
 
@@ -38,13 +39,26 @@ impl Header {
         let (_x, _y, _z): (f64, f64, f64) = (0.0, 0.0, 0.0);
 
         // VERSION must come first
-        let version = lines_iter.next().ok_or(ParsingError::VersionFormat)?;
-        let version = version.map_err(|_| ParsingError::VersionFormat)?;
+        let first_line = lines_iter.next().ok_or(ParsingError::VersionFormat)?;
 
-        let version = match scan_fmt!(&version, "CGGTTS GENERIC DATA FORMAT VERSION = {}", String) {
+        let first_line = first_line.map_err(|_| ParsingError::VersionFormat)?;
+
+        let version = match scan_fmt!(
+            &first_line,
+            "CGGTTS GENERIC DATA FORMAT VERSION = {}",
+            String
+        ) {
             Some(version) => Version::from_str(&version)?,
             _ => return Err(ParsingError::VersionFormat),
         };
+
+        // calculate first CRC contributions
+
+        for byte in first_line.as_bytes().iter() {
+            if *byte != b'\r' && *byte != b'\n' {
+                crc = crc.wrapping_add(*byte);
+            }
+        }
 
         for line in lines_iter {
             if line.is_err() {
@@ -52,6 +66,20 @@ impl Header {
             }
 
             let line = line.unwrap();
+            let line_len = line.len();
+
+            // CRC contribution
+            let crc_max = if line.starts_with(CKSUM_PATTERN) {
+                CKSUM_LEN
+            } else {
+                line_len
+            };
+
+            for byte in line.as_bytes()[..crc_max].iter() {
+                if *byte != b'\r' && *byte != b'\n' {
+                    crc = crc.wrapping_add(*byte);
+                }
+            }
 
             if line.starts_with("REV DATE = ") {
                 match scan_fmt!(&line, "REV DATE = {d}-{d}-{d}", i32, u8, u8) {
@@ -289,10 +317,8 @@ impl Header {
                     _ => {}, // non recognized delay type
                 };
             } else if line.starts_with("CKSUM = ") {
-                // CKSUM terminates this section
-
-                // verify CK value
-                header_ck = match scan_fmt!(&line, "CKSUM = {x}", String) {
+                // CRC verification
+                let value = match scan_fmt!(&line, "CKSUM = {x}", String) {
                     Some(s) => match u8::from_str_radix(&s, 16) {
                         Ok(hex) => hex,
                         _ => return Err(ParsingError::ChecksumParsing),
@@ -300,13 +326,11 @@ impl Header {
                     _ => return Err(ParsingError::ChecksumFormat),
                 };
 
-                let end_pos = line.find("= ").unwrap();
-                //cksum = cksum.wrapping_add(crc_calculation(line.split_at(end_pos + 2).0)?);
+                if value != crc {
+                    return Err(ParsingError::ChecksumValue);
+                }
 
-                //if cksum != header_ck {
-                //    //return Err(Error::ChecksumError(crc::Error::ChecksumError(cksum, ck)));
-                //}
-
+                // CKSUM initiates the end of header section
                 blank = true;
             } else if blank {
                 // Field labels expected next
@@ -319,11 +343,6 @@ impl Header {
             } else if unit_labels {
                 // last line that concludes this section
                 break;
-            } else {
-                // every single line (except comments) contributes to CRC calculation
-                if !line.starts_with("COMMENTS = ") {
-                    //cksum = cksum.wrapping_add(crc_calculation(&line)?);
-                }
             }
         }
 

@@ -97,5 +97,27 @@ CKSUM = ";
 
         buf.push_str(&content);
         assert_eq!(buf.calculate_crc(), 0xD7);
+
+        let mut buf = Utf8Buffer::new(1024);
+
+        let content = "CGGTTS     GENERIC DATA FORMAT VERSION = 2E
+REV DATE = 2023-06-27
+RCVR = GTR51 2204005 1.12.0
+CH = 20
+IMS = GTR51 2204005 1.12.0
+LAB = LAB
+X = +3970727.80 m
+Y = +1018888.02 m
+Z = +4870276.84 m
+FRAME = FRAME
+COMMENTS = NO COMMENTS
+INT DLY =   32.9 ns (GPS C1),  32.9 ns (GPS P1),   0.0 ns (GPS C2),  25.8 ns (GPS P2),   0.0 ns (GPS L5),   0.0 ns (GPS L1C)     CAL_ID = 1015-2021
+CAB DLY =  155.2 ns
+REF DLY =    0.0 ns
+REF = REF_IN
+CKSUM = ";
+
+        buf.push_str(&content);
+        assert_eq!(buf.calculate_crc(), 0x07);
     }
 }

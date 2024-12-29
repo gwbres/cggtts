@@ -20,7 +20,6 @@ use std::{
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
-//mod crc;
 mod cv;
 mod header;
 
@@ -358,14 +357,14 @@ impl CGGTTS {
     /// - If file revision is not 2E (latest)
     /// - If following [Track]s do not contain the same [Constellation]
     pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Self, ParsingError> {
+        // Parse header section
         let header = Header::parse(reader)?;
 
+        // Parse tracks:
+        // consumes all remaning lines and attempt parsing on each new line.
+        // Line CRC is internally verified for each line.
+        // We abort if Constellation content is not constant, as per standard conventions.
         let mut tracks = Vec::with_capacity(16);
-
-        // consume all remaning lines in attempting to parse a track
-        // on each new line. CRC is interally verified on a line basis.
-        // We will abort if [Constellation]s content is not consistent,
-        // as per standard specifications.
         let lines = reader.lines();
 
         let mut constellation = Option::<Constellation>::None;

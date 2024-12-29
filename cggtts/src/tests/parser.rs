@@ -91,10 +91,7 @@ mod test {
             .join("single")
             .join("GZSY8259.568");
 
-        let fullpath = path.to_string_lossy().to_string();
-        let cggtts = CGGTTS::from_file(&fullpath);
-        assert!(cggtts.is_ok());
-
+        let cggtts = CGGTTS::from_file(&path);
         let cggtts = cggtts.unwrap();
 
         assert_eq!(

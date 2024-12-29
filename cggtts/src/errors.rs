@@ -46,8 +46,8 @@ pub enum ParsingError {
     ChecksumFormat,
     #[error("failed to parse checksum value")]
     ChecksumParsing,
-    #[error("header crc error")]
-    ChecksumError(#[from] CrcError),
+    #[error("invalid crc value")]
+    ChecksumValue,
     #[error("missing crc field")]
     CrcMissing,
     #[error("track parsing error")]
