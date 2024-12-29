@@ -212,8 +212,8 @@ impl CGGTTS {
         }
     }
 
-    /// Returns [Track] (measurements) Iterator
-    pub fn tracks(&self) -> impl Iterator<Item = &Track> {
+    /// Returns [Track]s (measurements) Iterator
+    pub fn tracks_iter(&self) -> impl Iterator<Item = &Track> {
         self.tracks.iter()
     }
 
@@ -250,12 +250,27 @@ impl CGGTTS {
     /// This method is infaillible, but might generate incomplete
     /// results. In particular, this [CGGTTS] should not be empty
     /// and must contain [Track]s measurements for this to work correctly.
-    pub fn standardized_file_name(&self) -> String {
+    /// ## Inputs
+    /// - custom_lab: Possible LAB ID overwrite and customization.
+    /// Two characters are expected here, the result will not
+    /// respect the standard convention if you provide less.
+    /// When not defined, we use the LAB ID that was previously parsed.
+    /// - custom_id: Possible GNSS RX identification number
+    /// or whatever custom ID number you desire.
+    /// Two characters are expected here, the result will not
+    /// respect the standard convention if you provide less.
+    /// When not defined, we use the first two digits of the serial number
+    /// that was previously parsed.
+    pub fn standardized_file_name(
+        &self,
+        custom_lab: Option<&str>,
+        custom_id: Option<&str>,
+    ) -> String {
         let mut ret = String::new();
 
         // Grab first letter of constellation
         if let Some(first) = self.tracks.first() {
-            ret.push_str(&first.sv.constellation.to_string()[0..1]);
+            ret.push_str(&format!("{:x}", first.sv.constellation));
         } else {
             ret.push('X');
         }
@@ -269,25 +284,27 @@ impl CGGTTS {
             ret.push('M') // Single Freq / Multi Channel
         }
 
-        // Two following letters: from lab/agency code
-        let station_len = self.header.station.len();
-        let max = std::cmp::min(station_len, 2);
-
-        ret.push_str(&self.header.station[0..max]);
-
-        // TODO: need to cover case where station name is single letter..
-
-        // Two following letters: from receiver SN
-        if let Some(gnss_rx) = &self.header.receiver {
-            let sn_len = gnss_rx.serial_number.len();
-            let max = std::cmp::min(sn_len, 2);
-            ret.push_str(&gnss_rx.serial_number[0..max]);
-
-            // TODO: need to cover case where serial number is single letter..
+        // LAB / Agency
+        if let Some(custom_lab) = custom_lab {
+            let size = std::cmp::min(custom_lab.len(), 2);
+            ret.push_str(&custom_lab[0..size]);
         } else {
-            // as per specs
-            ret.push_str("__");
-        };
+            let size = std::cmp::min(self.header.station.len(), 2);
+            ret.push_str(&self.header.station[0..size]);
+        }
+
+        // GNSS RX / SN
+        if let Some(custom_id) = custom_id {
+            let size = std::cmp::min(custom_id.len(), 2);
+            ret.push_str(&custom_id[..size]);
+        } else {
+            if let Some(gnss_rx) = &self.header.receiver {
+                let size = std::cmp::min(gnss_rx.serial_number.len(), 2);
+                ret.push_str(&gnss_rx.serial_number[..size]);
+            } else {
+                ret.push_str("__");
+            }
+        }
 
         if let Some(epoch) = self.first_epoch() {
             let mjd = epoch.to_mjd_utc_days();
