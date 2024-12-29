@@ -111,13 +111,24 @@ impl Track {
             ));
         }
 
-        buffer.push_str(&format!("{:2} {:2}  {:2}", self.fr, self.hc, self.frc));
+        if let Some(fdma) = &self.fdma_channel {
+            buffer.push_str(&format!("{:2} ", fdma));
+        } else {
+            buffer.push_str(" 0 ");
+        }
+
+        buffer.push_str(&format!(
+            "{:2} {:>frc_padding$} ",
+            self.hc,
+            self.frc,
+            frc_padding = 3
+        ));
 
         // ready to proceed to calculation
         let crc = buffer.calculate_crc();
 
         // append CRC
-        buffer.push_str(&format!(" {:02X}", crc));
+        buffer.push_str(&format!("{:02X}", crc));
 
         // interprate
         let utf8 = buffer.to_utf8_ascii()?; // we will never format bad Utf8
@@ -139,10 +150,11 @@ mod test {
     #[test]
     fn track_crc_formatting() {
         let mut buf = Utf8Buffer::new(1024);
-
         let mut user_buf = BufWriter::new(Utf8Buffer::new(1024));
 
-        let track = Track::from_str("E03 FF 60258 001000  780 139  548     +723788    +14        -302    -14    2 076  325  -36   32   -3   20  +20   3  0  0  E1 A5")
+        let track = Track::from_str(
+            "E03 FF 60258 001000  780 139  548     +723788    +14        -302    -14    2 076  325  -36   32   -3   20  +20   3  0  0  E1 A5"
+        )
             .unwrap();
 
         track.format(&mut user_buf, &mut buf).unwrap();
@@ -152,7 +164,43 @@ mod test {
 
         assert_eq!(
             ascii_utf8,
-            "E03 FF 60258 001000  780 139  548      723788     14        -302    -14    2  76  325  -36   32   -3   20   20   3 00  0  E1 64",
+            "E03 FF 60258 001000  780 139  548      723788     14        -302    -14    2  76  325  -36   32   -3   20   20   3  0  0  E1 74",
+        );
+
+        // 3 letter modern Frequency modulation Code
+        let mut buf = Utf8Buffer::new(1024);
+        let mut user_buf = BufWriter::new(Utf8Buffer::new(1024));
+
+        let track = Track::from_str(
+            "E08 FF 60258 002600  780 142  988     1745615     40        -233    -19    4  79  321  -96   73  -14  116  -53  13  0  0 E5a 84"
+            ).unwrap();
+
+        track.format(&mut user_buf, &mut buf).unwrap();
+
+        let inner = user_buf.into_inner().unwrap_or_else(|_| panic!("oops"));
+        let ascii_utf8 = inner.to_utf8_ascii().expect("generated invalid utf-8!");
+
+        assert_eq!(
+            ascii_utf8,
+            "E08 FF 60258 002600  780 142  988     1745615     40        -233    -19    4  79  321  -96   73  -14  116  -53  13  0  0 E5a 30"
+        );
+
+        // 3 letter modern Frequency modulation Code (bis)
+        let mut buf = Utf8Buffer::new(1024);
+        let mut user_buf = BufWriter::new(Utf8Buffer::new(1024));
+
+        let track = Track::from_str(
+            "E03 FF 60258 001000  780 139  548      724092     28           2      1    2  76  325  -36   54   -6   34   35   5  0  0 E5b 77"
+        ).unwrap();
+
+        track.format(&mut user_buf, &mut buf).unwrap();
+
+        let inner = user_buf.into_inner().unwrap_or_else(|_| panic!("oops"));
+        let ascii_utf8 = inner.to_utf8_ascii().expect("generated invalid utf-8!");
+
+        assert_eq!(
+            ascii_utf8,
+            "E03 FF 60258 001000  780 139  548      724092     28           2      1    2  76  325  -36   54   -6   34   35   5  0  0 E5b 77"
         );
     }
 }

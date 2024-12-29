@@ -38,17 +38,41 @@ fitting method
 
 ## Parsing
 
-Use CGGTTS to parse local files
+Parse a local CGGTTS file:
 
 ```rust
 use cggtts::prelude::CGGTTS;
 
-let cggtts = CGGTTS::from_file("../data/dual/GZGTR560.258");
-assert!(cggtts.is_ok());
+let path = format!(
+    "{}/../data/dual/GZGTR560.258",
+    env!("CARGO_MANIFEST_DIR"),
+);
 
-let cggtts = cggtts.unwrap();
+let cggtts = CGGTTS::from_file("../data/dual/GZGTR560.258")
+    .unwrap();
+
 assert_eq!(cggtts.header.station, "LAB");
 assert_eq!(cggtts.tracks.len(), 2097);
 ```
 
-Refer to online API for more examples and further information.
+Refer to online API for more examples and further information
+about [CGGTTS].
+
+## Formatting
+
+Parse, modify, dump, parse back then verify:
+
+```rust
+use cggtts::prelude::CGGTTS;
+
+let cggtts = CGGTTS::from_file("../data/dual/GZGTR560.258")
+    .unwrap();
+
+cggtts.to_file("/tmp/test.txt")
+    .unwrap();
+
+let parsed = CGGTTS::from_file("/tmp/test.txt")
+    .unwrap();
+
+assert_eq!(parsed.tracks.len(), cggtts.tracks.len());
+```

@@ -1,7 +1,7 @@
 use crate::prelude::{Epoch, Track, TrackData, CGGTTS};
 use rand::{distributions::Alphanumeric, Rng};
 
-pub fn cmp_dut_model(dut: &CGGTTS, model: &CGGTTS) {
+pub fn cggtts_dut_model_comparison(dut: &CGGTTS, model: &CGGTTS) {
     assert_eq!(dut.header.version, model.header.version, "wrong version");
     assert_eq!(
         dut.header.release_date, model.header.release_date,
@@ -51,11 +51,11 @@ pub fn cmp_dut_model(dut: &CGGTTS, model: &CGGTTS) {
     );
 
     for (dut_trk, model_trk) in dut.tracks.iter().zip(model.tracks.iter()) {
-        cmp_trk_model(dut_trk, model_trk);
+        track_dut_model_comparison(dut_trk, model_trk);
     }
 }
 
-fn cmp_trk_model(dut_trk: &Track, model_trk: &Track) {
+pub fn track_dut_model_comparison(dut_trk: &Track, model_trk: &Track) {
     assert_eq!(dut_trk.epoch, model_trk.epoch, "bad track epoch");
     assert_eq!(
         dut_trk.class, model_trk.class,
@@ -92,8 +92,8 @@ fn cmp_trk_model(dut_trk: &Track, model_trk: &Track) {
         dut_trk.epoch
     );
     assert_eq!(
-        dut_trk.fr, model_trk.fr,
-        "bad glonass channel @ {:?}",
+        dut_trk.fdma_channel, model_trk.fdma_channel,
+        "invalid glonass FDMA channel @ {:?}",
         dut_trk.epoch
     );
     assert_eq!(
@@ -107,6 +107,13 @@ fn cmp_trk_model(dut_trk: &Track, model_trk: &Track) {
 
 pub fn trk_data_cmp(t: Epoch, dut: &TrackData, model: &TrackData) {
     assert_eq!(dut.ioe, model.ioe, "bad IOE @ {:?}", t);
+    assert!(
+        (dut.refsv - model.refsv).abs() < 1E-11,
+        "REFSV {}/{}",
+        dut.refsv,
+        model.refsv
+    );
+
     //assert!((dut.refsv - model.refsv).abs() < 1.0E-9, "bad REFSV @ {:?}");
     //assert!(
     //    (dut.srsv - model.srsv).abs() < 1.0E-9,

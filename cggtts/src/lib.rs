@@ -58,7 +58,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     buffer::Utf8Buffer,
     errors::{FormattingError, ParsingError},
-    header::Header,
+    header::{Header, ReferenceTime},
     track::{CommonViewClass, Track},
 };
 
@@ -336,8 +336,10 @@ impl CGGTTS {
     /// receivers that may describe the ionospheric delay compensation:
     /// ```
     /// use cggtts::prelude::CGGTTS;
-    /// let cggtts = CGGTTS::from_file("../data/dual/RZSY8257.000")
+    ///
+    /// let cggtts = CGGTTS::from_file("../data/dual/GZGTR560.258")
     ///     .unwrap();
+    ///
     /// if let Some(track) = cggtts.tracks.first() {
     ///     assert_eq!(track.has_ionospheric_data(), true);
     ///     if let Some(iono) = track.iono {
@@ -404,10 +406,7 @@ impl CGGTTS {
         Self::parse(&mut reader)
     }
 
-    /// CGGTTS production is currently permitted by "Displaying"
-    /// the [CGGTTS] structure.
-    ///
-    /// Basic [CGGTTS] example:
+    /// Format [CGGTTS] following standard specifications.
     ///
     /// To produce valid advanced CGGTTS, one should specify:
     /// - IMS [Hardware]
@@ -416,7 +415,15 @@ impl CGGTTS {
     ///
     /// ```
     /// use std::io::Write;
-    /// use cggtts::prelude::CGGTTS;
+    ///
+    /// use cggtts::prelude::{
+    ///     CGGTTS,
+    ///     Header,
+    ///     Hardware, Coordinates,
+    ///     Track, TrackData,
+    ///     SV, Epoch, Duration,
+    ///     CommonViewClass,
+    /// };
     ///
     /// let rcvr = Hardware::default()
     ///     .with_manufacturer("SEPTENTRIO")  
@@ -425,61 +432,102 @@ impl CGGTTS {
     ///     .with_release_year(2023)
     ///     .with_release_version("v1");
     ///
-    /// let mut cggtts = CGGTTS::default()
+    /// // form a header
+    /// let header = Header::default()
     ///     .with_station("AJACFR")
-    ///     .with_receiver_hardware(rcvr)
-    ///     .with_apc_coordinates(Coordinates {
-    ///         x: 0.0_f64,
-    ///         y: 0.0_f64,
-    ///         z: 0.0_f64,
-    ///     })
-    ///     .with_reference_time(ReferenceTime::UTCk("LAB".to_string()))
+    ///     .with_receiver_hardware(rcvr);
+    ///
+    /// // Although CGGTTS intends ITRF high precision
+    /// // frames, you may use whatever you can or need
+    /// let header = header
     ///     .with_reference_frame("ITRF");
     ///
-    ///     // TrackData is mandatory
-    ///     let data = TrackData {
-    ///         refsv: 0.0_f64,
-    ///         srsv: 0.0_f64,
-    ///         refsys: 0.0_f64,
-    ///         srsys: 0.0_f64,
-    ///         dsg: 0.0_f64,
-    ///         ioe: 0_u16,
-    ///         smdt: 0.0_f64,
-    ///         mdtr: 0.0_f64,
-    ///         mdio: 0.0_f64,
-    ///         smdi: 0.0_f64,
-    ///     };
+    /// // It is best practice to specify the APC coordinates
+    /// // (obviously in previous reference frame)
+    /// let header = header
+    ///     .with_apc_coordinates(Coordinates {
+    ///         x: 1.0_f64,
+    ///         y: 2.0_f64,
+    ///         z: 3.0_f64,
+    ///     });
     ///
-    ///     // tracking parameters
-    ///     let epoch = Epoch::default();
-    ///     let sv = SV::default();
-    ///     let (elevation, azimuth) = (0.0_f64, 0.0_f64);
-    ///     let duration = Duration::from_seconds(780.0);
+    /// // Create a [CGGTTS]
+    /// let mut cggtts = CGGTTS::default()
+    ///     .with_header(header);
     ///
-    ///     // receiver channel being used
-    ///     let rcvr_channel = 0_u8;
+    /// // Tracking context
+    /// let epoch = Epoch::default();
+    /// let sv = SV::default();
+    /// let (elevation, azimuth) = (0.0_f64, 0.0_f64);
+    /// let duration = Duration::from_seconds(780.0);
     ///
-    ///     // option 1: track resulting from a single SV observation
-    ///     let track = Track::new(
-    ///         sv,
-    ///         epoch,
-    ///         duration,
-    ///         CommonViewClass::SingleChannel,
-    ///         elevation,
-    ///         azimuth,
-    ///         data,
-    ///         None,
-    ///         rcvr_channel,
-    ///         "L1C",
-    ///     );
-
-    ///     cggtts.tracks.push(track);
+    /// // receiver channel being used
+    /// let rcvr_channel = 0_u8;
     ///
-    ///     let mut fd = std::fs::File::create("test.txt") // does not respect naming conventions
-    ///         .unwrap();
+    /// // TrackData is always mandatory (for each track)
+    /// let data = TrackData {
+    ///     refsv: 0.0_f64,
+    ///     srsv: 0.0_f64,
+    ///     refsys: 0.0_f64,
+    ///     srsys: 0.0_f64,
+    ///     dsg: 0.0_f64,
+    ///     ioe: 0_u16,
+    ///     smdt: 0.0_f64,
+    ///     mdtr: 0.0_f64,
+    ///     mdio: 0.0_f64,
+    ///     smdi: 0.0_f64,
+    /// };
     ///
-    ///     write!(fd, "{}", cggtts).unwrap();
-    /// }
+    /// // option 1: track resulting from a single SV observation
+    /// let track = Track::new(
+    ///     sv,
+    ///     epoch,
+    ///     duration,
+    ///     CommonViewClass::SingleChannel,
+    ///     elevation,
+    ///     azimuth,
+    ///     data,
+    ///     None,
+    ///     rcvr_channel, // receiver channel
+    ///     "L1C",
+    /// );
+    ///
+    /// cggtts.tracks.push(track);
+    ///
+    /// // option 2: track resulting from multi channel SV observation
+    /// let track = Track::new(
+    ///     sv,
+    ///     epoch,
+    ///     duration,
+    ///     CommonViewClass::MultiChannel,
+    ///     elevation,
+    ///     azimuth,
+    ///     data,
+    ///     None,
+    ///     rcvr_channel, // receiver channel
+    ///     "L1C",
+    /// );
+    ///
+    /// cggtts.tracks.push(track);
+    ///
+    /// // option 3: when working with Glonass, use the dedicated method
+    /// let track = Track::new_glonass(
+    ///     sv,
+    ///     epoch,
+    ///     duration,
+    ///     CommonViewClass::SingleChannel,
+    ///     elevation,
+    ///     azimuth,
+    ///     data,
+    ///     None,
+    ///     rcvr_channel, // receiver channel
+    ///     1, // FDMA channel
+    ///     "C1P",
+    /// );
+    ///
+    /// // produce CGGTTS
+    /// cggtts.to_file("/tmp/test.txt")
+    ///   .unwrap();
     /// ```
     pub fn format<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), FormattingError> {
         const TRACK_LABELS_WITH_IONOSPHERIC_DATA: &str =
@@ -498,6 +546,9 @@ impl CGGTTS {
         // format header
         self.header.format(writer, &mut buf)?;
 
+        // BLANK at end of header section
+        write!(writer, "{}", '\n')?;
+
         // format track labels
         if self.has_ionospheric_data() {
             writeln!(writer, "{}", TRACK_LABELS_WITH_IONOSPHERIC_DATA)?;
@@ -510,6 +561,7 @@ impl CGGTTS {
         // format all tracks
         for track in self.tracks.iter() {
             track.format(writer, &mut buf)?;
+            write!(writer, "{}", '\n')?;
         }
 
         Ok(())
@@ -531,9 +583,10 @@ impl CGGTTS {
         self.format(&mut writer)
     }
 
-    /// Returns a new [CGGTTS] ready to solve
-    /// [Track]s in [TimeScale::UTC] (most standard scenario).
-    /// Use this method when setting up a [CGGTTS] production context.
+    /// Returns a new [CGGTTS] ready to track in [TimeScale::UTC].
+    /// This is the most (most) general use case, for the simple reason
+    /// that UTC is a worldwide constant, hence, allows worldwide common-view.
+    /// You can use our other method for exotic contexts.
     /// NB: use this prior solving any [Track]s, otherwise
     /// it will corrupt previously solved content, because
     /// it does not perform the time shift for you.
@@ -543,8 +596,25 @@ impl CGGTTS {
         s
     }
 
-    /// Returns a new [CGGTTS] ready to solve
-    /// [Track]s in [TimeScale::TAI].
+    /// Returns a new [CGGTTS] ready to track in custom UTC-replica.
+    /// Use this method when setting up a [CGGTTS] production context.
+    /// NB(1): we differentiate UTC-replica (unofficial or local UTC)
+    /// from custom reference time system (exotic or private),
+    /// for which you have [Self::with_custom_reference_time].
+    /// NB(2): use this prior solving any [Track]s, otherwise
+    /// it will corrupt previously solved content, because
+    /// it does not perform the time shift for you.
+    /// ## Inputs
+    /// - name: name of your UTC replica (also referred to, as UTCk).
+    pub fn with_utc_replica_reference_time(&self, name: &str) -> Self {
+        let mut s = self.clone();
+        s.header = s
+            .header
+            .with_reference_time(ReferenceTime::UTCk(name.to_string()));
+        s
+    }
+
+    /// Returns a new [CGGTTS] ready to track in [TimeScale::TAI].
     /// Use this method when setting up a [CGGTTS] production context.
     /// NB: use this prior solving any [Track]s, otherwise
     /// it will corrupt previously solved content, because
@@ -552,6 +622,39 @@ impl CGGTTS {
     pub fn with_tai_reference_time(&self) -> Self {
         let mut s = self.clone();
         s.header = s.header.with_reference_time(TimeScale::TAI.into());
+        s
+    }
+
+    /// Returns a new [CGGTTS] ready to track in custom timescale
+    /// (either exotic, privately owned..).
+    /// Use this method when setting up a [CGGTTS] production context.
+    /// NB(1): we differentiate custom reference time systems from
+    /// UTC-replica (unofficial or local UTC),
+    /// for which you have [Self::with_utc_replica_reference_time].
+    /// NB(2): use this prior solving any [Track]s, otherwise
+    /// it will corrupt previously solved content, because
+    /// it does not perform the time shift for you.
+    /// ## Inputs
+    /// - name: name of your custom timescale
+    pub fn with_custom_reference_time(&self, name: &str) -> Self {
+        let mut s = self.clone();
+        s.header = s
+            .header
+            .with_reference_time(ReferenceTime::UTCk(name.to_string()));
+        s
+    }
+
+    /// Copies and returns new [CGGTTS] with updated [Header] section.
+    pub fn with_header(&self, header: Header) -> Self {
+        let mut s = self.clone();
+        s.header = header;
+        s
+    }
+
+    /// Copies and returns new [CGGTTS] with updated [Track] list.
+    pub fn with_tracks(&self, tracks: Vec<Track>) -> Self {
+        let mut s = self.clone();
+        s.tracks = tracks;
         s
     }
 }

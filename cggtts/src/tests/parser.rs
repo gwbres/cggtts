@@ -4,13 +4,12 @@ mod test {
 
     use crate::{
         header::{CalibrationID, Code, Coordinates, Delay},
-        prelude::{Constellation, Epoch, Hardware, ReferenceTime, CGGTTS, SV},
-        tests::toolkit::random_name,
+        prelude::{Epoch, Hardware, ReferenceTime, CGGTTS},
+        tests::toolkit::{random_name, track_dut_model_comparison},
         track::CommonViewClass,
     };
     use std::{
-        fs::read_dir,
-        io::Write,
+        fs::{read_dir, remove_file},
         path::{Path, PathBuf},
     };
 
@@ -32,30 +31,22 @@ mod test {
             let cggtts = CGGTTS::from_file(&path)
                 .unwrap_or_else(|e| panic!("failed to parse {}: {}", path.display(), e));
 
-            // test filename convention
-            let stem = path.file_name().unwrap();
-            let _stem = stem.to_string_lossy();
-            // assert_eq!(cggtts.filename(), stem, "bad filename convention");
+            // Dump then parse back
+            let file_name = random_name(8);
 
-            // dump into file
-            // let filename = random_name(8);
-            // let mut fd = File::create(&filename).unwrap();
-            // write!(fd, "{}", cggtts).unwrap();
+            cggtts.to_file(&file_name).unwrap();
 
-            // // parse back
-            // let parsed = CGGTTS::from_file(&filename);
-            // assert!(
-            //     parsed.is_ok(),
-            //     "failed to parse back generated file: {}",
-            //     parsed.err().unwrap()
-            // );
+            let parsed = CGGTTS::from_file(&file_name)
+                .unwrap_or_else(|e| panic!("failed to parse back \"{}\": {}", file_name, e));
 
-            // println!("running testbench on \"{}\"", filename);
-            // //TODO: hifitime pb
-            // // cmp_dut_model(&parsed.unwrap(), &cggtts);
+            assert_eq!(parsed.tracks.len(), cggtts.tracks.len());
 
-            // // remove generated file
-            // let _ = std::fs::remove_file(&filename);
+            for (dut, model) in parsed.tracks_iter().zip(cggtts.tracks_iter()) {
+                track_dut_model_comparison(dut, model);
+            }
+
+            // remove generated file
+            let _ = std::fs::remove_file(&file_name);
         }
     }
 
@@ -77,9 +68,22 @@ mod test {
             let cggtts = CGGTTS::from_file(&path)
                 .unwrap_or_else(|e| panic!("failed to parse {}: {}", path.display(), e));
 
+            // Dump then parse back
             let file_name = random_name(8);
 
             cggtts.to_file(&file_name).unwrap();
+
+            let parsed = CGGTTS::from_file(&file_name)
+                .unwrap_or_else(|e| panic!("failed to parse back \"{}\": {}", file_name, e));
+
+            assert_eq!(parsed.tracks.len(), cggtts.tracks.len());
+
+            for (dut, model) in parsed.tracks_iter().zip(cggtts.tracks_iter()) {
+                track_dut_model_comparison(dut, model);
+            }
+
+            // remove generated file
+            let _ = std::fs::remove_file(&file_name);
         }
     }
 
@@ -131,31 +135,25 @@ mod test {
 
         assert_eq!(cggtts.tracks.len(), 32);
 
-        let first = cggtts.tracks.first();
-        //assert_eq!(cggtts.delay.value(), 0.0);
-        assert!(first.is_some());
-        let first = first.unwrap();
-        assert_eq!(
-            first.sv,
-            SV {
-                constellation: Constellation::GPS,
-                prn: 99,
-            }
-        );
-
         assert_eq!(
             cggtts.standardized_file_name(Some("SY"), Some("82")),
             String::from("GSSY8259.568")
         );
 
-        let tracks: Vec<_> = cggtts.tracks_iter().collect();
-        assert_eq!(tracks.len(), 32);
+        // format (dump) then parse back
+        let filename = random_name(8);
+        cggtts.to_file(&filename).unwrap();
 
-        // let _dumped = cggtts.to_string();
-        // let _compare = std::fs::read_to_string(
-        //     env!("CARGO_MANIFEST_DIR").to_owned() + "/../data/single/GZSY8259.568",
-        // )
-        // .unwrap();
+        let parsed = CGGTTS::from_file(&filename)
+            .unwrap_or_else(|e| panic!("failed to parse back CGGTTS \"{}\": {}", filename, e));
+
+        assert_eq!(parsed.tracks.len(), cggtts.tracks.len());
+
+        for (dut, model) in parsed.tracks_iter().zip(cggtts.tracks_iter()) {
+            track_dut_model_comparison(dut, model);
+        }
+
+        let _ = remove_file(&filename);
     }
 
     #[test]
@@ -217,6 +215,7 @@ mod test {
                 _ => {},
             }
         }
+
         assert_eq!(tests_passed, 1);
 
         // test filename generator
@@ -226,6 +225,19 @@ mod test {
         );
 
         // format (dump) then parse back
+        let file_name = random_name(8);
+        cggtts.to_file(&file_name).unwrap();
+
+        let parsed = CGGTTS::from_file(&file_name)
+            .unwrap_or_else(|e| panic!("failed to parse back CGGTTS \"{}\": {}", file_name, e));
+
+        assert_eq!(parsed.tracks.len(), cggtts.tracks.len());
+
+        for (dut, model) in parsed.tracks_iter().zip(cggtts.tracks_iter()) {
+            track_dut_model_comparison(dut, model);
+        }
+
+        let _ = remove_file(&file_name);
     }
 
     #[test]
@@ -294,5 +306,18 @@ mod test {
         );
 
         // format (dump) then parse back
+        let file_name = random_name(8);
+        cggtts.to_file(&file_name).unwrap();
+
+        let parsed = CGGTTS::from_file(&file_name)
+            .unwrap_or_else(|e| panic!("failed to parse back CGGTTS \"{}\": {}", file_name, e));
+
+        assert_eq!(parsed.tracks.len(), cggtts.tracks.len());
+
+        for (dut, model) in parsed.tracks_iter().zip(cggtts.tracks_iter()) {
+            track_dut_model_comparison(dut, model);
+        }
+
+        let _ = remove_file(&file_name);
     }
 }
