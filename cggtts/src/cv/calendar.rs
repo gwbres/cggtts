@@ -24,9 +24,10 @@ impl CommonViewCalendar {
     /// Whether "right now" is already inside active measurement or not, is up
     /// to your [CommonViewPeriod] specifications.
     pub fn now(period: CommonViewPeriod) -> Result<Self, HifitimeError> {
+        let now = Self::now_utc()?;
         Ok(Self {
+            start_time: period.next_period_start(now),
             period,
-            start_time: Self::now_utc()?,
         })
     }
 
@@ -37,9 +38,10 @@ impl CommonViewCalendar {
         postponing: Duration,
         period: CommonViewPeriod,
     ) -> Result<Self, HifitimeError> {
+        let now = Self::now_utc()?;
         Ok(Self {
+            start_time: period.next_period_start(now + postponing),
             period,
-            start_time: Self::now_utc()? + postponing,
         })
     }
 
@@ -49,5 +51,18 @@ impl CommonViewCalendar {
     pub fn active(&self) -> Result<bool, HifitimeError> {
         let now = Self::now_utc()?;
         Ok(now > self.start_time)
+    }
+
+    /// Returns true if we're currently inside an observation period (active measurement).
+    /// To respect this [CommonViewCalendar] table, your measurement system should be active!
+    pub fn active_measurement(&self) -> Result<bool, HifitimeError> {
+        let now = Self::now_utc()?;
+        if now > self.start_time {
+            // we're inside a cv-period
+            Ok(false)
+        } else {
+            // not inside a cv-period
+            Ok(false)
+        }
     }
 }
