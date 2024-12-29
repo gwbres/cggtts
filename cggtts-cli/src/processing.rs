@@ -13,28 +13,28 @@ use crate::plot::{
 };
 
 pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
-    let sv: Vec<_> = cggtts.tracks().map(|trk| trk.sv).unique().collect();
+    let sv: Vec<_> = cggtts.tracks_iter().map(|trk| trk.sv).unique().collect();
     let codes: Vec<_> = cggtts
-        .tracks()
+        .tracks_iter()
         .map(|trk| trk.frc.clone())
         .unique()
         .collect();
 
     //REFSV/SRSV analysis
     ctx.add_timedomain_2y_plot(
-        &format!("{} REFSV/SRSV", cggtts.station),
+        &format!("{} REFSV/SRSV", cggtts.header.station),
         "REFSV [s]",
         "SRSV [s/s]",
     );
     for sv in &sv {
         for code in &codes {
             let epochs: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| if trk.sv == *sv { Some(trk.epoch) } else { None })
                 .collect();
 
             let refsv: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| {
                     if trk.sv == *sv {
                         Some(trk.data.refsv)
@@ -45,7 +45,7 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
                 .collect();
 
             let srsv: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| {
                     if trk.sv == *sv {
                         Some(trk.data.srsv)
@@ -76,19 +76,19 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
 
     //REFSYS/SRSYS analysis
     ctx.add_timedomain_2y_plot(
-        &format!("{} REFSYS/SRSYS", cggtts.station),
+        &format!("{} REFSYS/SRSYS", cggtts.header.station),
         "REFSYS [s]",
         "SRSYS [s/s]",
     );
     for sv in &sv {
         for code in &codes {
             let epochs: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| if trk.sv == *sv { Some(trk.epoch) } else { None })
                 .collect();
 
             let refsys: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| {
                     if trk.sv == *sv {
                         Some(trk.data.refsys)
@@ -99,7 +99,7 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
                 .collect();
 
             let srsys: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| {
                     if trk.sv == *sv {
                         Some(trk.data.srsys)
@@ -130,19 +130,19 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
 
     //TROPO
     ctx.add_timedomain_2y_plot(
-        &format!("{} MDTR/SMDT", cggtts.station),
+        &format!("{} MDTR/SMDT", cggtts.header.station),
         "MDTR [s]",
         "SMDT [s/s]",
     );
     for sv in &sv {
         for code in &codes {
             let epochs: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| if trk.sv == *sv { Some(trk.epoch) } else { None })
                 .collect();
 
             let mdtr: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| {
                     if trk.sv == *sv {
                         Some(trk.data.mdtr)
@@ -153,7 +153,7 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
                 .collect();
 
             let smdt: Vec<_> = cggtts
-                .tracks()
+                .tracks_iter()
                 .filter_map(|trk| {
                     if trk.sv == *sv {
                         Some(trk.data.smdt)
@@ -185,28 +185,28 @@ pub fn single_clock(cggtts: &CGGTTS, ctx: &mut PlotContext) {
 
 pub fn clock_comparison(workspace: &Path, pool: &Vec<CGGTTS>, ctx: &mut PlotContext) {
     let ref_clock = &pool[0];
-    info!("{} is considered reference clock", ref_clock.station);
+    info!("{} is considered reference clock", ref_clock.header.station);
 
-    let ref_sv: Vec<_> = ref_clock.tracks().map(|trk| trk.sv).unique().collect();
+    let ref_sv: Vec<_> = ref_clock.tracks_iter().map(|trk| trk.sv).unique().collect();
     let ref_codes: Vec<_> = ref_clock
-        .tracks()
+        .tracks_iter()
         .map(|trk| trk.frc.clone())
         .unique()
         .collect();
     let refsys: HashMap<Epoch, f64> = ref_clock
-        .tracks()
+        .tracks_iter()
         .map(|trk| (trk.epoch, trk.data.refsys))
         .collect();
 
     for i in 1..pool.len() {
         ctx.add_timedomain_plot(
-            &format!("{}-{}", ref_clock.station, pool[i].station),
+            &format!("{}-{}", ref_clock.header.station, pool[i].header.station),
             "Delta [s]",
         );
         for sv in &ref_sv {
             for code in &ref_codes {
                 let x_err: Vec<_> = ref_clock
-                    .tracks()
+                    .tracks_iter()
                     .filter_map(|trk| {
                         if trk.sv == *sv && &trk.frc == code {
                             if refsys.get(&trk.epoch).is_some() {
@@ -220,7 +220,7 @@ pub fn clock_comparison(workspace: &Path, pool: &Vec<CGGTTS>, ctx: &mut PlotCont
                     })
                     .collect();
                 let t_err: Vec<_> = ref_clock
-                    .tracks()
+                    .tracks_iter()
                     .filter_map(|trk| {
                         if trk.sv == *sv && &trk.frc == code {
                             refsys
@@ -243,31 +243,31 @@ pub fn clock_comparison(workspace: &Path, pool: &Vec<CGGTTS>, ctx: &mut PlotCont
         }
     }
 
-    let mut fd = File::create(workspace.join(&pool[0].station))
+    let mut fd = File::create(workspace.join(&pool[0].header.station))
         .expect("failed to create textfile: permission denied");
 
     writeln!(fd, "t, CLOCK(A), CLOCK(B), SV, (elev[°], azi[°]) @REF, (elev[°], azi[°]) @CLOCK, SIGNAL, CLOCK(A) - CLOCK(B) [s]")
         .expect("failed to generate textfile");
 
-    for trk in ref_clock.tracks() {
+    for trk in ref_clock.tracks_iter() {
         let ref_t = trk.epoch;
         let ref_sv = trk.sv;
-        let (ref_elev, ref_azim) = (trk.elevation, trk.azimuth);
+        let (ref_elev, ref_azim) = (trk.elevation_deg, trk.azimuth_deg);
         let ref_frc = &trk.frc;
         for i in 1..pool.len() {
             let track = pool[i]
-                .tracks()
+                .tracks_iter()
                 .filter(|trk| trk.epoch == ref_t && trk.sv == ref_sv && trk.frc == *ref_frc)
                 .reduce(|trk, _| trk);
             if let Some(b_trk) = track {
-                let (b_elev, b_azim) = (b_trk.elevation, b_trk.azimuth);
+                let (b_elev, b_azim) = (b_trk.elevation_deg, b_trk.azimuth_deg);
                 let dt = b_trk.data.refsys - trk.data.refsys;
                 writeln!(
                     fd,
                     "{:?}, {}, {}, {}, ({:.2E}, {:.2E}), ({:.2E}, {:.2E}), {}, {:.3E}",
                     ref_t,
-                    pool[i].station,
-                    pool[0].station,
+                    pool[i].header.station,
+                    pool[0].header.station,
                     ref_sv,
                     ref_elev,
                     ref_azim,

@@ -109,18 +109,18 @@ pub fn main() {
 
     if cli.identification() {
         for p in pool {
-            info!("STATION          \"{}\"", p.station);
+            info!("STATION          \"{}\"", p.header.station);
             info!("NUMBER OF TRACKS  {}", p.tracks.len());
             info!(
                 "CODES            {:?}",
-                p.tracks()
+                p.tracks_iter()
                     .map(|trk| trk.frc.clone())
                     .unique()
                     .collect::<Vec<_>>()
             );
             info!(
                 "SV               {:?}",
-                p.tracks()
+                p.tracks_iter()
                     .map(|trk| trk.sv.to_string())
                     .unique()
                     .collect::<Vec<_>>()
