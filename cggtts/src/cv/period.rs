@@ -50,6 +50,14 @@ impl CommonViewPeriod {
     /// Offset of first track for any given MJD, expressed in nanoseconds
     /// within that day.
     fn first_track_offset_nanos(&self, mjd: u32) -> i128 {
+        // if not bimp period, return 0
+        if self.setup_duration != Duration::from_seconds(BIPM_SETUP_DURATION_SECONDS as f64)
+            || self.tracking_duration
+            != Duration::from_seconds(BIPM_TRACKING_DURATION_SECONDS as f64)
+        {
+            return 0i128;
+        }
+
         let tracking_nanos = self.total_period().total_nanoseconds();
 
         let mjd_difference = REFERENCE_MJD as i128 - mjd as i128;
