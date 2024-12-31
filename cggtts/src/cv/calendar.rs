@@ -8,6 +8,8 @@ pub struct CommonViewCalendar {
     /// Deploy time is the [Epoch] at which
     /// the first [CommonViewPeriod] was launched
     start_time: Epoch,
+    /// Indicates whether this is the first tracking in a MJD.
+    is_t0: bool,
     /// [CommonViewPeriod] specification
     period: CommonViewPeriod,
 }
@@ -25,8 +27,10 @@ impl CommonViewCalendar {
     /// to your [CommonViewPeriod] specifications.
     pub fn now(period: CommonViewPeriod) -> Result<Self, HifitimeError> {
         let now = Self::now_utc()?;
+        let (start_time, is_t0) = period.next_period_start(now);
         Ok(Self {
-            start_time: period.next_period_start(now),
+            start_time,
+            is_t0,
             period,
         })
     }
@@ -39,8 +43,10 @@ impl CommonViewCalendar {
         period: CommonViewPeriod,
     ) -> Result<Self, HifitimeError> {
         let now = Self::now_utc()?;
+        let (start_time, is_t0) = period.next_period_start(now + postponing);
         Ok(Self {
-            start_time: period.next_period_start(now + postponing),
+            start_time,
+            is_t0,
             period,
         })
     }

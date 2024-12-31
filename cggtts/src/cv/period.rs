@@ -50,6 +50,14 @@ impl CommonViewPeriod {
     /// Offset of first track for any given MJD, expressed in nanoseconds
     /// within that day.
     fn first_track_offset_nanos(&self, mjd: u32) -> i128 {
+        // if not bimp period, return 0
+        if self.setup_duration != Duration::from_seconds(BIPM_SETUP_DURATION_SECONDS as f64)
+            || self.tracking_duration
+                != Duration::from_seconds(BIPM_TRACKING_DURATION_SECONDS as f64)
+        {
+            return 0i128;
+        }
+
         let tracking_nanos = self.total_period().total_nanoseconds();
 
         let mjd_difference = REFERENCE_MJD as i128 - mjd as i128;
@@ -68,11 +76,12 @@ impl CommonViewPeriod {
         }
     }
 
-    /// Returns date and time of next [CommonViewPeriod]
-    /// expressed as an [Epoch]. `now` may be any [Epoch]
+    /// Returns the date and time of the next [CommonViewPeriod] expressed as an [Epoch]
+    /// and a boolean indicating whether the next [CommonViewPeriod] is `t0`.
+    /// `now` may be any [Epoch]
     /// but is usually `now()` when actively tracking.
     /// Although CGGTTS uses UTC strictly, we accept any timescale here.
-    pub fn next_period_start(&self, now: Epoch) -> Epoch {
+    pub fn next_period_start(&self, now: Epoch) -> (Epoch, bool) {
         let total_period = self.total_period();
         let total_period_nanos = total_period.total_nanoseconds();
 
@@ -91,7 +100,7 @@ impl CommonViewPeriod {
 
         if today_offset_nanos < today_t0_offset_nanos {
             // still within first track
-            today_t0_utc
+            (today_t0_utc, true)
         } else {
             let ith_period = (((now_utc - today_t0_utc).total_nanoseconds() as f64)
                 / total_period_nanos as f64)
@@ -102,12 +111,18 @@ impl CommonViewPeriod {
             if ith_period >= number_periods_per_day {
                 let tomorrow_t0_offset_nanos = self.first_track_offset_nanos(mjd_utc + 1);
 
-                Epoch::from_mjd_utc((mjd_utc + 1) as f64)
-                    + tomorrow_t0_offset_nanos as f64 * Unit::Nanosecond
+                (
+                    Epoch::from_mjd_utc((mjd_utc + 1) as f64)
+                        + tomorrow_t0_offset_nanos as f64 * Unit::Nanosecond,
+                    false,
+                )
             } else {
-                today_midnight_utc
-                    + today_t0_offset_nanos as f64 * Unit::Nanosecond
-                    + (ith_period * total_period_nanos) as f64 * Unit::Nanosecond
+                (
+                    today_midnight_utc
+                        + today_t0_offset_nanos as f64 * Unit::Nanosecond
+                        + (ith_period * total_period_nanos) as f64 * Unit::Nanosecond,
+                    false,
+                )
             }
         }
     }
@@ -117,7 +132,8 @@ impl CommonViewPeriod {
     /// but is usually `now()` when actively tracking.
     /// Although CGGTTS uses UTC strictly, we accept any timescale here.
     pub fn time_to_next_period(&self, now: Epoch) -> Duration {
-        self.next_period_start(now) - now
+        let (next_period_start, _) = self.next_period_start(now);
+        next_period_start - now
     }
 
     /// Returns a new [CommonViewPeriod] with desired setup [Duration]
@@ -181,6 +197,9 @@ mod test {
     #[test]
     fn cv_next_period_start() {
         let cv = CommonViewPeriod::bipm_common_view_period();
+
+        let (mjd_59025_last_t, _) = CommonViewPeriod::bipm_common_view_period()
+            .next_period_start(Epoch::from_mjd_utc(59026.0));
 
         for (now, expected) in vec![
             // reference MJD
@@ -297,8 +316,7 @@ mod test {
                 Epoch::from_mjd_utc(59025.0)
                     + 23.0 * Unit::Hour
                     + (50.0 * 60.0 + 10.0) * Unit::Second,
-                CommonViewPeriod::bipm_common_view_period()
-                    .next_period_start(Epoch::from_mjd_utc(59026.0)),
+                mjd_59025_last_t,
             ),
             // // MJD = 59_025 N-1 +10s => MJD 59_026 T0
             (
@@ -308,7 +326,7 @@ mod test {
                 Epoch::from_mjd_utc(59026.0) + (2.0 * 60.0) * Unit::Second,
             ),
         ] {
-            let next_start = cv.next_period_start(now);
+            let (next_start, _) = cv.next_period_start(now);
             let error_nanos = (next_start - expected).abs().total_nanoseconds();
             assert!(
                 error_nanos < 1,
