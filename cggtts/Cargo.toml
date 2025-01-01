@@ -3,18 +3,29 @@ name = "cggtts"
 version = "4.1.7"
 license = "MIT OR Apache-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
-description = "Package to analyze and create CGGTTS data"
+description = "CGGTTS files parsing and production"
 homepage = "https://github.com/gwbres/cggtts"
-keywords = ["positionning","bipm","gnss","timing","satellites"]
+keywords = ["navigation", "gnss", "timing", "space"]
 categories = ["science","parsing"]
 edition = "2018"
 readme = "../README.md"
 
 [features]
-default = [] # no features by default
+default = []
 
-# unlock the Track Scheduling and data production helpers
-scheduler = ["polyfit-rs"]
+# unlock gzip file native support
+flate2 = ["dep:flate2"]
+
+# unlock serdes operations
+serde = [
+    "dep:serde", 
+    "hifitime/serde",
+    "gnss-rs/serde",
+]
+
+# unlock helper to fit several measurements during 
+# a CommonViewPeriod, following BIPM recommendations.
+polyfit-rs = ["dep:polyfit-rs"]
 
 [dependencies]
 thiserror = "2"
@@ -22,12 +33,13 @@ scan_fmt = "0.1.3"
 strum = "0.26"
 itertools = "0.13"
 strum_macros = "0.26"
+flate2 = { version = "1", optional = true }
 serde = { version = "1.0", optional = true, features = ["derive"] }
 
-hifitime = { version = "4.0", features = ["serde", "std"] }
+hifitime = { version = "4.0", features = ["std"] }
 
-# gnss-rs = { version = "2.2.4", features = ["serde"] }
-gnss-rs = { git = "https://github.com/rtk-rs/gnss", branch = "main", features = ["serde"] }
+# gnss-rs = "2.2.4"
+gnss-rs = { git = "https://github.com/rtk-rs/gnss", branch = "main" }
 
 # track scheduling
 polyfit-rs = { version = "0.2", optional = true }
