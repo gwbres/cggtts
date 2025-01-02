@@ -24,55 +24,15 @@ Add "cggtts" to your Cargo.toml
 cggtts = "4"
 ```
 
-## Crate features
-
-`CGGTTS` supports several features:
-
-- `serde` will unlock the serdes operation
-of many internal structures.
-- `flate2` will unlock native support
-of gzip compressed files.
-- `polyfit-rs` will unlock one fitting helper
-that help fit observation according to the BIPM track
-fitting method
-
-## Parsing
-
-Parse a local CGGTTS file:
+Use CGGTTS to parse local files
 
 ```rust
 use cggtts::prelude::CGGTTS;
 
-let path = format!(
-    "{}/../data/dual/GZGTR560.258",
-    env!("CARGO_MANIFEST_DIR"),
-);
+let cggtts = CGGTTS::from_file("../data/dual/GZGTR560.258");
+assert!(cggtts.is_ok());
 
-let cggtts = CGGTTS::from_file("../data/dual/GZGTR560.258")
-    .unwrap();
-
-assert_eq!(cggtts.header.station, "LAB");
+let cggtts = cggtts.unwrap();
+assert_eq!(cggtts.station, "LAB");
 assert_eq!(cggtts.tracks.len(), 2097);
-```
-
-Refer to online API for more examples and further information
-about [CGGTTS].
-
-## Formatting
-
-Parse, modify, dump, parse back then verify:
-
-```rust
-use cggtts::prelude::CGGTTS;
-
-let cggtts = CGGTTS::from_file("../data/dual/GZGTR560.258")
-    .unwrap();
-
-cggtts.to_file("/tmp/test.txt")
-    .unwrap();
-
-let parsed = CGGTTS::from_file("/tmp/test.txt")
-    .unwrap();
-
-assert_eq!(parsed.tracks.len(), cggtts.tracks.len());
 ```
